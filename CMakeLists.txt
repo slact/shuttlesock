@@ -22,6 +22,10 @@ target_compile_features(shuttlesock PRIVATE c_std_99 c_static_assert c_variadic_
 target_include_directories(shuttlesock PUBLIC src/include)
 target_include_directories(shuttlesock PRIVATE src)
 
+#ptrheads
+set(THREADS_PREFER_PTHREAD_FLAG ON)
+find_package(Threads REQUIRED)
+target_link_libraries(shuttlesock PUBLIC ${CMAKE_THREAD_LIBS_INIT})
 
 target_require_package(shuttlesock PUBLIC ev)
 target_require_package(shuttlesock PRIVATE atomic_ops)

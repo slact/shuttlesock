@@ -24,6 +24,10 @@ function(add_build_mode mode cflags linker_flags)
   )
 endfunction()
 
+if(NOT CMAKE_BUILD_TYPE)
+  set(CMAKE_BUILD_TYPE Debug)
+endif()
+
 #add DebugASan mode
 add_build_mode(DebugASan 
   "-fsanitize-address-use-after-scope -fsanitize=address -fsanitize=undefined  -fsanitize=leak"

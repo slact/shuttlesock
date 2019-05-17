@@ -1,8 +1,5 @@
 #include <shuttlesock.h>
-#include <math.h>
-#include <pthread.h>
 #include <stdio.h>
-#include <signal.h>
 #define SNOW_ENABLED 1
 #include "snow.h"
 
@@ -32,6 +29,14 @@ int set_test_options(int *argc, char **argv) {
     */
   }
   return 1;
+}
+
+
+describe(shuttlesock_init) {
+  test("run loop") {
+    shuso_t *ss = shuso_create(EVFLAG_AUTO, NULL, NULL);
+    shuso_run(ss);
+  }
 }
 
 snow_main_decls;
