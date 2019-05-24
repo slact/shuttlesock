@@ -1,11 +1,21 @@
+#ifndef __SHUTTLESOCK_IPC_H
+#define __SHUTTLESOCK_IPC_H
 #include <shuttlesock.h>
+#include <stdatomic.h>
 
 typedef struct {
-  uint32_t  size;
-  uint32_t  code;
-  char      data[];
-} ipc_packet_t;
+  _Atomic char      *code;
+  _Atomic intptr_t  *ptr;
+} ipc_inbuf_t;
 
-bool ipc_init_pipe(shuso_t *ctx, shuso_process_t *process);
-bool ipc_add_pipe_reader(shuso_t *ctx, shuso_process_t *process);
-bool ipc_add_pipe_writer(shuso_t *ctx, shuso_process_t *process);
+typedef struct ipc_outbuf_s {
+  void                *ptr;
+  struct ipc_outbuf_s *next;
+} ipc_outbuf_t;
+
+typedef struct {
+  ipc_inbuf_t     in;
+  ipc_outbuf_t   *out;
+} ipc_buf_t;
+
+#endif //__SHUTTLESOCK_IPC_H

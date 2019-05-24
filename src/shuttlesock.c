@@ -11,7 +11,6 @@ static bool shuso_worker_spawn(shuso_t *ctx);
 static void cleanup_master_loop(EV_P_ ev_cleanup *w, int revents);
 static void signal_watcher_cb(EV_P_ ev_signal *w, int revents);
 static void child_watcher_cb(EV_P_ ev_child *w, int revents);
-static void io_pipe_master_reader(EV_P_ ev_io *w, int revents);
 
 shuso_t *shuso_create(unsigned int ev_loop_flags, shuso_handlers_t *handlers, const char **err) {
   shuso_shared_t     *shared_ctx;
@@ -89,16 +88,9 @@ static bool shuso_spawn_worker(shuso_t *ctx) {
 
 bool shuso_run(shuso_t *ctx) {
   ctx->procnum = SHUTTLESOCK_MASTER;
-  if(!ipc_init_pipe(ctx, &ctx->shared->master)) {
-    return set_error(ctx, "failed to create master pipe");
-  }
-  if(!ipc_init_pipe(ctx, &ctx->shared->manager)) {
-    return set_error(ctx, "failed to create manager pipe");
-  }
   
   shuso_init_signal_watchers(ctx);
-  ipc_add_pipe_reader(ctx, &ctx->shared->master);
-  ipc_add_pipe_writer(ctx, &ctx->shared->manager);
+  //TODO: add master and manager IPC initialization
   
   if(ctx->shared->handlers.start_master) {
     ctx->shared->handlers.start_master(ctx, ctx->shared->handlers.privdata);

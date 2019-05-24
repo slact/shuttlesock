@@ -6,6 +6,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <fcntl.h>
+#include <shuttlesock/sbuf.h>
 #include <shuttlesock/llist.h>
 
 #define SHUTTLESOCK_MAX_WORKERS 1024
@@ -16,32 +17,9 @@ typedef enum {
   SHUSO_DEFER     = 3,
 } shuso_nextaction_t;
 
-typedef struct sbuf_s sbuf_t;
-
-struct sbuf_s {
-  char           *start;
-  char           *cur;
-  char           *end;
-  sbuf_t         *next;
-};
-typedef struct {
-  sbuf_t         *head;
-  sbuf_t         *tail;
-} sbuf_list_t;
-
 typedef struct {
   pid_t            id;
   uint16_t         generation;
-  struct {       //ipc
-    struct {      //pipe
-      int             out;
-      int             in;
-    }               pipe;
-    struct {      //fifo
-      sbuf_t         *head;
-      sbuf_t         *tail;
-    }               fifo;
-  }               ipc;
 } shuso_process_t;
 
 typedef struct shuso_s shuso_t;
