@@ -8,6 +8,7 @@
 #include <fcntl.h>
 #include <shuttlesock/sbuf.h>
 #include <shuttlesock/llist.h>
+#include <shuttlesock/ipc.h>
 
 #define SHUTTLESOCK_MAX_WORKERS 1024
 
@@ -17,9 +18,10 @@ typedef enum {
   SHUSO_DEFER     = 3,
 } shuso_nextaction_t;
 
-typedef struct {
-  pid_t            id;
-  uint16_t         generation;
+typedef struct shuso_process_s {
+  pid_t               id;
+  uint16_t            generation;
+  shuso_ipc_channel_t ipc;
 } shuso_process_t;
 
 typedef struct shuso_s shuso_t;
@@ -35,11 +37,22 @@ typedef struct {
 } shuso_handlers_t;
 
 typedef struct {
-  shuso_handlers_t    handlers;
-  shuso_process_t     master;
-  shuso_process_t     manager;
-  shuso_process_t     worker[SHUTTLESOCK_MAX_WORKERS];
-} shuso_shared_t;
+  size_t              ipc_buffer_size;
+  float               ipc_send_retry_delay;
+  float               ipc_receive_retry_delay;
+  float               ipc_send_timeout;
+} shuso_config_t;
+
+typedef struct {
+  shuso_handlers_t    phase_handlers;
+  shuso_ipc_handler_t ipc_handlers[256];
+  shuso_config_t      config;
+  struct {          //process
+    shuso_process_t     master;
+    shuso_process_t     manager;
+    shuso_process_t     worker[SHUTTLESOCK_MAX_WORKERS];
+  }                   process;
+} shuso_common_t;
 
 #define SHUTTLESOCK_NOPROCESS -3
 #define SHUTTLESOCK_MASTER  -2
@@ -52,22 +65,20 @@ LLIST_TYPEDEF_LINK_STRUCT(ev_timer);
 LLIST_TYPEDEF_LINK_STRUCT(ev_periodic);
 
 struct shuso_s {
-  int                 procnum;
-  struct ev_loop     *loop;
-  ev_cleanup          loop_cleanup;
-  shuso_shared_t *shared;
-  struct {      //ipc_fifo
-    sbuf_list_t    *list;
-    sbuf_list_t    *next;
-  }               ipc_fifo;
-  struct {     //base_watchers
+  int               procnum;
+  shuso_process_t  *process;
+  struct ev_loop   *loop;
+  ev_cleanup        loop_cleanup;
+  shuso_common_t   *common;
+  struct {        //base_watchers
     LLIST_STRUCT(ev_signal)   signal;
     LLIST_STRUCT(ev_child)    child;
     LLIST_STRUCT(ev_io)       io;
     LLIST_STRUCT(ev_timer)    timer;
     LLIST_STRUCT(ev_periodic) periodic;
-  }               base_watchers;
-  const char     *errmsg;
+  }                 base_watchers;
+  const char       *errmsg;
+  void             *data;  //custom data attached to this shuttlesock context
 }; //shuso_t;
 
 shuso_t *shuso_create(unsigned int ev_loop_flags, shuso_handlers_t *handlers, const char **err);

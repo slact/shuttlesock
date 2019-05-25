@@ -13,16 +13,16 @@ static void signal_watcher_cb(EV_P_ ev_signal *w, int revents);
 static void child_watcher_cb(EV_P_ ev_child *w, int revents);
 
 shuso_t *shuso_create(unsigned int ev_loop_flags, shuso_handlers_t *handlers, const char **err) {
-  shuso_shared_t     *shared_ctx;
+  shuso_common_t     *common_ctx;
   shuso_t            *ctx;
   struct ev_loop     *loop;
   
-  if((shared_ctx = calloc(1, sizeof(*shared_ctx))) == NULL) {
-    if(err) *err = "not enough memory to allocate shared_ctx";
+  if((common_ctx = calloc(1, sizeof(*common_ctx))) == NULL) {
+    if(err) *err = "not enough memory to allocate common_ctx";
     return NULL;
   }
   if((ctx = calloc(1, sizeof(*ctx))) == NULL) {
-    free(shared_ctx);
+    free(common_ctx);
     if(err) *err = "not enough memory to allocate ctx";
     return NULL;
   }
@@ -32,18 +32,18 @@ shuso_t *shuso_create(unsigned int ev_loop_flags, shuso_handlers_t *handlers, co
   // "The default loop is the only loop that can handle ev_child watchers [...]"
   if((loop = ev_default_loop(ev_loop_flags)) == NULL) {
     free(ctx);
-    free(shared_ctx);
+    free(common_ctx);
     if(err) *err = "failed to create event loop";
     return NULL;
   }
   
   if(handlers) {
-    shared_ctx->handlers = *handlers;
+    common_ctx->phase_handlers = *handlers;
   }
   *ctx = (shuso_t ){
     .procnum = SHUTTLESOCK_NOPROCESS,
     .loop    = loop,
-    .shared  = shared_ctx
+    .common  = common_ctx
   };
   
   ev_set_userdata(loop, ctx);
@@ -55,7 +55,7 @@ bool shuso_destroy(shuso_t *ctx) {
   assert(ctx->loop);
   ev_loop_destroy(ctx->loop);
   if(ctx->procnum <= SHUTTLESOCK_MANAGER) {
-    free(ctx->shared);
+    free(ctx->common);
   }
   free(ctx);
   return true;
@@ -72,6 +72,8 @@ static bool shuso_init_signal_watchers(shuso_t *ctx) {
   shuso_add_signal_watcher(ctx, signal_watcher_cb, NULL, SIGWINCH);
   
   shuso_add_child_watcher(ctx, child_watcher_cb, NULL, 0, 0);
+  //TODO: what else?
+  return true;
 }
 
 static bool shuso_spawn_manager(shuso_t *ctx) {
@@ -92,8 +94,8 @@ bool shuso_run(shuso_t *ctx) {
   shuso_init_signal_watchers(ctx);
   //TODO: add master and manager IPC initialization
   
-  if(ctx->shared->handlers.start_master) {
-    ctx->shared->handlers.start_master(ctx, ctx->shared->handlers.privdata);
+  if(ctx->common->phase_handlers.start_master) {
+    ctx->common->phase_handlers.start_master(ctx, ctx->common->phase_handlers.privdata);
   }
   if(!shuso_spawn_manager(ctx)) {
     return set_error(ctx, "failed to spawn manager process");
@@ -105,6 +107,30 @@ bool shuso_run(shuso_t *ctx) {
 bool set_error(shuso_t *ctx, const char *err) {
   ctx->errmsg = err;
   return false;
+}
+
+shuso_process_t *procnum_to_process(shuso_t *ctx, int procnum) {
+ if(procnum < SHUTTLESOCK_MASTER || procnum > SHUTTLESOCK_MAX_WORKERS) {
+   return NULL;
+ }
+ //negative master and manager procnums refer to their position relative 
+ //to worker[] in shuso_common_t, that's why this is one line,
+ return &ctx->common->process.worker[procnum]; 
+}
+
+int process_to_procnum(shuso_t *ctx, shuso_process_t *proc) {
+  if(proc == &ctx->common->process.master) {
+    return SHUTTLESOCK_MASTER;
+  }
+  else if(proc == &ctx->common->process.manager) {
+    return SHUTTLESOCK_MASTER;
+  }
+  else if(proc >= ctx->common->process.worker && proc < &ctx->common->process.worker[SHUTTLESOCK_MAX_WORKERS]) {
+    return proc - ctx->common->process.worker;
+  }
+  else {
+    return SHUTTLESOCK_NOPROCESS;
+  }
 }
 
 #define DELETE_BASE_WATCHERS(ctx, watcher_type) \
