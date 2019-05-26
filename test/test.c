@@ -1,4 +1,5 @@
 #include <shuttlesock.h>
+#include <shuttlesock/log.h>
 #include <stdio.h>
 #define SNOW_ENABLED 1
 #include "snow.h"
@@ -31,10 +32,37 @@ int set_test_options(int *argc, char **argv) {
   return 1;
 }
 
+void start_master(shuso_t *ctx, void *pd) {
+  shuso_log(ctx, "start master");
+}
+void stop_master(shuso_t *ctx, void *pd) {
+  shuso_log(ctx, "stop master");
+}
+void start_manager(shuso_t *ctx, void *pd) {
+  shuso_log(ctx, "start manager");
+}
+void stop_manager(shuso_t *ctx, void *pd) {
+  shuso_log(ctx, "stop manager");
+}
+void start_worker(shuso_t *ctx, void *pd) {
+  shuso_log(ctx, "start worker");
+}
+void stop_worker(shuso_t *ctx, void *pd) {
+  shuso_log(ctx, "stop worker");
+}
+
 
 describe(shuttlesock_init) {
   test("run loop") {
-    shuso_t *ss = shuso_create(EVFLAG_AUTO, NULL, NULL);
+    shuso_handlers_t handlers = {
+      .start_master = start_master,
+      .stop_master = stop_master,
+      .start_manager = start_manager,
+      .stop_manager = stop_manager,
+      .start_worker = start_worker,
+      .stop_worker = stop_worker
+    };
+    shuso_t *ss = shuso_create(EVFLAG_AUTO, &handlers, NULL);
     shuso_run(ss);
   }
 }

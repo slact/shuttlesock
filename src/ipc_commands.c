@@ -1,12 +1,14 @@
 #include <shuttlesock.h>
 #include <shuttlesock/ipc.h>
+#include <shuttlesock/log.h>
 #include "shuttlesock_private.h"
 #include <stdlib.h>
 
-static void test_handle(shuso_t *ctx, const uint8_t code, void *ptr) {
-  
+static void signal_handle(shuso_t *ctx, const uint8_t code, void *ptr) {
+  intptr_t sig = (intptr_t )ptr;
+  shuso_log(ctx, "got signal %ld via IPC", sig);
 }
-static void test_cancel(shuso_t *ctx, const uint8_t code, void *ptr) {
+static void signal_cancel(shuso_t *ctx, const uint8_t code, void *ptr) {
   
 }
 
@@ -32,7 +34,7 @@ static void reconfigure_response_cancel(shuso_t *ctx, const uint8_t code, void *
 }
 
 bool shuso_ipc_commands_init(shuso_t *ctx) {
-  if(!shuso_ipc_add_handler(ctx, "test", SHUTTLESOCK_IPC_CMD_TEST, test_handle, test_cancel)) {
+  if(!shuso_ipc_add_handler(ctx, "signal", SHUTTLESOCK_IPC_CMD_SIGNAL, signal_handle, signal_cancel)) {
     return false;
   }
   if(!shuso_ipc_add_handler(ctx, "shutdown", SHUTTLESOCK_IPC_CMD_SHUTDOWN, shutdown_handle, shutdown_cancel)) {

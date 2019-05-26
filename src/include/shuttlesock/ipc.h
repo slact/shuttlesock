@@ -3,7 +3,7 @@
 #include <stdatomic.h>
 
 #define SHUTTLESOCK_IPC_CMD_NIL                   0
-#define SHUTTLESOCK_IPC_CMD_TEST                  1
+#define SHUTTLESOCK_IPC_CMD_SIGNAL                1
 #define SHUTTLESOCK_IPC_CMD_SHUTDOWN              2
 #define SHUTTLESOCK_IPC_CMD_RECONFIGURE           3
 #define SHUTTLESOCK_IPC_CMD_RECONFIGURE_RESPONSE  4

@@ -25,7 +25,7 @@ typedef struct shuso_process_s {
 } shuso_process_t;
 
 typedef struct shuso_s shuso_t;
-typedef bool shuso_callback_fn(shuso_t *ctx, void *pd);
+typedef void shuso_callback_fn(shuso_t *ctx, void *pd);
 typedef struct {
   shuso_callback_fn *start_master;
   shuso_callback_fn *stop_master;
