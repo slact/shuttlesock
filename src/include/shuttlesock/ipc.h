@@ -2,6 +2,12 @@
 #define __SHUTTLESOCK_IPC_H
 #include <stdatomic.h>
 
+#define SHUTTLESOCK_IPC_CMD_NIL                   0
+#define SHUTTLESOCK_IPC_CMD_TEST                  1
+#define SHUTTLESOCK_IPC_CMD_SHUTDOWN              2
+#define SHUTTLESOCK_IPC_CMD_RECONFIGURE           3
+#define SHUTTLESOCK_IPC_CMD_RECONFIGURE_RESPONSE  4
+
 struct shuso_s;
 struct shuso_process_s;
 
@@ -11,7 +17,7 @@ typedef struct {
   _Atomic size_t     last_reserve;
   _Atomic size_t     last_release;
   _Atomic uint8_t   *code;
-  _Atomic intptr_t  *ptr;
+  _Atomic(void *)   *ptr;
 } shuso_ipc_inbuf_t;
 
 typedef void shuso_ipc_receive_fn(struct shuso_s *, const uint8_t code, void *ptr);
@@ -34,21 +40,29 @@ typedef struct shuso_ipc_outbuf_s {
 } shuso_ipc_outbuf_t;
 
 typedef struct {
-  ev_async              receive;
   ev_timer              send_retry;
   ev_timer              receive_retry;
-  shuso_ipc_inbuf_t     in;
   struct {
     shuso_ipc_outbuf_t   *first;
     shuso_ipc_outbuf_t   *last;
-  }                     out;
-} shuso_ipc_channel_t;
+  }                     buf;
+} shuso_ipc_channel_local_t;
+
+typedef struct {
+  ev_async              receive;
+  shuso_ipc_inbuf_t     buf;
+} shuso_ipc_channel_shared_t;
 
 
-shuso_ipc_channel_t *shuso_ipc_channel_create(struct shuso_s *, struct shuso_process_s *);
-bool shuso_ipc_channel_start(struct shuso_s *, struct shuso_process_s *);
-bool shuso_ipc_channel_stop(struct shuso_s *, struct shuso_process_s *);
-bool shuso_ipc_channel_destroy(struct shuso_s *, struct shuso_process_s *);
+bool shuso_ipc_commands_init(struct shuso_s *);
+bool shuso_ipc_channel_local_init(struct shuso_s *);
+bool shuso_ipc_channel_local_start(struct shuso_s *);
+bool shuso_ipc_channel_local_stop(struct shuso_s *);
+bool shuso_ipc_channel_shared_create(struct shuso_s *, struct shuso_process_s *);
+bool shuso_ipc_channel_shared_destroy(struct shuso_s *, struct shuso_process_s *);
+bool shuso_ipc_channel_shared_start(struct shuso_s *, struct shuso_process_s *);
+bool shuso_ipc_channel_shared_stop(struct shuso_s *, struct shuso_process_s *);
+
 
 bool shuso_ipc_send(struct shuso_s *, struct shuso_process_s *, const uint8_t code, void *ptr);
 bool shuso_ipc_add_handler(struct shuso_s *,  const char *name, const uint8_t code, shuso_ipc_receive_fn *, shuso_ipc_cancel_fn *);

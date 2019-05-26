@@ -6,7 +6,7 @@
 #include "shuttlesock_private.h"
 
 static bool shuso_spawn_manager(shuso_t *ctx);
-static bool shuso_worker_spawn(shuso_t *ctx);
+static bool shuso_spawn_worker(shuso_t *ctx);
 
 static void cleanup_master_loop(EV_P_ ev_cleanup *w, int revents);
 static void signal_watcher_cb(EV_P_ ev_signal *w, int revents);
@@ -47,7 +47,31 @@ shuso_t *shuso_create(unsigned int ev_loop_flags, shuso_handlers_t *handlers, co
   };
   
   ev_set_userdata(loop, ctx);
+  
+  if(!shuso_ipc_channel_shared_create(ctx, &common_ctx->process.master)) {
+    free(ctx);
+    free(common_ctx);
+    if(err) *err = "failed to create shared IPC channel for master";
+    return NULL;
+  }
+  if(!shuso_ipc_channel_shared_create(ctx, &common_ctx->process.manager)) {
+    shuso_ipc_channel_shared_destroy(ctx, &common_ctx->process.master);
+    free(ctx);
+    free(common_ctx);
+    if(err) *err = "failed to create shared IPC channel for manager";
+    return NULL;
+  }
+  if(!shuso_ipc_commands_init(ctx)) {
+    shuso_ipc_channel_shared_destroy(ctx, &common_ctx->process.manager);
+    shuso_ipc_channel_shared_destroy(ctx, &common_ctx->process.master);
+    free(ctx);
+    free(common_ctx);
+    if(err) *err = "failed to initialize IPC commands";
+    return NULL;
+  }
+  
   ev_cleanup_init(&ctx->loop_cleanup, cleanup_master_loop);
+  
   return ctx;
 }
 
@@ -81,15 +105,21 @@ static bool shuso_spawn_manager(shuso_t *ctx) {
   if(pid > 0)   return true;
   if(pid == -1) return false;
   
+  ctx->procnum = SHUTTLESOCK_MANAGER;
+  ctx->process = &ctx->common->process.manager;
   
+  ev_loop_fork(ctx->loop);
   return true;
 }
+
 static bool shuso_spawn_worker(shuso_t *ctx) {
   return true;
 }
 
 bool shuso_run(shuso_t *ctx) {
   ctx->procnum = SHUTTLESOCK_MASTER;
+  ctx->process = &ctx->common->process.master;
+  bool shuso_run(shuso_t *);
   
   shuso_init_signal_watchers(ctx);
   //TODO: add master and manager IPC initialization
@@ -100,6 +130,8 @@ bool shuso_run(shuso_t *ctx) {
   if(!shuso_spawn_manager(ctx)) {
     return set_error(ctx, "failed to spawn manager process");
   }
+  shuso_ipc_channel_local_start(ctx);
+  shuso_ipc_channel_shared_start(ctx, ctx->process);
   ev_run(ctx->loop, 0);
   return true;
 }

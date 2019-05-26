@@ -16,7 +16,7 @@ set(libsrc
   src/shuttlesock.c
   src/watchers.c
   src/ipc.c
-  src/ringbuf.c
+  src/ipc_commands.c
 )
 
 add_library(shuttlesock SHARED ${libsrc})

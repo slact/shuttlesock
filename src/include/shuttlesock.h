@@ -21,7 +21,7 @@ typedef enum {
 typedef struct shuso_process_s {
   pid_t               id;
   uint16_t            generation;
-  shuso_ipc_channel_t ipc;
+  shuso_ipc_channel_shared_t ipc;
 } shuso_process_t;
 
 typedef struct shuso_s shuso_t;
@@ -54,9 +54,10 @@ typedef struct {
   }                   process;
 } shuso_common_t;
 
-#define SHUTTLESOCK_NOPROCESS -3
-#define SHUTTLESOCK_MASTER  -2
-#define SHUTTLESOCK_MANAGER -1
+#define SHUTTLESOCK_NOPROCESS  -3
+#define SHUTTLESOCK_MASTER     -2
+#define SHUTTLESOCK_MANAGER    -1
+#define SHUTTLESOCK_WORKER      0
 
 LLIST_TYPEDEF_LINK_STRUCT(ev_signal);
 LLIST_TYPEDEF_LINK_STRUCT(ev_child);
@@ -65,20 +66,21 @@ LLIST_TYPEDEF_LINK_STRUCT(ev_timer);
 LLIST_TYPEDEF_LINK_STRUCT(ev_periodic);
 
 struct shuso_s {
-  int               procnum;
-  shuso_process_t  *process;
-  struct ev_loop   *loop;
-  ev_cleanup        loop_cleanup;
-  shuso_common_t   *common;
-  struct {        //base_watchers
-    LLIST_STRUCT(ev_signal)   signal;
-    LLIST_STRUCT(ev_child)    child;
-    LLIST_STRUCT(ev_io)       io;
-    LLIST_STRUCT(ev_timer)    timer;
-    LLIST_STRUCT(ev_periodic) periodic;
-  }                 base_watchers;
-  const char       *errmsg;
-  void             *data;  //custom data attached to this shuttlesock context
+  int                         procnum;
+  shuso_process_t            *process;
+  shuso_ipc_channel_local_t   ipc;
+  struct ev_loop             *loop;
+  ev_cleanup                  loop_cleanup;
+  shuso_common_t             *common;
+  struct {                  //base_watchers
+    LLIST_STRUCT(ev_signal)     signal;
+    LLIST_STRUCT(ev_child)      child;
+    LLIST_STRUCT(ev_io)         io;
+    LLIST_STRUCT(ev_timer)      timer;
+    LLIST_STRUCT(ev_periodic)   periodic;
+  }                           base_watchers;
+  const char                 *errmsg;
+  void                       *data;  //custom data attached to this shuttlesock context
 }; //shuso_t;
 
 shuso_t *shuso_create(unsigned int ev_loop_flags, shuso_handlers_t *handlers, const char **err);
