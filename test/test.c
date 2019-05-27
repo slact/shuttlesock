@@ -62,7 +62,7 @@ describe(shuttlesock_init) {
       .start_worker = start_worker,
       .stop_worker = stop_worker
     };
-    shuso_t *ss = shuso_create(EVFLAG_AUTO, &handlers, NULL);
+    shuso_t *ss = shuso_create(EVFLAG_AUTO, &handlers, NULL, NULL);
     shuso_run(ss);
   }
 }

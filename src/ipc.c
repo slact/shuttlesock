@@ -1,12 +1,18 @@
 #include <shuttlesock.h>
 #include <shuttlesock/ipc.h>
+#include <shuttlesock/log.h>
 #include "shuttlesock_private.h"
 #include <sys/mman.h>
 #include <stdlib.h>
+#include <unistd.h>
+#include <assert.h>
+#ifdef SHUTTLESOCK_HAVE_EVENTFD
+#include <sys/eventfd.h>
+#endif
 
 static void ipc_send_retry_cb(EV_P_ ev_timer *w, int revents);
 static void ipc_receive_retry_cb(EV_P_ ev_timer *w, int revents);
-static void ipc_receive_cb(EV_P_ ev_async *w, int revents);
+static void ipc_receive_cb(EV_P_ ev_io *w, int revents);
 
 bool shuso_ipc_channel_shared_create(shuso_t *ctx, shuso_process_t *proc) {
   int               procnum = process_to_procnum(ctx, proc);
@@ -14,18 +20,44 @@ bool shuso_ipc_channel_shared_create(shuso_t *ctx, shuso_process_t *proc) {
   size_t            bufsize = ctx->common->config.ipc_buffer_size;
   size_t            sz = (sizeof(void *) + sizeof(char)) * bufsize;
   
+  if(sz == 0) return false;
+  
   if(procnum == SHUTTLESOCK_MASTER || procnum == SHUTTLESOCK_MANAGER) {
     ptr = mmap(NULL, sz, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_SHARED,-1, 0);
   }
   else {
     ptr = calloc(1, sz);
   }
-  if(!ptr) return true;
+  if(!ptr) return false;
   proc->ipc.buf.sz = sz;
   proc->ipc.buf.ptr = (void *)ptr;
   proc->ipc.buf.code = (void *)&ptr[sizeof(void *) * bufsize];
   
-  ev_async_init(&proc->ipc.receive, ipc_receive_cb);
+  int fds[2]={-1, -1};
+#ifdef SHUTTLESOCK_HAVE_EVENTFD
+  //straight out of libev
+  fds[1] = eventfd(0, 0);
+  if(fds[1] == -1) {
+    return set_error(ctx, "failed to create IPC channel eventfd");
+  }
+#else
+  if(pipe(fds) == -1) {
+    return set_error(ctx, "failed to create IPC channel pipe");
+  }
+#endif
+  proc->ipc.fd[0] = fds[0];
+  proc->ipc.fd[1] = fds[1];
+  shuso_log(ctx, "fds: %d %d, -> %d %d", fds[0], fds[1], proc->ipc.fd[0], proc->ipc.fd[1]);
+  
+  fcntl(fds[1], F_SETFL, O_NONBLOCK);
+  if(fds[0] != -1) { //using pipe()
+    fcntl(fds[0], F_SETFL, O_NONBLOCK);
+    ev_io_init(&proc->ipc.receive, ipc_receive_cb, fds[0], EV_READ);
+  }
+  else { //using eventfd
+    ev_io_init(&proc->ipc.receive, ipc_receive_cb, fds[1], EV_READ);
+  }
+  
   proc->ipc.receive.data = ctx->process;
   
   return true;
@@ -43,7 +75,14 @@ bool shuso_ipc_channel_shared_destroy(shuso_t *ctx, shuso_process_t *proc) {
   proc->ipc.buf.sz = 0;
   proc->ipc.buf.ptr = NULL;
   proc->ipc.buf.code = NULL;
-  
+  if(proc->ipc.fd[0] != -1) {
+    close(proc->ipc.fd[0]);
+    proc->ipc.fd[0] = -1;
+  }
+  if(proc->ipc.fd[1] != -1) {
+    close(proc->ipc.fd[1]);
+    proc->ipc.fd[1] = -1;
+  }
   return true;
 }
 
@@ -79,17 +118,20 @@ bool shuso_ipc_channel_local_stop(shuso_t *ctx) {
 }
 
 bool shuso_ipc_channel_shared_start(shuso_t *ctx, shuso_process_t *proc) {
-  ev_async_start(ctx->loop, &proc->ipc.receive);
+  proc->ipc.receive.data = proc;
+  ev_io_start(ctx->loop, &proc->ipc.receive);
+  shuso_log(ctx, "started shared channel, fds %d %d", proc->ipc.fd[0], proc->ipc.fd[1]);
   return true;
 }
 
 bool shuso_ipc_channel_shared_stop(shuso_t *ctx, shuso_process_t *proc) {
-  ev_async_stop(ctx->loop, &proc->ipc.receive);
+  ev_io_stop(ctx->loop, &proc->ipc.receive);
   return true;
 }
 
 static bool ipc_send_direct(shuso_t *ctx, shuso_process_t *src, shuso_process_t *dst, const uint8_t code, void *ptr) {
   shuso_ipc_inbuf_t   *buf = &dst->ipc.buf;
+  ssize_t              written;
   if(buf->last_reserve >= buf->sz-1) {
     //out of space
     return false;
@@ -98,7 +140,16 @@ static bool ipc_send_direct(shuso_t *ctx, shuso_process_t *src, shuso_process_t 
   buf->ptr[last] = ptr;
   buf->code[last] = code;
   atomic_fetch_add(&buf->last_release, 1);
-  ev_async_send(ctx->loop, &dst->ipc.receive);
+#ifdef SHUTTLESOCK_HAVE_EVENTFD
+  shuso_log(ctx, "write to eventfd %d %d", dst->ipc.fd[0], dst->ipc.fd[1]);
+  static const uint64_t incr = 1;
+  written = write(dst->ipc.fd[1], &incr, sizeof(incr));
+  assert(written != -1);
+#else
+  shuso_log(ctx, "write to pipe %d %d", dst->ipc.fd[0], dst->ipc.fd[1]);
+  //just write to the pipe
+  written = write(dst->ipc.fd[1], code, 1);
+#endif
   return true;
 }
 
@@ -178,9 +229,11 @@ static void ipc_receive(shuso_t *ctx, shuso_process_t *proc) {
   size_t              last_reserve = in->last_reserve, last_release = in->last_release;
   uint_fast8_t        code;
   void               *ptr;
+  shuso_log(ctx, "ipc_receive");
   for(size_t i=in->first; i<=last_release; i++) {
     code = in->code[i];
     if(!code) {
+      shuso_log(ctx, "ipc_receive no code -- wait a little");
       //this ipc alert is not ready yet. it will be ready really soon though. retry quite rather very soon
       if(!ev_is_active(&ctx->ipc.receive_retry) && !ev_is_pending(&ctx->ipc.receive_retry)) {
         ev_timer_again(ctx->loop, &ctx->ipc.receive_retry);
@@ -188,6 +241,7 @@ static void ipc_receive(shuso_t *ctx, shuso_process_t *proc) {
       return;
     }
     ptr = in->ptr[i];
+    shuso_log(ctx, "got code %i", (int )code);
     ctx->common->ipc_handlers[code].receive(ctx, code, ptr);
     in->code[i]=0;
     in->first++;
@@ -208,8 +262,23 @@ static void ipc_receive_retry_cb(EV_P_ ev_timer *w, int revents) {
   ipc_receive(ctx, proc);
 }
 
-static void ipc_receive_cb(EV_P_ ev_async *w, int revents) {
+static void ipc_receive_cb(EV_P_ ev_io *w, int revents) {
   shuso_t            *ctx = ev_userdata(EV_A);
   shuso_process_t    *proc = w->data;
+  
+#ifdef SHUTTLESOCK_HAVE_EVENTFD
+  uint64_t buf;
+  ssize_t readsize = read(proc->ipc.fd[1], &buf, sizeof(buf));
+  if(readsize <= 0) {
+    shuso_log(ctx, "ipc_receive callback got eventfd readsize %zd", readsize);
+  }
+#else
+  char buf[32];
+  ssize_t readsize = read(proc->ipc.fd[0], buf, sizeof(buf));
+  if(readsize <= 0) {
+    shuso_log(ctx, "ipc_receive callback got eventfd readsize %zd", readsize);
+  }
+#endif
+  
   ipc_receive(ctx, proc);
 }

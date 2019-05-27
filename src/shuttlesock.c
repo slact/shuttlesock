@@ -18,7 +18,13 @@ static void do_nothing(void) {}
   if(!ctx->common->phase_handlers.phase) \
     ctx->common->phase_handlers.start_master = (shuso_callback_fn *)do_nothing
 
-shuso_t *shuso_create(unsigned int ev_loop_flags, shuso_handlers_t *handlers, const char **err) {
+#define set_default_config(ctx, conf, default_val) do {\
+  if(!(ctx)->common->config.conf) { \
+    (ctx)->common->config.conf = default_val; \
+  } \
+} while(0)
+
+shuso_t *shuso_create(unsigned int ev_loop_flags, shuso_handlers_t *handlers, shuso_config_t *config, const char **err) {
   shuso_common_t     *common_ctx;
   shuso_t            *ctx;
   struct ev_loop     *loop;
@@ -48,6 +54,14 @@ shuso_t *shuso_create(unsigned int ev_loop_flags, shuso_handlers_t *handlers, co
     .loop    = loop,
     .common  = common_ctx
   };
+  
+  if(config) {
+    common_ctx->config = *config;
+  }
+  set_default_config(ctx, ipc_buffer_size, SHUTTLESOCK_CONFIG_DEFAULT_IPC_BUFFER_SIZE);
+  set_default_config(ctx, ipc_send_retry_delay, SHUTTLESOCK_CONFIG_DEFAULT_IPC_SEND_RETRY_DELAY);
+  set_default_config(ctx, ipc_receive_retry_delay, SHUTTLESOCK_CONFIG_DEFAULT_IPC_RECEIVE_RETRY_DELAY);
+  set_default_config(ctx, ipc_send_timeout, SHUTTLESOCK_CONFIG_DEFAULT_IPC_SEND_TIMEOUT);
   
   if(handlers) {
     common_ctx->phase_handlers = *handlers;
@@ -115,12 +129,17 @@ static bool shuso_init_signal_watchers(shuso_t *ctx) {
 
 static bool shuso_spawn_manager(shuso_t *ctx) {
   pid_t pid = fork();
-  if(pid > 0)   return true;
+  if(pid > 0) {
+    //master
+    shuso_ipc_channel_shared_start(ctx, &ctx->common->process.master);
+    return true;
+  }
   if(pid == -1) return false;
   
+  shuso_ipc_channel_shared_start(ctx, &ctx->common->process.manager);
   ctx->procnum = SHUTTLESOCK_MANAGER;
   ctx->process = &ctx->common->process.manager;
-  setpgid(0, 0); // so that the shell doesn't send signals to manager and workers
+  //setpgid(0, 0); // so that the shell doesn't send signals to manager and workers
   ev_loop_fork(ctx->loop);
   ctx->common->phase_handlers.start_manager(ctx, ctx->common->phase_handlers.privdata);
   return true;
@@ -139,19 +158,20 @@ bool shuso_run(shuso_t *ctx) {
   shuso_add_child_watcher(ctx, child_watcher_cb, NULL, 0, 0);
   
   ctx->common->phase_handlers.start_master(ctx, ctx->common->phase_handlers.privdata);
+  
   if(!shuso_spawn_manager(ctx)) {
     return set_error(ctx, "failed to spawn manager process");
   }
   shuso_init_signal_watchers(ctx);
-  
   shuso_ipc_channel_local_start(ctx);
-  shuso_ipc_channel_shared_start(ctx, ctx->process);
   ev_run(ctx->loop, 0);
+  shuso_log(ctx, "done running");
   return true;
 }
 
 bool set_error(shuso_t *ctx, const char *err) {
   ctx->errmsg = err;
+  shuso_log(ctx, "%s", err);
   return false;
 }
 
@@ -201,7 +221,8 @@ static void signal_watcher_cb(EV_P_ ev_signal *w, int revents) {
   shuso_t *ctx = ev_userdata(EV_A);
   shuso_log(ctx, "got signal: %d", w->signum);
   if(ctx->procnum != SHUTTLESOCK_MASTER) {
-    shuso_ipc_send(ctx, &ctx->common->process.master, SHUTTLESOCK_IPC_CMD_SIGNAL, (intptr_t )w->signum);
+    shuso_log(ctx, "forward signal to master via IPC");
+    shuso_ipc_send(ctx, &ctx->common->process.master, SHUTTLESOCK_IPC_CMD_SIGNAL, (void *)(intptr_t )w->signum);
   }
 }
 

@@ -49,7 +49,8 @@ typedef struct {
 } shuso_ipc_channel_local_t;
 
 typedef struct {
-  ev_async              receive;
+  int                   fd[2];
+  ev_io                 receive;
   shuso_ipc_inbuf_t     buf;
 } shuso_ipc_channel_shared_t;
 

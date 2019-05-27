@@ -2,6 +2,7 @@
 #define __SHUTTLESOCK_H
 
 #include <ev.h>
+#include <shuttlesock/configure.h>
 #include <pthread.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -35,6 +36,11 @@ typedef struct {
   shuso_callback_fn *stop_worker;
   void   *privdata;
 } shuso_handlers_t;
+
+#define SHUTTLESOCK_CONFIG_DEFAULT_IPC_BUFFER_SIZE  32
+#define SHUTTLESOCK_CONFIG_DEFAULT_IPC_SEND_RETRY_DELAY  0.050
+#define SHUTTLESOCK_CONFIG_DEFAULT_IPC_RECEIVE_RETRY_DELAY  0.010
+#define SHUTTLESOCK_CONFIG_DEFAULT_IPC_SEND_TIMEOUT 0.500
 
 typedef struct {
   size_t              ipc_buffer_size;
@@ -83,7 +89,7 @@ struct shuso_s {
   void                       *data;  //custom data attached to this shuttlesock context
 }; //shuso_t;
 
-shuso_t *shuso_create(unsigned int ev_loop_flags, shuso_handlers_t *handlers, const char **err);
+shuso_t *shuso_create(unsigned int ev_loop_flags, shuso_handlers_t *handlers, shuso_config_t *config, const char **err);
 bool shuso_destroy(shuso_t *ctx);
 bool shuso_run(shuso_t *);
 
