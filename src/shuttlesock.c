@@ -136,10 +136,10 @@ static bool shuso_spawn_manager(shuso_t *ctx) {
   }
   if(pid == -1) return false;
   
-  shuso_ipc_channel_shared_start(ctx, &ctx->common->process.manager);
   ctx->procnum = SHUTTLESOCK_MANAGER;
   ctx->process = &ctx->common->process.manager;
-  //setpgid(0, 0); // so that the shell doesn't send signals to manager and workers
+  shuso_ipc_channel_shared_start(ctx, &ctx->common->process.manager);
+  setpgid(0, 0); // so that the shell doesn't send signals to manager and workers
   ev_loop_fork(ctx->loop);
   ctx->common->phase_handlers.start_manager(ctx, ctx->common->phase_handlers.privdata);
   return true;

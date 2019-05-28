@@ -18,7 +18,7 @@ bool shuso_ipc_channel_shared_create(shuso_t *ctx, shuso_process_t *proc) {
   int               procnum = process_to_procnum(ctx, proc);
   char             *ptr;
   size_t            bufsize = ctx->common->config.ipc_buffer_size;
-  size_t            sz = (sizeof(void *) + sizeof(char)) * bufsize;
+  size_t            sz = sizeof(shuso_ipc_inbuf_t) + (sizeof(void *) + sizeof(char)) * bufsize;
   
   if(sz == 0) return false;
   
@@ -29,9 +29,12 @@ bool shuso_ipc_channel_shared_create(shuso_t *ctx, shuso_process_t *proc) {
     ptr = calloc(1, sz);
   }
   if(!ptr) return false;
-  proc->ipc.buf.sz = sz;
-  proc->ipc.buf.ptr = (void *)ptr;
-  proc->ipc.buf.code = (void *)&ptr[sizeof(void *) * bufsize];
+  proc->ipc.buf = (void *)ptr;
+  proc->ipc.buf->sz = sz;
+  
+  ptr = (char *)&proc->ipc.buf[1];
+  proc->ipc.buf->ptr = (void *)ptr;
+  proc->ipc.buf->code = (void *)&ptr[sizeof(void *) * bufsize];
   
   int fds[2]={-1, -1};
 #ifdef SHUTTLESOCK_HAVE_EVENTFD
@@ -67,14 +70,12 @@ bool shuso_ipc_channel_shared_destroy(shuso_t *ctx, shuso_process_t *proc) {
   int               procnum = process_to_procnum(ctx, proc);
   
   if(procnum == SHUTTLESOCK_MASTER || procnum == SHUTTLESOCK_MANAGER) {
-    munmap(proc->ipc.buf.ptr, proc->ipc.buf.sz);
+    munmap(proc->ipc.buf, proc->ipc.buf->sz);
   }
   else {
-    free(proc->ipc.buf.ptr);
+    free(proc->ipc.buf);
   }
-  proc->ipc.buf.sz = 0;
-  proc->ipc.buf.ptr = NULL;
-  proc->ipc.buf.code = NULL;
+  proc->ipc.buf = NULL;
   if(proc->ipc.fd[0] != -1) {
     close(proc->ipc.fd[0]);
     proc->ipc.fd[0] = -1;
@@ -130,16 +131,18 @@ bool shuso_ipc_channel_shared_stop(shuso_t *ctx, shuso_process_t *proc) {
 }
 
 static bool ipc_send_direct(shuso_t *ctx, shuso_process_t *src, shuso_process_t *dst, const uint8_t code, void *ptr) {
-  shuso_ipc_inbuf_t   *buf = &dst->ipc.buf;
+  shuso_log(ctx, "direct send to dst %p", (void *)dst);
+  shuso_ipc_inbuf_t   *buf = dst->ipc.buf;
   ssize_t              written;
-  if(buf->last_reserve >= buf->sz-1) {
+  if(buf->next_reserve >= buf->sz-1) {
     //out of space
     return false;
   }
-  size_t last = atomic_fetch_add(&buf->last_reserve, 1) + 1;
-  buf->ptr[last] = ptr;
-  buf->code[last] = code;
-  atomic_fetch_add(&buf->last_release, 1);
+  size_t next = atomic_fetch_add(&buf->next_reserve, 1);
+  buf->ptr[next] = ptr;
+  buf->code[next] = code;
+  atomic_fetch_add(&buf->next_release, 1);
+  shuso_log(ctx, "next_reserve %zd next_release %zd", buf->next_reserve, buf->next_release);
 #ifdef SHUTTLESOCK_HAVE_EVENTFD
   shuso_log(ctx, "write to eventfd %d %d", dst->ipc.fd[0], dst->ipc.fd[1]);
   static const uint64_t incr = 1;
@@ -180,7 +183,7 @@ static bool ipc_send_outbuf_append(shuso_t *ctx, shuso_process_t *src, shuso_pro
 
 bool shuso_ipc_send(shuso_t *ctx, shuso_process_t *dst, const uint8_t code, void *ptr) {
   shuso_process_t *src = ctx->process;
-  if(src->ipc.buf.first) {
+  if(src->ipc.buf->first) {
     return ipc_send_outbuf_append(ctx, src, dst, code, ptr);
   }
   if(!ipc_send_direct(ctx, src, dst, code, ptr)) {
@@ -225,12 +228,13 @@ static void ipc_send_retry_cb(EV_P_ ev_timer *w, int revents) {
 }
 
 static void ipc_receive(shuso_t *ctx, shuso_process_t *proc) {
-  shuso_ipc_inbuf_t  *in = &proc->ipc.buf;
-  size_t              last_reserve = in->last_reserve, last_release = in->last_release;
+  shuso_ipc_inbuf_t  *in = proc->ipc.buf;
+  size_t              next_reserve = in->next_reserve, next_release = in->next_release;
   uint_fast8_t        code;
   void               *ptr;
-  shuso_log(ctx, "ipc_receive");
-  for(size_t i=in->first; i<=last_release; i++) {
+  shuso_log(ctx, "ipc_receive at dst %p", (void *)proc);
+  shuso_log(ctx, "next_reserve %zd next_release %zd", in->next_reserve, in->next_release);
+  for(size_t i=in->first; i<next_release; i++) {
     code = in->code[i];
     if(!code) {
       shuso_log(ctx, "ipc_receive no code -- wait a little");
@@ -248,10 +252,10 @@ static void ipc_receive(shuso_t *ctx, shuso_process_t *proc) {
   }
   //alright, we've walked the whole inbound array, now rewind it
   
-  //don't just set last_reserve and last_release to 0 because they
+  //don't just set next_reserve and next_release to 0 because they
   //may have been modified in another thread.
-  atomic_fetch_sub(&in->last_reserve, last_reserve);
-  atomic_fetch_sub(&in->last_release, last_release);
+  atomic_fetch_sub(&in->next_reserve, next_reserve);
+  atomic_fetch_sub(&in->next_release, next_release);
   //no one else may modify ->first though.
   in->first = 0;
 }

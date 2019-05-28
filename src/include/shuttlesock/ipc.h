@@ -14,8 +14,8 @@ struct shuso_process_s;
 typedef struct {
   size_t             sz;
   _Atomic size_t     first;
-  _Atomic size_t     last_reserve;
-  _Atomic size_t     last_release;
+  _Atomic size_t     next_reserve;
+  _Atomic size_t     next_release;
   _Atomic uint8_t   *code;
   _Atomic(void *)   *ptr;
 } shuso_ipc_inbuf_t;
@@ -51,7 +51,7 @@ typedef struct {
 typedef struct {
   int                   fd[2];
   ev_io                 receive;
-  shuso_ipc_inbuf_t     buf;
+  shuso_ipc_inbuf_t    *buf;
 } shuso_ipc_channel_shared_t;
 
 
