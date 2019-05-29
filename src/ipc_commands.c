@@ -3,17 +3,34 @@
 #include <shuttlesock/log.h>
 #include "shuttlesock_private.h"
 #include <stdlib.h>
+#include <signal.h>
 
 static void signal_handle(shuso_t *ctx, const uint8_t code, void *ptr) {
   intptr_t sig = (intptr_t )ptr;
-  shuso_log(ctx, "got signal %ld via IPC", sig);
+  if(ctx->procnum != SHUTTLESOCK_MASTER) {
+    shuso_log(ctx, "ignore signal %ld received via IPC", sig);
+    return; 
+  }
+  shuso_log(ctx, "master received signal %ld via IPC", sig);
+  switch(sig) {
+    case SIGINT:
+    case SIGQUIT:
+      shuso_ipc_send(ctx, &ctx->common->process.manager, SHUTTLESOCK_IPC_CMD_SHUTDOWN, NULL); 
+      break;
+    default:
+      //ignore
+      break;
+  }
 }
+
 static void signal_cancel(shuso_t *ctx, const uint8_t code, void *ptr) {
   
 }
 
 static void shutdown_handle(shuso_t *ctx, const uint8_t code, void *ptr) {
-  
+  if(ctx->procnum == SHUTTLESOCK_MASTER) {
+    
+  }
 }
 static void shutdown_cancel(shuso_t *ctx, const uint8_t code, void *ptr) {
   

@@ -3,13 +3,11 @@
 #include <ev.h>
 #include <assert.h>
 #include <unistd.h>
+#include <sys/types.h>
 #include "shuttlesock_private.h"
 #include <shuttlesock/log.h>
 
-static bool shuso_spawn_manager(shuso_t *ctx);
-static bool shuso_spawn_worker(shuso_t *ctx);
-
-static void cleanup_master_loop(EV_P_ ev_cleanup *w, int revents);
+static void cleanup_loop(EV_P_ ev_cleanup *w, int revents);
 static void signal_watcher_cb(EV_P_ ev_signal *w, int revents);
 static void child_watcher_cb(EV_P_ ev_child *w, int revents);
 
@@ -51,7 +49,8 @@ shuso_t *shuso_create(unsigned int ev_loop_flags, shuso_handlers_t *handlers, sh
   
   *ctx = (shuso_t ){
     .procnum = SHUTTLESOCK_NOPROCESS,
-    .loop    = loop,
+    .ev.loop = loop,
+    .ev.flags = ev_loop_flags,
     .common  = common_ctx
   };
   
@@ -97,14 +96,14 @@ shuso_t *shuso_create(unsigned int ev_loop_flags, shuso_handlers_t *handlers, sh
     return NULL;
   }
   
-  ev_cleanup_init(&ctx->loop_cleanup, cleanup_master_loop);
+  ev_cleanup_init(&ctx->ev.cleanup, cleanup_loop);
   
   return ctx;
 }
 
 bool shuso_destroy(shuso_t *ctx) {
-  assert(ctx->loop);
-  ev_loop_destroy(ctx->loop);
+  assert(ctx->ev.loop);
+  ev_loop_destroy(ctx->ev.loop);
   if(ctx->procnum <= SHUTTLESOCK_MANAGER) {
     free(ctx->common);
   }
@@ -127,7 +126,7 @@ static bool shuso_init_signal_watchers(shuso_t *ctx) {
   return true;
 }
 
-static bool shuso_spawn_manager(shuso_t *ctx) {
+bool shuso_spawn_manager(shuso_t *ctx) {
   pid_t pid = fork();
   if(pid > 0) {
     //master
@@ -138,34 +137,105 @@ static bool shuso_spawn_manager(shuso_t *ctx) {
   
   ctx->procnum = SHUTTLESOCK_MANAGER;
   ctx->process = &ctx->common->process.manager;
+  ctx->process->id = getpid();
+  ctx->process->state = SHUSO_PROCESS_STATE_STARTING;
   shuso_ipc_channel_shared_start(ctx, &ctx->common->process.manager);
   setpgid(0, 0); // so that the shell doesn't send signals to manager and workers
-  ev_loop_fork(ctx->loop);
+  ev_loop_fork(ctx->ev.loop);
   ctx->common->phase_handlers.start_manager(ctx, ctx->common->phase_handlers.privdata);
-  return true;
-}
-
-static bool shuso_spawn_worker(shuso_t *ctx) {
-  ctx->common->phase_handlers.start_worker(ctx, ctx->common->phase_handlers.privdata);
+  ctx->process->state = SHUSO_PROCESS_STATE_RUNNING;
   return true;
 }
 
 bool shuso_run(shuso_t *ctx) {
   ctx->procnum = SHUTTLESOCK_MASTER;
   ctx->process = &ctx->common->process.master;
-  bool shuso_run(shuso_t *);
+  ctx->process->id = getpid();
   
   shuso_add_child_watcher(ctx, child_watcher_cb, NULL, 0, 0);
   
+  ctx->process->state = SHUSO_PROCESS_STATE_STARTING;
   ctx->common->phase_handlers.start_master(ctx, ctx->common->phase_handlers.privdata);
+  ctx->process->state = SHUSO_PROCESS_STATE_RUNNING;
   
   if(!shuso_spawn_manager(ctx)) {
     return set_error(ctx, "failed to spawn manager process");
   }
   shuso_init_signal_watchers(ctx);
   shuso_ipc_channel_local_start(ctx);
-  ev_run(ctx->loop, 0);
+  ev_run(ctx->ev.loop, 0);
   shuso_log(ctx, "done running");
+  return true;
+}
+
+
+static void shuso_cleanup_worker_thread(void *arg) {
+  shuso_t     *ctx = arg;
+  assert(ctx->ev.loop);
+  ev_loop_destroy(ctx->ev.loop);
+  free(ctx);
+}
+
+ static void shuso_run_worker(void *arg) {
+  shuso_t   *ctx = arg;
+  ctx->ev.loop = ev_loop_new(ctx->ev.flags);
+  ev_cleanup_init(&ctx->ev.cleanup, cleanup_loop);
+  
+  ctx->process->state = SHUSO_PROCESS_STATE_STARTING;
+  pthread_cleanup_push(shuso_cleanup_worker_thread, ctx);
+  
+  ctx->common->phase_handlers.start_worker(ctx, ctx->common->phase_handlers.privdata);
+  ctx->process->state = SHUSO_PROCESS_STATE_RUNNING;
+  ev_run(ctx->ev.loop, 0);
+  shuso_log(ctx, "done running worker?...");
+  pthread_cleanup_pop(1);
+}
+
+bool shuso_spawn_worker(shuso_t *ctx, shuso_process_t *proc) {
+  int               procnum = process_to_procnum(ctx, proc);
+  assert(procnum >= SHUTTLESOCK_WORKER);
+  
+  if(proc->state <= SHUSO_PROCESS_STATE_NIL) {
+    return set_error(ctx, "can't spawn worker here, it looks like there's a running worker already");
+  }
+  proc->state <= SHUSO_PROCESS_STATE_STARTING;
+  pthread_attr_t    pthread_attr;
+  if(pthread_attr_init(&pthread_attr) != 0) {
+    return set_error(ctx, "can't spawn worker: pthread_attr_init() failed");
+  }
+  
+  shuso_t          *threadctx = malloc(sizeof(*ctx));
+  if(!threadctx) {
+    pthread_attr_destroy(&pthread_attr);
+    return set_error(ctx, "can't spawn worker: failed to malloc() shuttlesock context");
+  }
+  
+  if(proc->state == SHUSO_PROCESS_STATE_NIL) {
+    assert(proc->ipc.buf == NULL);
+    if(!shuso_ipc_channel_shared_create(ctx, proc)) {
+      pthread_attr_destroy(&pthread_attr);
+      free(threadctx);
+      return set_error(ctx, "can't spawn worker: failed to create shared IPC buffer");
+    }
+  }
+  if(proc->state == SHUSO_PROCESS_STATE_DEAD) {
+    assert(proc->ipc.buf);
+    //TODO: ensure buf is empty
+  }
+  
+  *threadctx = *ctx;
+  threadctx->process = proc;
+  threadctx->process = SHUSO_PROCESS_STATE_NIL;
+  threadctx->procnum = procnum;
+  
+  
+  int rc = pthread_create(&proc->thread, &pthread_attr, shuso_run_worker, threadctx);
+  
+  return true;
+}
+
+bool shuso_stop_worker(shuso_t *ctx, shuso_process_t *proc, shuso_stop_t forcefulness) {
+  ctx->common->phase_handlers.stop_worker(ctx, ctx->common->phase_handlers.privdata);
   return true;
 }
 
@@ -206,14 +276,15 @@ int process_to_procnum(shuso_t *ctx, shuso_process_t *proc) {
     free(cur); \
   } \
   llist_init(ctx->base_watchers.watcher_type)
-static void cleanup_master_loop(EV_P_ ev_cleanup *w, int revents) {
+static void cleanup_loop(EV_P_ ev_cleanup *w, int revents) {
   shuso_t *ctx = ev_userdata(EV_A);
-  
-  DELETE_BASE_WATCHERS(ctx, signal);
-  DELETE_BASE_WATCHERS(ctx, child);
-  DELETE_BASE_WATCHERS(ctx, io);
-  DELETE_BASE_WATCHERS(ctx, timer);
-  DELETE_BASE_WATCHERS(ctx, periodic);
+  if(ctx->procnum == SHUTTLESOCK_MASTER) {
+    DELETE_BASE_WATCHERS(ctx, signal);
+    DELETE_BASE_WATCHERS(ctx, child);
+    DELETE_BASE_WATCHERS(ctx, io);
+    DELETE_BASE_WATCHERS(ctx, timer);
+    DELETE_BASE_WATCHERS(ctx, periodic);
+  }
 }
 #undef DELETE_BASE_WATCHERS
 

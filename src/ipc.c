@@ -110,23 +110,23 @@ bool shuso_ipc_channel_local_stop(shuso_t *ctx) {
   ctx->ipc.buf.first = NULL;
   ctx->ipc.buf.last = NULL;
   if(ev_is_active(&ctx->ipc.send_retry) || ev_is_pending(&ctx->ipc.send_retry)) {
-    ev_timer_stop(ctx->loop, &ctx->ipc.send_retry);
+    ev_timer_stop(ctx->ev.loop, &ctx->ipc.send_retry);
   }
   if(ev_is_active(&ctx->ipc.receive_retry) || ev_is_pending(&ctx->ipc.receive_retry)) {
-    ev_timer_stop(ctx->loop, &ctx->ipc.receive_retry);
+    ev_timer_stop(ctx->ev.loop, &ctx->ipc.receive_retry);
   }
   return true;
 }
 
 bool shuso_ipc_channel_shared_start(shuso_t *ctx, shuso_process_t *proc) {
   proc->ipc.receive.data = proc;
-  ev_io_start(ctx->loop, &proc->ipc.receive);
+  ev_io_start(ctx->ev.loop, &proc->ipc.receive);
   shuso_log(ctx, "started shared channel, fds %d %d", proc->ipc.fd[0], proc->ipc.fd[1]);
   return true;
 }
 
 bool shuso_ipc_channel_shared_stop(shuso_t *ctx, shuso_process_t *proc) {
-  ev_io_stop(ctx->loop, &proc->ipc.receive);
+  ev_io_stop(ctx->ev.loop, &proc->ipc.receive);
   return true;
 }
 
@@ -176,7 +176,7 @@ static bool ipc_send_outbuf_append(shuso_t *ctx, shuso_process_t *src, shuso_pro
   }
   ch->buf.last = buffered;
   if(!ev_is_active(&ch->send_retry) && !ev_is_pending(&ch->send_retry)) {
-    ev_timer_again(ctx->loop, &ch->send_retry);
+    ev_timer_again(ctx->ev.loop, &ch->send_retry);
   }
   return true;
 }
@@ -218,7 +218,7 @@ static void ipc_send_retry_cb(EV_P_ ev_timer *w, int revents) {
   while((cur = ctx->ipc.buf.first) != NULL) {
     if(!ipc_send_direct(ctx, proc, cur->dst, cur->code, cur->ptr)) {
       //send still fails. retry again later
-      ev_timer_again(ctx->loop, w);
+      ev_timer_again(ctx->ev.loop, w);
       return;
     }
     ctx->ipc.buf.first = cur->next;
@@ -240,7 +240,7 @@ static void ipc_receive(shuso_t *ctx, shuso_process_t *proc) {
       shuso_log(ctx, "ipc_receive no code -- wait a little");
       //this ipc alert is not ready yet. it will be ready really soon though. retry quite rather very soon
       if(!ev_is_active(&ctx->ipc.receive_retry) && !ev_is_pending(&ctx->ipc.receive_retry)) {
-        ev_timer_again(ctx->loop, &ctx->ipc.receive_retry);
+        ev_timer_again(ctx->ev.loop, &ctx->ipc.receive_retry);
       }
       return;
     }

@@ -10,6 +10,7 @@
 #include <shuttlesock/sbuf.h>
 #include <shuttlesock/llist.h>
 #include <shuttlesock/ipc.h>
+#include <pthread.h>
 
 #define SHUTTLESOCK_MAX_WORKERS 1024
 
@@ -19,8 +20,20 @@ typedef enum {
   SHUSO_DEFER     = 3,
 } shuso_nextaction_t;
 
+//non-positive states MUST be kinds of non-running states
+#define SHUSO_PROCESS_STATE_DEAD -1
+#define SHUSO_PROCESS_STATE_NIL 0
+//positive states MUST be kinds of running states
+#define SHUSO_PROCESS_STATE_STARTING  1
+#define SHUSO_PROCESS_STATE_RUNNING   2
+#define SHUSO_PROCESS_STATE_STOPPING  3
+
+
+
 typedef struct shuso_process_s {
   pid_t               id;
+  pthread_t           thread; //only used for workers
+  int8_t              state;
   uint16_t            generation;
   shuso_ipc_channel_shared_t ipc;
 } shuso_process_t;
@@ -75,8 +88,12 @@ struct shuso_s {
   int                         procnum;
   shuso_process_t            *process;
   shuso_ipc_channel_local_t   ipc;
-  struct ev_loop             *loop;
-  ev_cleanup                  loop_cleanup;
+  struct {                  //ev
+    struct ev_loop             *loop;
+    ev_cleanup                  cleanup;
+    unsigned int                flags;
+  }                           ev;
+  
   shuso_common_t             *common;
   struct {                  //base_watchers
     LLIST_STRUCT(ev_signal)     signal;
@@ -89,9 +106,21 @@ struct shuso_s {
   void                       *data;  //custom data attached to this shuttlesock context
 }; //shuso_t;
 
+typedef enum {
+  SHUSO_STOP_ASK =      1,
+  SHUSO_STOP_INSIST =   2,
+  SHUSO_STOP_DEMAND =   3,
+  SHUSO_STOP_COMMAND =  4,
+  SHUSO_STOP_FORCE =    5
+} shuso_stop_t;
+
 shuso_t *shuso_create(unsigned int ev_loop_flags, shuso_handlers_t *handlers, shuso_config_t *config, const char **err);
 bool shuso_destroy(shuso_t *ctx);
 bool shuso_run(shuso_t *);
+bool shuso_spawn_manager(shuso_t *ctx);
+bool shuso_stop_manager(shuso_t *ctx, shuso_stop_t forcefulness);
+bool shuso_spawn_worker(shuso_t *ctx, shuso_process_t *proc);
+bool shuso_stop_worker(shuso_t *ctx, shuso_process_t *proc, shuso_stop_t forcefulness);
 
 
 #define shuso_set_nonblocking(fd) fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_NONBLOCK)
