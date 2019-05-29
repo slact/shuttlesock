@@ -60,6 +60,7 @@ typedef struct {
   float               ipc_send_retry_delay;
   float               ipc_receive_retry_delay;
   float               ipc_send_timeout;
+  int                 workers;
 } shuso_config_t;
 
 typedef struct {

@@ -6,6 +6,7 @@
 #include <sys/types.h>
 #include "shuttlesock_private.h"
 #include <shuttlesock/log.h>
+#include "sysutil.h"
 
 static void cleanup_loop(EV_P_ ev_cleanup *w, int revents);
 static void signal_watcher_cb(EV_P_ ev_signal *w, int revents);
@@ -61,6 +62,7 @@ shuso_t *shuso_create(unsigned int ev_loop_flags, shuso_handlers_t *handlers, sh
   set_default_config(ctx, ipc_send_retry_delay, SHUTTLESOCK_CONFIG_DEFAULT_IPC_SEND_RETRY_DELAY);
   set_default_config(ctx, ipc_receive_retry_delay, SHUTTLESOCK_CONFIG_DEFAULT_IPC_RECEIVE_RETRY_DELAY);
   set_default_config(ctx, ipc_send_timeout, SHUTTLESOCK_CONFIG_DEFAULT_IPC_SEND_TIMEOUT);
+  set_default_config(ctx, workers, shuso_system_cores_online());
   
   if(handlers) {
     common_ctx->phase_handlers = *handlers;
@@ -144,6 +146,9 @@ bool shuso_spawn_manager(shuso_t *ctx) {
   ev_loop_fork(ctx->ev.loop);
   ctx->common->phase_handlers.start_manager(ctx, ctx->common->phase_handlers.privdata);
   ctx->process->state = SHUSO_PROCESS_STATE_RUNNING;
+  for(int i=0; i<ctx->common->config.workers; i++) {
+    shuso_spawn_worker(ctx, &ctx->common->process.worker[i]);
+  }
   return true;
 }
 
@@ -176,39 +181,56 @@ static void shuso_cleanup_worker_thread(void *arg) {
   free(ctx);
 }
 
- static void shuso_run_worker(void *arg) {
+static void worker_noop(EV_P_ ev_timer *w, int revents) {
+  shuso_t   *ctx = ev_userdata(EV_A);
+  shuso_log(ctx, "noop");
+}
+
+ static void *shuso_run_worker(void *arg) {
   shuso_t   *ctx = arg;
+  assert(ctx);
   ctx->ev.loop = ev_loop_new(ctx->ev.flags);
+  ev_set_userdata(ctx->ev.loop, ctx);
   ev_cleanup_init(&ctx->ev.cleanup, cleanup_loop);
-  
+  assert(ctx->process);
   ctx->process->state = SHUSO_PROCESS_STATE_STARTING;
   pthread_cleanup_push(shuso_cleanup_worker_thread, ctx);
   
+  shuso_ipc_channel_local_start(ctx);
+  
   ctx->common->phase_handlers.start_worker(ctx, ctx->common->phase_handlers.privdata);
   ctx->process->state = SHUSO_PROCESS_STATE_RUNNING;
+  
+  shuso_add_timer_watcher(ctx, worker_noop, ctx, 1.0, 1.0);
+  
   ev_run(ctx->ev.loop, 0);
   shuso_log(ctx, "done running worker?...");
   pthread_cleanup_pop(1);
+  return NULL;
 }
 
 bool shuso_spawn_worker(shuso_t *ctx, shuso_process_t *proc) {
   int               procnum = process_to_procnum(ctx, proc);
+  assert(proc);
   assert(procnum >= SHUTTLESOCK_WORKER);
   
-  if(proc->state <= SHUSO_PROCESS_STATE_NIL) {
+  if(proc->state > SHUSO_PROCESS_STATE_NIL) {
     return set_error(ctx, "can't spawn worker here, it looks like there's a running worker already");
   }
-  proc->state <= SHUSO_PROCESS_STATE_STARTING;
+  proc->state = SHUSO_PROCESS_STATE_STARTING;
   pthread_attr_t    pthread_attr;
   if(pthread_attr_init(&pthread_attr) != 0) {
     return set_error(ctx, "can't spawn worker: pthread_attr_init() failed");
   }
   
-  shuso_t          *threadctx = malloc(sizeof(*ctx));
+  shuso_t          *threadctx = calloc(1, sizeof(*ctx));
   if(!threadctx) {
     pthread_attr_destroy(&pthread_attr);
     return set_error(ctx, "can't spawn worker: failed to malloc() shuttlesock context");
   }
+  threadctx->common = ctx->common;
+  threadctx->ev.flags = ctx->ev.flags;
+  threadctx->data = ctx->data;
   
   if(proc->state == SHUSO_PROCESS_STATE_NIL) {
     assert(proc->ipc.buf == NULL);
@@ -223,13 +245,15 @@ bool shuso_spawn_worker(shuso_t *ctx, shuso_process_t *proc) {
     //TODO: ensure buf is empty
   }
   
-  *threadctx = *ctx;
   threadctx->process = proc;
-  threadctx->process = SHUSO_PROCESS_STATE_NIL;
+  threadctx->process->state = SHUSO_PROCESS_STATE_NIL;
   threadctx->procnum = procnum;
   
-  
-  int rc = pthread_create(&proc->thread, &pthread_attr, shuso_run_worker, threadctx);
+  if(pthread_create(&proc->thread, &pthread_attr, shuso_run_worker, threadctx) != 0) {
+    pthread_attr_destroy(&pthread_attr);
+    free(threadctx);
+    return set_error(ctx, "can't spawn worker: failed to create thread");
+  }
   
   return true;
 }

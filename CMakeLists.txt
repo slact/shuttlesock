@@ -18,6 +18,7 @@ set(libsrc
   src/watchers.c
   src/ipc.c
   src/ipc_commands.c
+  src/sysutil.c
 )
 
 add_library(shuttlesock SHARED ${libsrc})
