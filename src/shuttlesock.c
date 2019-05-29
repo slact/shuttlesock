@@ -181,14 +181,14 @@ static void shuso_cleanup_worker_thread(void *arg) {
   free(ctx);
 }
 
-static void worker_noop(EV_P_ ev_timer *w, int revents) {
-  shuso_t   *ctx = ev_userdata(EV_A);
-  shuso_log(ctx, "noop");
-}
-
  static void *shuso_run_worker(void *arg) {
   shuso_t   *ctx = arg;
   assert(ctx);
+  
+  char       threadname[16];
+  snprintf(threadname, 16, "worker %i", ctx->procnum);
+  shuso_system_thread_setname(threadname);
+  
   ctx->ev.loop = ev_loop_new(ctx->ev.flags);
   ev_set_userdata(ctx->ev.loop, ctx);
   ev_cleanup_init(&ctx->ev.cleanup, cleanup_loop);
@@ -196,12 +196,11 @@ static void worker_noop(EV_P_ ev_timer *w, int revents) {
   ctx->process->state = SHUSO_PROCESS_STATE_STARTING;
   pthread_cleanup_push(shuso_cleanup_worker_thread, ctx);
   
+  shuso_ipc_channel_shared_start(ctx, ctx->process);
   shuso_ipc_channel_local_start(ctx);
   
   ctx->common->phase_handlers.start_worker(ctx, ctx->common->phase_handlers.privdata);
   ctx->process->state = SHUSO_PROCESS_STATE_RUNNING;
-  
-  shuso_add_timer_watcher(ctx, worker_noop, ctx, 1.0, 1.0);
   
   ev_run(ctx->ev.loop, 0);
   shuso_log(ctx, "done running worker?...");
@@ -217,6 +216,8 @@ bool shuso_spawn_worker(shuso_t *ctx, shuso_process_t *proc) {
   if(proc->state > SHUSO_PROCESS_STATE_NIL) {
     return set_error(ctx, "can't spawn worker here, it looks like there's a running worker already");
   }
+  
+  int               prev_proc_state = proc->state;
   proc->state = SHUSO_PROCESS_STATE_STARTING;
   pthread_attr_t    pthread_attr;
   if(pthread_attr_init(&pthread_attr) != 0) {
@@ -232,7 +233,7 @@ bool shuso_spawn_worker(shuso_t *ctx, shuso_process_t *proc) {
   threadctx->ev.flags = ctx->ev.flags;
   threadctx->data = ctx->data;
   
-  if(proc->state == SHUSO_PROCESS_STATE_NIL) {
+  if(prev_proc_state == SHUSO_PROCESS_STATE_NIL) {
     assert(proc->ipc.buf == NULL);
     if(!shuso_ipc_channel_shared_create(ctx, proc)) {
       pthread_attr_destroy(&pthread_attr);
@@ -240,7 +241,7 @@ bool shuso_spawn_worker(shuso_t *ctx, shuso_process_t *proc) {
       return set_error(ctx, "can't spawn worker: failed to create shared IPC buffer");
     }
   }
-  if(proc->state == SHUSO_PROCESS_STATE_DEAD) {
+  if(prev_proc_state == SHUSO_PROCESS_STATE_DEAD) {
     assert(proc->ipc.buf);
     //TODO: ensure buf is empty
   }
@@ -318,6 +319,11 @@ static void signal_watcher_cb(EV_P_ ev_signal *w, int revents) {
   if(ctx->procnum != SHUTTLESOCK_MASTER) {
     shuso_log(ctx, "forward signal to master via IPC");
     shuso_ipc_send(ctx, &ctx->common->process.master, SHUTTLESOCK_IPC_CMD_SIGNAL, (void *)(intptr_t )w->signum);
+  }
+  else {
+    //TODO: do the actual shutdown, ya know?
+    shuso_ipc_send(ctx, &ctx->common->process.manager, SHUTTLESOCK_IPC_CMD_SHUTDOWN, (void *)(intptr_t )(shuso_stop_t )SHUSO_STOP_ASK);
+    
   }
 }
 

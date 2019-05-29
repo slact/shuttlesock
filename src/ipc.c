@@ -50,7 +50,7 @@ bool shuso_ipc_channel_shared_create(shuso_t *ctx, shuso_process_t *proc) {
 #endif
   proc->ipc.fd[0] = fds[0];
   proc->ipc.fd[1] = fds[1];
-  shuso_log(ctx, "fds: %d %d, -> %d %d", fds[0], fds[1], proc->ipc.fd[0], proc->ipc.fd[1]);
+  shuso_log(ctx, "created shared IPC channel fds: %d %d", fds[0], fds[1]);
   
   fcntl(fds[1], F_SETFL, O_NONBLOCK);
   if(fds[0] != -1) { //using pipe()
