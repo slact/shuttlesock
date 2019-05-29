@@ -71,6 +71,8 @@ typedef struct {
     shuso_process_t     master;
     shuso_process_t     manager;
     shuso_process_t     worker[SHUTTLESOCK_MAX_WORKERS];
+    uint16_t            workers_start;
+    uint16_t            workers_end;
   }                   process;
 } shuso_common_t;
 

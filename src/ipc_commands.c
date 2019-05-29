@@ -29,7 +29,11 @@ static void signal_cancel(shuso_t *ctx, const uint8_t code, void *ptr) {
 
 static void shutdown_handle(shuso_t *ctx, const uint8_t code, void *ptr) {
   if(ctx->procnum == SHUTTLESOCK_MASTER) {
-    
+    //do nothing i guess?
+  }
+  else if(ctx->procnum == SHUTTLESOCK_MANAGER) {
+    //forward it to all the workers
+    shuso_ipc_send_workers(ctx, SHUTTLESOCK_IPC_CMD_SHUTDOWN, ptr); 
   }
 }
 static void shutdown_cancel(shuso_t *ctx, const uint8_t code, void *ptr) {

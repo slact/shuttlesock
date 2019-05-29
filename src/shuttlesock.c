@@ -146,8 +146,11 @@ bool shuso_spawn_manager(shuso_t *ctx) {
   ev_loop_fork(ctx->ev.loop);
   ctx->common->phase_handlers.start_manager(ctx, ctx->common->phase_handlers.privdata);
   ctx->process->state = SHUSO_PROCESS_STATE_RUNNING;
+  ctx->common->process.workers_start = 0;
+  ctx->common->process.workers_end = ctx->common->process.workers_start;
   for(int i=0; i<ctx->common->config.workers; i++) {
     shuso_spawn_worker(ctx, &ctx->common->process.worker[i]);
+    ctx->common->process.workers_end++;
   }
   return true;
 }
