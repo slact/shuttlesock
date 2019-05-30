@@ -155,6 +155,42 @@ bool shuso_spawn_manager(shuso_t *ctx) {
   return true;
 }
 
+static void stop_manager_timer_cb(EV_P_ ev_timer *w, int revents) {
+  shuso_t           *ctx = ev_userdata(EV_A);
+  shuso_log(ctx, "stop_manager_timer_cb");
+  shuso_stop_manager(ctx, SHUSO_STOP_ASK);
+}
+
+bool shuso_stop_manager(shuso_t *ctx, shuso_stop_t stop_type) {
+  if(ctx->procnum != SHUTTLESOCK_MANAGER) {
+    return set_error(ctx, "can't stop manager from outside the manager");
+  }
+  if(ctx->process->state == SHUSO_PROCESS_STATE_RUNNING) {
+    ctx->process->state = SHUSO_PROCESS_STATE_STOPPING;
+    shuso_ipc_send_workers(ctx, SHUTTLESOCK_IPC_CMD_SHUTDOWN, (void *)(intptr_t )stop_type);
+    shuso_add_timer_watcher(ctx, stop_manager_timer_cb, ctx, 1.0, 1.0);
+  }
+  if(ctx->process->state == SHUSO_PROCESS_STATE_STOPPING) {
+    bool all_stopped = true;
+    if(stop_type >= SHUSO_STOP_FORCE) {
+      //kill all threads
+      for(int i = ctx->common->process.workers_start; i<ctx->common->process.workers_start; i++) {
+        //TODO: kill 'em!
+      }
+    }
+    else {
+      for(int i = ctx->common->process.workers_start; i<ctx->common->process.workers_start; i++) {
+        all_stopped &= ctx->common->process.worker[i].state == SHUSO_PROCESS_STATE_DEAD;
+      }
+    }
+    if(all_stopped) {
+      ev_break(ctx->ev.loop, EVBREAK_ALL);
+      return true;
+    }
+  }
+  return true;
+}
+
 bool shuso_run(shuso_t *ctx) {
   ctx->procnum = SHUTTLESOCK_MASTER;
   ctx->process = &ctx->common->process.master;
@@ -180,6 +216,8 @@ bool shuso_run(shuso_t *ctx) {
 static void shuso_cleanup_worker_thread(void *arg) {
   shuso_t     *ctx = arg;
   assert(ctx->ev.loop);
+  shuso_log(ctx, "exiting worker");
+  ctx->process->state = SHUSO_PROCESS_STATE_DEAD;
   ev_loop_destroy(ctx->ev.loop);
   free(ctx);
 }
@@ -206,7 +244,6 @@ static void shuso_cleanup_worker_thread(void *arg) {
   ctx->process->state = SHUSO_PROCESS_STATE_RUNNING;
   
   ev_run(ctx->ev.loop, 0);
-  shuso_log(ctx, "done running worker?...");
   pthread_cleanup_pop(1);
   return NULL;
 }
@@ -263,8 +300,25 @@ bool shuso_spawn_worker(shuso_t *ctx, shuso_process_t *proc) {
 }
 
 bool shuso_stop_worker(shuso_t *ctx, shuso_process_t *proc, shuso_stop_t forcefulness) {
-  ctx->common->phase_handlers.stop_worker(ctx, ctx->common->phase_handlers.privdata);
-  return true;
+  if(ctx->process == proc) { //i'm the workers that wants to stop
+    if(forcefulness < SHUSO_STOP_FORCE) {
+      if(ctx->process->state == SHUSO_PROCESS_STATE_RUNNING) {
+        ctx->common->phase_handlers.stop_worker(ctx, ctx->common->phase_handlers.privdata);
+        ctx->process->state = SHUSO_PROCESS_STATE_STOPPING;
+        //TODO: defer worker stop maybe?
+        
+        ev_break(ctx->ev.loop, EVBREAK_ALL);
+      }
+      else {
+        shuso_log(ctx, "already shutting down");
+      }
+    }
+    //TODO: forced self-shutdown
+    return true;
+  }
+  else {
+    return shuso_ipc_send(ctx, proc, SHUTTLESOCK_IPC_CMD_SHUTDOWN, (void *)(intptr_t )forcefulness);
+  }
 }
 
 bool set_error(shuso_t *ctx, const char *err) {
@@ -306,12 +360,17 @@ int process_to_procnum(shuso_t *ctx, shuso_process_t *proc) {
   llist_init(ctx->base_watchers.watcher_type)
 static void cleanup_loop(EV_P_ ev_cleanup *w, int revents) {
   shuso_t *ctx = ev_userdata(EV_A);
+  shuso_log(ctx, "CLEANUP LOOP");
   if(ctx->procnum == SHUTTLESOCK_MASTER) {
     DELETE_BASE_WATCHERS(ctx, signal);
     DELETE_BASE_WATCHERS(ctx, child);
     DELETE_BASE_WATCHERS(ctx, io);
     DELETE_BASE_WATCHERS(ctx, timer);
     DELETE_BASE_WATCHERS(ctx, periodic);
+    shuso_log(ctx, "exiting master");
+  }
+  else if(ctx->procnum == SHUTTLESOCK_MANAGER) {
+    shuso_log(ctx, "exiting manager");
   }
 }
 #undef DELETE_BASE_WATCHERS

@@ -15,7 +15,8 @@
 #define SHUTTLESOCK_MAX_WORKERS 1024
 
 typedef enum {
-  SHUSO_ABORT     = 1,
+  SHUSO_ABORT     = 0,
+  SHUSO_FINISH    = 1,
   SHUSO_CONTINUE  = 2,
   SHUSO_DEFER     = 3,
 } shuso_nextaction_t;

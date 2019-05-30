@@ -28,12 +28,16 @@ static void signal_cancel(shuso_t *ctx, const uint8_t code, void *ptr) {
 }
 
 static void shutdown_handle(shuso_t *ctx, const uint8_t code, void *ptr) {
+  shuso_stop_t stop_type = (shuso_stop_t )(intptr_t )ptr;
   if(ctx->procnum == SHUTTLESOCK_MASTER) {
     //do nothing i guess?
   }
   else if(ctx->procnum == SHUTTLESOCK_MANAGER) {
     //forward it to all the workers
-    shuso_ipc_send_workers(ctx, SHUTTLESOCK_IPC_CMD_SHUTDOWN, ptr); 
+    shuso_stop_manager(ctx, stop_type);
+  }
+  else if(ctx->procnum >= SHUTTLESOCK_WORKER) {
+    shuso_stop_worker(ctx, ctx->process, stop_type);
   }
 }
 static void shutdown_cancel(shuso_t *ctx, const uint8_t code, void *ptr) {
