@@ -37,6 +37,7 @@
   else { \
     (ll).tail->next = el; \
     (el)->prev = (ll).tail; \
+    (ll).tail = el; \
   } \
   (ll).count++; \
   (el)->next = NULL
@@ -73,7 +74,7 @@ typedef struct type##_link_s { \
 struct { \
   type##_link_t *head; \
   type##_link_t *tail; \
-  off_t         *count; \
+  size_t         count; \
 }
   
 #endif //__SHUTTLESOCK_LLIST_H

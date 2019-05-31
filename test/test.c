@@ -64,6 +64,7 @@ describe(shuttlesock_init) {
     };
     shuso_t *ss = shuso_create(EVFLAG_AUTO, &handlers, NULL, NULL);
     shuso_run(ss);
+    shuso_destroy(ss);
   }
 }
 

@@ -50,7 +50,7 @@ bool shuso_ipc_channel_shared_create(shuso_t *ctx, shuso_process_t *proc) {
 #endif
   proc->ipc.fd[0] = fds[0];
   proc->ipc.fd[1] = fds[1];
-  shuso_log(ctx, "created shared IPC channel fds: %d %d", fds[0], fds[1]);
+  //shuso_log(ctx, "created shared IPC channel fds: %d %d", fds[0], fds[1]);
   
   fcntl(fds[1], F_SETFL, O_NONBLOCK);
   if(fds[0] != -1) { //using pipe()
@@ -68,11 +68,12 @@ bool shuso_ipc_channel_shared_create(shuso_t *ctx, shuso_process_t *proc) {
 
 bool shuso_ipc_channel_shared_destroy(shuso_t *ctx, shuso_process_t *proc) {
   int               procnum = process_to_procnum(ctx, proc);
-  
   if(procnum == SHUTTLESOCK_MASTER || procnum == SHUTTLESOCK_MANAGER) {
+    //shuso_log(ctx, "destroy shared IPC for %s", procnum == SHUTTLESOCK_MASTER ? "master" : "manager");
     munmap(proc->ipc.buf, proc->ipc.buf->sz);
   }
   else {
+    //shuso_log(ctx, "destroy shared IPC for worker %i", procnum);
     free(proc->ipc.buf);
   }
   proc->ipc.buf = NULL;
@@ -121,7 +122,7 @@ bool shuso_ipc_channel_local_stop(shuso_t *ctx) {
 bool shuso_ipc_channel_shared_start(shuso_t *ctx, shuso_process_t *proc) {
   proc->ipc.receive.data = proc;
   ev_io_start(ctx->ev.loop, &proc->ipc.receive);
-  shuso_log(ctx, "started shared channel, fds %d %d", proc->ipc.fd[0], proc->ipc.fd[1]);
+  //shuso_log(ctx, "started shared channel, fds %d %d", proc->ipc.fd[0], proc->ipc.fd[1]);
   return true;
 }
 

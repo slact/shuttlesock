@@ -54,7 +54,10 @@ if(CCACHE_PROGRAM)
   set(CMAKE_CXX_COMPILER_LAUNCHER ${CCACHE_PROGRAM})
 endif()
 
-add_executable(shuso_test test/test.c)
+add_executable(shuso_test 
+  test/test.c
+  test/util.c
+)
 target_link_libraries(shuso_test PRIVATE shuttlesock)
 target_include_directories(shuso_test PRIVATE test)
 

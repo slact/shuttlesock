@@ -32,9 +32,9 @@ typedef enum {
 
 
 typedef struct shuso_process_s {
-  pid_t               id;
-  pthread_t           thread; //only used for workers
-  int8_t              state;
+  pid_t               pid;
+  pthread_t           tid;
+  _Atomic int8_t     *state;
   uint16_t            generation;
   shuso_ipc_channel_shared_t ipc;
 } shuso_process_t;
@@ -75,6 +75,10 @@ typedef struct {
     uint16_t            workers_start;
     uint16_t            workers_end;
   }                   process;
+  struct {          //shm
+    void               *ptr;
+    size_t              sz;
+  }                   shm;
 } shuso_common_t;
 
 #define SHUTTLESOCK_NOPROCESS  -3
@@ -121,12 +125,19 @@ typedef enum {
 shuso_t *shuso_create(unsigned int ev_loop_flags, shuso_handlers_t *handlers, shuso_config_t *config, const char **err);
 bool shuso_destroy(shuso_t *ctx);
 bool shuso_run(shuso_t *);
+bool shuso_stop(shuso_t *ctx, shuso_stop_t forcefulness);
+bool shuso_is_forked_manager(shuso_t *ctx, shuso_stop_t forcefulness);
 bool shuso_spawn_manager(shuso_t *ctx);
 bool shuso_stop_manager(shuso_t *ctx, shuso_stop_t forcefulness);
 bool shuso_spawn_worker(shuso_t *ctx, shuso_process_t *proc);
-bool shuso_stop_worker(shuso_t *ctx, shuso_process_t *proc, shuso_stop_t forcefulness);
+bool shuso_stop_worker(shuso_t *ctx, shuso_process_t *proc, shuso_stop_t
+ forcefulness);
+bool shuso_stop_manager(shuso_t *ctx, shuso_stop_t forcefulness);
 
 
+
+#define SHUSO_EACH_WORKER(ctx, cur) \
+  for(shuso_process_t *cur = &ctx->common->process.worker[ctx->common->process.workers_start], *___worker_end = &ctx->common->process.worker[ctx->common->process.workers_end]; cur < ___worker_end; cur++)
 #define shuso_set_nonblocking(fd) fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_NONBLOCK)
 ev_signal   *shuso_add_signal_watcher(shuso_t *ctx, void (*cb)(EV_P_ ev_signal *, int), void *pd, int signum);
 ev_child    *shuso_add_child_watcher(shuso_t *ctx, void (*cb)(EV_P_ ev_child *, int), void *pd, pid_t pid, int trace);

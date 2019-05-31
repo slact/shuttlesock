@@ -2,6 +2,7 @@
 #include <shuttlesock.h>
 #include <ev.h>
 #include <assert.h>
+#include <shuttlesock/log.h>
 #include "shuttlesock_private.h"
 
 //ugly repetition follows
