@@ -173,14 +173,16 @@ bool shuso_spawn_manager(shuso_t *ctx) {
   return true;
 }
 
+bool shuso_is_forked_manager(shuso_t *ctx) {
+  return (ctx->procnum == SHUTTLESOCK_MANAGER);
+}
+
 static void stop_manager_timer_cb(EV_P_ ev_timer *w, int revents) {
   shuso_t           *ctx = ev_userdata(EV_A);
-  shuso_log(ctx, "stop_manager_timer_cb");
   shuso_stop_manager(ctx, SHUSO_STOP_ASK);
 }
 static void stop_master_timer_cb(EV_P_ ev_timer *w, int revents) {
   shuso_t           *ctx = ev_userdata(EV_A);
-  shuso_log(ctx, "stop_master_timer_cb");
   shuso_stop(ctx, SHUSO_STOP_ASK);
 }
 
@@ -195,7 +197,7 @@ bool shuso_stop_manager(shuso_t *ctx, shuso_stop_t forcefulness) {
   if(*ctx->process->state == SHUSO_PROCESS_STATE_RUNNING) {
     *ctx->process->state = SHUSO_PROCESS_STATE_STOPPING;
     shuso_ipc_send_workers(ctx, SHUTTLESOCK_IPC_CMD_SHUTDOWN, (void *)(intptr_t )forcefulness);
-    shuso_add_timer_watcher(ctx, stop_manager_timer_cb, ctx, 1.0, 1.0);
+    shuso_add_timer_watcher(ctx, stop_manager_timer_cb, ctx, 0.1, 0.5);
   }
   if(*ctx->process->state == SHUSO_PROCESS_STATE_STOPPING) {
     bool all_stopped = true;
@@ -211,6 +213,8 @@ bool shuso_stop_manager(shuso_t *ctx, shuso_stop_t forcefulness) {
       }
     }
     if(all_stopped) {
+      ctx->common->phase_handlers.stop_manager(ctx, ctx->common->phase_handlers.privdata);
+      //TODO: deferred stopping
       ev_break(ctx->ev.loop, EVBREAK_ALL);
       return true;
     }
@@ -257,7 +261,7 @@ bool shuso_stop(shuso_t *ctx, shuso_stop_t forcefulness) {
     if(!shuso_stop_manager(ctx, forcefulness)) {
       return false;
     }
-    shuso_add_timer_watcher(ctx, stop_master_timer_cb, ctx, 1.0, 1.0);
+    shuso_add_timer_watcher(ctx, stop_master_timer_cb, ctx, 0.1, 0.5);
   }
   
   if(*ctx->common->process.manager.state == SHUSO_PROCESS_STATE_DEAD) {

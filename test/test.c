@@ -3,6 +3,8 @@
 #include <stdio.h>
 #define SNOW_ENABLED 1
 #include "snow.h"
+#include <signal.h>
+#include <sys/mman.h>
 
 #undef snow_main_decls
 #define snow_main_decls \
@@ -11,6 +13,7 @@
         struct _snow _snow; \
         int _snow_inited = 0
 
+#include "test.h"
 
 int set_test_options(int *argc, char **argv) {
   int i = 1;
@@ -51,8 +54,17 @@ void stop_worker(shuso_t *ctx, void *pd) {
   shuso_log(ctx, "stop worker");
 }
 
-
 describe(shuttlesock_init) {
+  static shuso_t *ss = NULL;
+  before_each() {
+    ss = NULL;
+  }
+  after_each() {
+    if(ss) {
+      shuso_destroy(ss);
+      ss = NULL;
+    }
+  }
   test("run loop") {
     shuso_handlers_t handlers = {
       .start_master = start_master,
@@ -62,16 +74,42 @@ describe(shuttlesock_init) {
       .start_worker = start_worker,
       .stop_worker = stop_worker
     };
-    shuso_t *ss = shuso_create(EVFLAG_AUTO, &handlers, NULL, NULL);
+    ss = shuso_create(EVFLAG_AUTO, &handlers, NULL, NULL);
     shuso_run(ss);
-    shuso_destroy(ss);
+    assert_shuttlesock_ok(ss);
+    if(shuso_is_forked_manager(ss)) {
+      sleep(2);
+    }
+  }
+  test("another test") {
+    //do nothing
+  }
+  subdesc(oh_no_athother_thing) {
+    test("test thisn thing too") {
+      //meh
+    }
+  }
+}
+
+describe(now_what) {
+  test("yeap...") {
+    //okay
   }
 }
 
 snow_main_decls;
 int main(int argc, char **argv) {
+  child_result = mmap(NULL, sizeof(*child_result), PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_SHARED,-1, 0);
+  assert(child_result);
   if(!set_test_options(&argc, argv)) {
     return 1;
   }
-  return snow_main_function(argc, argv);
+  pid_t pid = getpid();
+  int rc = snow_main_function(argc, argv);
+  if(getpid() != pid) {
+    child_result->pid = getpid();
+    child_result->status = rc;
+  }
+  munmap(child_result, sizeof(child_result));
+  return rc;
 }

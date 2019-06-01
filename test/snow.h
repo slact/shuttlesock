@@ -41,6 +41,7 @@
 #define assert(...)
 #define snow_break()
 #define snow_rerun_failed()
+#define snow_bail()
 
 #define asserteq_dbl(...)
 #define asserteq_ptr(...)
@@ -254,6 +255,7 @@ struct _snow {
 	int exit_code;
 	const char *filename;
 	int linenum;
+	int bail;
 
 	struct _snow_arr desc_funcs;
 	struct _snow_arr desc_stack;
@@ -543,6 +545,13 @@ static void _snow_print_desc_end(void) {
 		_snow.linenum = __LINE__; \
 	} while (0)
 
+#define snow_bail() \
+	do {\
+		_snow.opts[_SNOW_OPT_RERUN_FAILED].boolval = 0; \
+		_snow.bail = 1; \
+	} while(0)
+
+
 __attribute__((unused))
 static void _snow_init(void) {
 	_snow_inited = 1;
@@ -672,6 +681,7 @@ static void _snow_desc_end(void) {
  */
 #define _snow_case_begin(casename) \
 	do { \
+		if (_snow.bail) break; \
 		if (_snow.opts[_SNOW_OPT_LIST].boolval) break; \
 		if (!_snow.current_desc->enabled) break; \
 		if (!_snow.current_desc->printed) _snow_print_desc_begin(); \
@@ -745,7 +755,6 @@ static void _snow_case_end(int success) {
 			_snow.exit_code = EXIT_FAILURE;
 		}
 	}
-
 	longjmp(_snow.current_case.done_jmp_ret, 1);
 }
 
@@ -1056,6 +1065,9 @@ static int snow_main_function(int argc, char **argv) {
 	int total_descs_ran = 0;
 
 	for (size_t i = 0; i < _snow.desc_funcs.length; ++i) {
+		if(_snow.bail) {
+			continue;
+		}
 		struct _snow_desc_func *df = _snow_arr_get(&_snow.desc_funcs, i);
 		_snow_desc_begin(df->name);
 		df->func();
