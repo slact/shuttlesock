@@ -7,7 +7,7 @@
 #include <sys/mman.h>
 #include "shuttlesock_private.h"
 #include <shuttlesock/log.h>
-#include "sysutil.h"
+#include <shuttlesock/sysutil.h>
 
 static void shuso_cleanup_loop(shuso_t *ctx);
 static void signal_watcher_cb(EV_P_ ev_signal *w, int revents);
@@ -19,7 +19,7 @@ static void do_nothing(void) {}
     ctx->common->phase_handlers.start_master = (shuso_callback_fn *)do_nothing
 
 #define set_default_config(ctx, conf, default_val) do {\
-  if(!(ctx)->common->config.conf) { \
+  if(!(bool )((ctx)->common->config.conf)) { \
     (ctx)->common->config.conf = default_val; \
   } \
 } while(0)
@@ -265,6 +265,8 @@ bool shuso_stop(shuso_t *ctx, shuso_stop_t forcefulness) {
   }
   
   if(*ctx->common->process.manager.state == SHUSO_PROCESS_STATE_DEAD) {
+    ctx->common->phase_handlers.stop_master(ctx, ctx->common->phase_handlers.privdata);
+    //TODO: deferred stop
     ev_break(ctx->ev.loop, EVBREAK_ALL);
   }
   return true;

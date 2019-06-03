@@ -1,4 +1,5 @@
-#if SHUTTLESOCK_PTHREAD_SETNAME_STYLE == SETNAME_STYLE_LINUX
+#include <shuttlesock/configure.h>
+#ifdef SHUTTLESOCK_PTHREAD_SETNAME_STYLE_LINUX
 #define _GNU_SOURCE
 #endif
 #include <pthread.h>
@@ -6,7 +7,6 @@
 #undef _GNU_SOURCE
 #endif
 
-#include <shuttlesock/configure.h>
 #include <unistd.h>
 #include <stdint.h>
 #include <stdbool.h>
@@ -25,7 +25,7 @@ int shuso_system_cores_online(void) {
   uint32_t cores;
 #ifdef _SC_NPROCESSORS_ONLN
   cores = sysconf(_SC_NPROCESSORS_ONLN);
-  if (cores < 1 || cores > (uint32_t )(1<<31)) {
+  if (cores < 1 || cores > (uint32_t )(1<<(uint32_t )31)) {
     cores = sysconf(_SC_NPROCESSORS_CONF);
   }
 #else
@@ -46,11 +46,11 @@ int shuso_system_cores_online(void) {
 }
 
 bool shuso_system_thread_setname(const char *name) {
-#if SHUTTLESOCK_PTHREAD_SETNAME_STYLE == SETNAME_STYLE_LINUX
+#if defined SHUTTLESOCK_PTHREAD_SETNAME_STYLE_LINUX
   return pthread_setname_np(pthread_self(), name) == 0;
-#elif SHUTTLESOCK_PTHREAD_SETNAME_STYLE == SETNAME_STYLE_FREEBSD
+#elif defined SHUTTLESOCK_PTHREAD_SETNAME_STYLE_FREEBSD
   return pthread_set_name_np(pthread_self(), name) == 0;
-#elif SHUTTLESOCK_PTHREAD_SETNAME_STYLE == SETNAME_STYLE_NETBSD
+#elif defined SHUTTLESOCK_PTHREAD_SETNAME_STYLE_NETBSD
   return pthread_set_name_np(th, "%s", name) == 0;
 #else
   return false;

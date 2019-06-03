@@ -1,18 +1,3 @@
-#include <shuttlesock.h>
-#include <shuttlesock/log.h>
-#include <stdio.h>
-#define SNOW_ENABLED 1
-#include "snow.h"
-#include <signal.h>
-#include <sys/mman.h>
-
-#undef snow_main_decls
-#define snow_main_decls \
-        void snow_break() {} \
-        void snow_rerun_failed() {raise(SIGSTOP);} \
-        struct _snow _snow; \
-        int _snow_inited = 0
-
 #include "test.h"
 
 int set_test_options(int *argc, char **argv) {
@@ -35,24 +20,7 @@ int set_test_options(int *argc, char **argv) {
   return 1;
 }
 
-void start_master(shuso_t *ctx, void *pd) {
-  shuso_log(ctx, "start master");
-}
-void stop_master(shuso_t *ctx, void *pd) {
-  shuso_log(ctx, "stop master");
-}
-void start_manager(shuso_t *ctx, void *pd) {
-  shuso_log(ctx, "start manager");
-}
-void stop_manager(shuso_t *ctx, void *pd) {
-  shuso_log(ctx, "stop manager");
-}
-void start_worker(shuso_t *ctx, void *pd) {
-  shuso_log(ctx, "start worker");
-}
-void stop_worker(shuso_t *ctx, void *pd) {
-  shuso_log(ctx, "stop worker");
-}
+
 
 describe(shuttlesock_init) {
   static shuso_t *ss = NULL;
@@ -61,25 +29,22 @@ describe(shuttlesock_init) {
   }
   after_each() {
     if(ss) {
+      test_runcheck_t *runcheck = ss->common->phase_handlers.privdata;
       shuso_destroy(ss);
+      if(runcheck) {
+        shmfree(runcheck);
+      }
       ss = NULL;
     }
   }
   test("run loop") {
-    shuso_handlers_t handlers = {
-      .start_master = start_master,
-      .stop_master = stop_master,
-      .start_manager = start_manager,
-      .stop_manager = stop_manager,
-      .start_worker = start_worker,
-      .stop_worker = stop_worker
-    };
-    ss = shuso_create(EVFLAG_AUTO, &handlers, NULL, NULL);
+    ss = runcheck_shuso_create(EVFLAG_AUTO, NULL);
     shuso_run(ss);
-    assert_shuttlesock_ok(ss);
-    if(shuso_is_forked_manager(ss)) {
-      sleep(2);
+    test_runcheck_t *chk = ss->common->phase_handlers.privdata;
+    if(!shuso_is_forked_manager(ss)) {
+      //meh
     }
+    assert_shuso(ss);
   }
   test("another test") {
     //do nothing
@@ -99,7 +64,7 @@ describe(now_what) {
 
 snow_main_decls;
 int main(int argc, char **argv) {
-  child_result = mmap(NULL, sizeof(*child_result), PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_SHARED,-1, 0);
+  child_result = shmalloc(child_result);
   assert(child_result);
   if(!set_test_options(&argc, argv)) {
     return 1;
@@ -110,6 +75,6 @@ int main(int argc, char **argv) {
     child_result->pid = getpid();
     child_result->status = rc;
   }
-  munmap(child_result, sizeof(child_result));
+  shmfree(child_result);
   return rc;
 }

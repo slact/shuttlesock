@@ -1,5 +1,5 @@
-#ifndef __SHUTTLESOCK_LLIST_H
-#define __SHUTTLESOCK_LLIST_H
+#ifndef SHUTTLESOCK_LLIST_H
+#define SHUTTLESOCK_LLIST_H
 #include <stddef.h>
 #include <assert.h>
 
@@ -77,4 +77,4 @@ struct { \
   size_t         count; \
 }
   
-#endif //__SHUTTLESOCK_LLIST_H
+#endif //SHUTTLESOCK_LLIST_H

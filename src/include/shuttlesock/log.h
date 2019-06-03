@@ -1,3 +1,6 @@
+#ifndef SHUTTLESOCK_LOG_H
+#define SHUTTLESOCK_LOG_H
+
 #include <shuttlesock.h>
 #include <unistd.h>
 #include <stdio.h>
@@ -19,4 +22,4 @@
 #define shuso_loop_log(loop, ...) \
   shuso_log(((shuso_t *)ev_userdata(loop)), __VA_ARGS__)
   
-
+#endif //SHUTTLESOCK_LOG_H

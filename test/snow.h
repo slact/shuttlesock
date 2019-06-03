@@ -548,6 +548,7 @@ static void _snow_print_desc_end(void) {
 #define snow_bail() \
 	do {\
 		_snow.opts[_SNOW_OPT_RERUN_FAILED].boolval = 0; \
+		_snow.opts[_SNOW_OPT_QUIET].boolval = 1; \
 		_snow.bail = 1; \
 	} while(0)
 

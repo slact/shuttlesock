@@ -1,5 +1,5 @@
-#ifndef __SHUTTLESOCK_IPC_H
-#define __SHUTTLESOCK_IPC_H
+#ifndef SHUTTLESOCK_IPC_H
+#define SHUTTLESOCK_IPC_H
 #include <stdatomic.h>
 
 #define SHUTTLESOCK_IPC_CMD_NIL                   0
@@ -70,4 +70,4 @@ bool shuso_ipc_send(struct shuso_s *, struct shuso_process_s *, const uint8_t co
 bool shuso_ipc_send_workers(struct shuso_s *, const uint8_t code, void *ptr);
 bool shuso_ipc_add_handler(struct shuso_s *,  const char *name, const uint8_t code, shuso_ipc_receive_fn *, shuso_ipc_cancel_fn *);
 
-#endif //__SHUTTLESOCK_IPC_H
+#endif //SHUTTLESOCK_IPC_H

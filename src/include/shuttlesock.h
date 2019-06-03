@@ -1,5 +1,5 @@
-#ifndef __SHUTTLESOCK_H
-#define __SHUTTLESOCK_H
+#ifndef SHUTTLESOCK_H
+#define SHUTTLESOCK_H
 
 #include <ev.h>
 #include <shuttlesock/configure.h>
@@ -98,7 +98,6 @@ struct shuso_s {
   shuso_ipc_channel_local_t   ipc;
   struct {                  //ev
     struct ev_loop             *loop;
-    ev_cleanup                  cleanup;
     unsigned int                flags;
   }                           ev;
   
@@ -151,4 +150,4 @@ void shuso_remove_io_watcher(shuso_t *ctx, ev_io *w);
 void shuso_remove_timer_watcher(shuso_t *ctx, ev_timer *w);
 void shuso_remove_periodic_watcher(shuso_t *ctx, ev_periodic *w);
   
-#endif //__SHUTTLESOCK_H
+#endif //SHUTTLESOCK_H
