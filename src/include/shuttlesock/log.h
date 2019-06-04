@@ -16,7 +16,7 @@
   ___cur += sprintf(___cur, "] "); \
   ___cur += sprintf(___cur, __VA_ARGS__); \
   ___cur += sprintf(___cur, "\n"); \
-  printf("%s", ___log); \
+  write((ctx)->common->log.fd, ___log, ___cur - ___log); \
 } while(0)
 
 #define shuso_loop_log(loop, ...) \

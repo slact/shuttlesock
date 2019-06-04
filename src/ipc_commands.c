@@ -58,6 +58,13 @@ static void reconfigure_response_cancel(shuso_t *ctx, const uint8_t code, void *
   
 }
 
+static void set_log_fd_handle(shuso_t *ctx, const uint8_t code, void *ptr) {
+  ctx->common->log.fd = (intptr_t )ptr;
+}
+static void set_log_fd_cancel(shuso_t *ctx, const uint8_t code, void *ptr) {
+  
+}
+
 bool shuso_ipc_commands_init(shuso_t *ctx) {
   if(!shuso_ipc_add_handler(ctx, "signal", SHUTTLESOCK_IPC_CMD_SIGNAL, signal_handle, signal_cancel)) {
     return false;
@@ -68,9 +75,10 @@ bool shuso_ipc_commands_init(shuso_t *ctx) {
   if(!shuso_ipc_add_handler(ctx, "reconfigure", SHUTTLESOCK_IPC_CMD_RECONFIGURE, reconfigure_handle, reconfigure_cancel)) {
     return false;
   }
-  if(!shuso_ipc_add_handler(ctx, "reconfigure_response", SHUTTLESOCK_IPC_CMD_RECONFIGURE_RESPONSE,
-                        reconfigure_response_handle, reconfigure_response_cancel)) {
+  if(!shuso_ipc_add_handler(ctx, "set_log_fd", SHUTTLESOCK_IPC_CMD_SET_LOG_FD,
+                        set_log_fd_handle, set_log_fd_cancel)) {
     return false;
   }
+
   return true;
 }

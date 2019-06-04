@@ -21,22 +21,24 @@ typedef enum {
   SHUSO_DEFER     = 3,
 } shuso_nextaction_t;
 
-//non-positive states MUST be kinds of non-running states
-#define SHUSO_PROCESS_STATE_DEAD -1
-#define SHUSO_PROCESS_STATE_NIL 0
-//positive states MUST be kinds of running states
-#define SHUSO_PROCESS_STATE_STARTING  1
-#define SHUSO_PROCESS_STATE_RUNNING   2
-#define SHUSO_PROCESS_STATE_STOPPING  3
+typedef enum {
+  //non-positive states MUST be kinds of non-running states
+  SHUSO_PROCESS_STATE_DEAD = -1,
+  SHUSO_PROCESS_STATE_NIL = 0,
+  //positive states MUST be kinds of running states
+  SHUSO_PROCESS_STATE_STARTING = 1,
+  SHUSO_PROCESS_STATE_RUNNING  = 2,
+  SHUSO_PROCESS_STATE_STOPPING = 3
+} shuso_process_state_t;
 
 
 
 typedef struct shuso_process_s {
-  pid_t               pid;
-  pthread_t           tid;
-  _Atomic int8_t     *state;
-  uint16_t            generation;
-  shuso_ipc_channel_shared_t ipc;
+  pid_t                             pid;
+  pthread_t                         tid;
+  _Atomic(shuso_process_state_t)   *state;
+  uint16_t                          generation;
+  shuso_ipc_channel_shared_t        ipc;
 } shuso_process_t;
 
 typedef struct shuso_s shuso_t;
@@ -75,6 +77,9 @@ typedef struct {
     uint16_t            workers_start;
     uint16_t            workers_end;
   }                   process;
+  struct {          //log
+    int                 fd;
+  }                   log;
   struct {          //shm
     void               *ptr;
     size_t              sz;
@@ -133,6 +138,7 @@ bool shuso_stop_worker(shuso_t *ctx, shuso_process_t *proc, shuso_stop_t
  forcefulness);
 bool shuso_stop_manager(shuso_t *ctx, shuso_stop_t forcefulness);
 
+bool shuso_set_log_fd(shuso_t *ctx, int fd);
 
 
 #define SHUSO_EACH_WORKER(ctx, cur) \

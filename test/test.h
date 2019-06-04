@@ -9,6 +9,12 @@
 #include <signal.h>
 #include <sys/mman.h>
 
+typedef struct {
+  bool    verbose;
+} test_config_t;
+
+test_config_t test_config;
+
 #undef snow_main_decls
 #define snow_main_decls \
         void snow_break() {} \
@@ -42,6 +48,8 @@ typedef struct {
     _Atomic int      stop_worker;
   }                count;
 } test_runcheck_t;
+
+int dev_null;
 
 #define shmalloc(ptr) mmap(NULL, sizeof(*ptr), PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_SHARED,-1, 0)
 #define shmfree(ptr) munmap(ptr, sizeof(*ptr))
@@ -124,5 +132,7 @@ do { \
 shuso_t *___runcheck_shuso_create(unsigned int ev_loop_flags, shuso_config_t *config);
 #define runcheck_shuso_create(...) \
   ((_snow.filename = __FILE__, _snow.linenum = __LINE__,  ___runcheck_shuso_create(__VA_ARGS__)))
+  
+void stop_timer(EV_P_ ev_timer *, int);
   
 #endif //__SHUTTLESOCK_TEST_H

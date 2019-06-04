@@ -1,23 +1,17 @@
 #include "test.h"
 
-int set_test_options(int *argc, char **argv) {
+bool set_test_options(int *argc, char **argv) {
   int i = 1;
   while(i < *argc) {
     char *arg = argv[i];
-    /*
-    if(strcmp(arg, "--multiplier") == 0 && *argc >= i+1) {
-      char *val = argv_extract2(argc, argv, i);
-      if((repeat_multiplier = atof(val)) == 0.0) {
-        printf("invalid --multiplier value %s\n", val);
-        return 0;
-      }
+    if((strcmp(arg, "-v") == 0 || strcmp(arg, "--verbose") == 0)) {
+      test_config.verbose = true;
     }
     else {
       i++;
     }
-    */
   }
-  return 1;
+  return true;
 }
 
 
@@ -39,8 +33,8 @@ describe(shuttlesock_init) {
   }
   test("run loop") {
     ss = runcheck_shuso_create(EVFLAG_AUTO, NULL);
+    shuso_add_timer_watcher(ss, stop_timer, ss, 0.2, 0.0);
     shuso_run(ss);
-    test_runcheck_t *chk = ss->common->phase_handlers.privdata;
     if(!shuso_is_forked_manager(ss)) {
       //meh
     }
@@ -64,6 +58,8 @@ describe(now_what) {
 
 snow_main_decls;
 int main(int argc, char **argv) {
+  memset(&test_config, 0x0, sizeof(test_config));
+  dev_null = open("/dev/null", O_WRONLY);
   child_result = shmalloc(child_result);
   assert(child_result);
   if(!set_test_options(&argc, argv)) {
@@ -76,5 +72,6 @@ int main(int argc, char **argv) {
     child_result->status = rc;
   }
   shmfree(child_result);
+  close(dev_null);
   return rc;
 }

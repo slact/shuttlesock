@@ -8,6 +8,7 @@
 #define SHUTTLESOCK_IPC_CMD_SHUTDOWN_COMPLETE     3
 #define SHUTTLESOCK_IPC_CMD_RECONFIGURE           4
 #define SHUTTLESOCK_IPC_CMD_RECONFIGURE_RESPONSE  5
+#define SHUTTLESOCK_IPC_CMD_SET_LOG_FD            6
 
 struct shuso_s;
 struct shuso_process_s;

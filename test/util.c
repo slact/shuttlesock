@@ -67,5 +67,12 @@ shuso_t *___runcheck_shuso_create(unsigned int ev_loop_flags, shuso_config_t *co
     return NULL;
   }
   
+  shuso_set_log_fd(ctx, dev_null);
+  
   return ctx;
+}
+
+void stop_timer(EV_P_ ev_timer *w, int revent) {
+  shuso_t *ctx = w->data;
+  shuso_stop(ctx, SHUSO_STOP_ASK);
 }

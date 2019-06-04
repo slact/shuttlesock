@@ -91,14 +91,14 @@ shuso_t *shuso_create(unsigned int ev_loop_flags, shuso_handlers_t *handlers, sh
     goto fail;
   }
   
-  size_t sz = sizeof(_Atomic int8_t) * (SHUTTLESOCK_MAX_WORKERS + 2);
+  size_t sz = sizeof(_Atomic(shuso_process_state_t)) * (SHUTTLESOCK_MAX_WORKERS + 2);
   if((shm = mmap(NULL, sz, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_SHARED,-1, 0)) == NULL) {
     errmsg = "failed to initialize shared memory";
     goto fail;
   }
   common_ctx->shm.ptr = shm;
   common_ctx->shm.sz = sz;
-  _Atomic(int8_t) *states = shm;
+  _Atomic(shuso_process_state_t) *states = shm;
   common_ctx->process.master.state = &states[0];
   common_ctx->process.manager.state = &states[1];
   for(int i=0; i < SHUTTLESOCK_MAX_WORKERS; i++) {
@@ -465,4 +465,15 @@ static void child_watcher_cb(EV_P_ ev_child *w, int revents) {
     }
   }
   shuso_log(ctx, "child watcher: child pid %d rstatus %x", w->rpid, w->rstatus);
+}
+
+bool shuso_set_log_fd(shuso_t *ctx, int fd) {
+  if(ctx->procnum == SHUTTLESOCK_MASTER && *ctx->common->process.manager.state >= SHUSO_PROCESS_STATE_RUNNING) {
+    shuso_ipc_send(ctx, &ctx->common->process.manager, SHUTTLESOCK_IPC_CMD_SET_LOG_FD, (void *)(intptr_t)fd);
+  }
+  else if(*ctx->common->process.master.state >= SHUSO_PROCESS_STATE_RUNNING) {
+    shuso_ipc_send(ctx, &ctx->common->process.master, SHUTTLESOCK_IPC_CMD_SET_LOG_FD, (void *)(intptr_t)fd);
+  }
+  ctx->common->log.fd = fd;
+  return true;
 }
