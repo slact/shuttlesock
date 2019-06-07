@@ -191,7 +191,7 @@ static bool ipc_send_outbuf_append(shuso_t *ctx, shuso_process_t *src, shuso_pro
 bool shuso_ipc_send(shuso_t *ctx, shuso_process_t *dst, const uint8_t code, void *ptr) {
   shuso_process_t *src = ctx->process;
   assert(*dst->state >= SHUSO_PROCESS_STATE_RUNNING);
-  if(src->ipc.buf->first) {
+  if(ctx->ipc.buf.first) {
     return ipc_send_outbuf_append(ctx, src, dst, code, ptr);
   }
   if(!ipc_send_direct(ctx, src, dst, code, ptr)) {
