@@ -66,13 +66,24 @@ shuso_t *___runcheck_shuso_create(unsigned int ev_loop_flags, shuso_config_t *co
     snow_fail("failed to create shuttlesock ctx: %s", err ? err : "unknown error");
     return NULL;
   }
-  
-  shuso_set_log_fd(ctx, dev_null);
+  if(!test_config.verbose) {
+    shuso_set_log_fd(ctx, dev_null);
+  }
   
   return ctx;
 }
 
 void stop_timer(EV_P_ ev_timer *w, int revent) {
-  shuso_t *ctx = w->data;
+  shuso_t *ctx = ev_userdata(EV_A);
+  int desired_procnum = (intptr_t )w->data;
+  if(desired_procnum == SHUTTLESOCK_MASTER && ctx->procnum != SHUTTLESOCK_MASTER) {
+    return;
+  }
+  if(desired_procnum == SHUTTLESOCK_MANAGER && ctx->procnum != SHUTTLESOCK_MANAGER) {
+    return;
+  }
+  if(desired_procnum == SHUTTLESOCK_WORKER && ctx->procnum < SHUTTLESOCK_WORKER) {
+    return;
+  }
   shuso_stop(ctx, SHUSO_STOP_ASK);
 }

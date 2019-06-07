@@ -141,8 +141,13 @@ static bool ipc_send_direct(shuso_t *ctx, shuso_process_t *src, shuso_process_t 
     return false;
   }
   size_t next = atomic_fetch_add(&buf->next_reserve, 1);
+  if(next > 0) {
+    raise(SIGSTOP);
+  }
   buf->ptr[next] = ptr;
+  //shuso_log(ctx, "write?ipc code buf %p #%d %p, code %d", (void *)buf, next, (void *)&buf->code[next], (int )code);
   buf->code[next] = code;
+  //shuso_log(ctx, "write!ipc code buf %p #%d %p, code %d", (void *)buf, next, (void *)&buf->code[next], (int )buf->code[next]);
   atomic_fetch_add(&buf->next_release, 1);
   //shuso_log(ctx, "next_reserve %zd next_release %zd", buf->next_reserve, buf->next_release);
 #ifdef SHUTTLESOCK_HAVE_EVENTFD
@@ -242,15 +247,18 @@ static void ipc_send_retry_cb(EV_P_ ev_timer *w, int revents) {
 
 static void ipc_receive(shuso_t *ctx, shuso_process_t *proc) {
   shuso_ipc_inbuf_t  *in = proc->ipc.buf;
-  size_t              next_reserve = in->next_reserve, next_release = in->next_release;
+  size_t              next_reserve = in->next_reserve, next_release = in->next_release, first = in->first;
   uint_fast8_t        code;
   void               *ptr;
   //shuso_log(ctx, "ipc_receive at dst %p", (void *)proc);
-  //shuso_log(ctx, "next_reserve %zd next_release %zd", in->next_reserve, in->next_release);
-  for(size_t i=in->first; i<next_release; i++) {
+  //shuso_log(ctx, "first: %zd next_reserve %zd next_release %zd", first, in->next_reserve, in->next_release);
+  for(size_t i=first; i<next_release; i++) {
+    //shuso_log(ctx, "read? ipc code buf %p #%d %p", (void *)in, i, (void *)&in->code[i]);
     code = in->code[i];
+    //shuso_log(ctx, "read! ipc code buf %p #%d %p", (void *)in, i, (void *)&in->code[i]);
     if(!code) {
-      shuso_log(ctx, "ipc: received no code -- wait a little");
+      raise(SIGSTOP);
+      //shuso_log(ctx, "ipc: received no code -- wait a little");
       //this ipc alert is not ready yet. it will be ready really soon though. retry quite rather very soon
       if(!ev_is_active(&ctx->ipc.receive_retry) && !ev_is_pending(&ctx->ipc.receive_retry)) {
         ev_timer_again(ctx->ev.loop, &ctx->ipc.receive_retry);
@@ -258,17 +266,13 @@ static void ipc_receive(shuso_t *ctx, shuso_process_t *proc) {
       return;
     }
     ptr = in->ptr[i];
-    shuso_log(ctx, "ipc: got code %i", (int )code);
-    ctx->common->ipc_handlers[code].receive(ctx, code, ptr);
+    //shuso_log(ctx, "ipc: got code %i ptr %p", (int )code, ptr);
     in->code[i]=0;
     in->first++;
+    atomic_fetch_sub(&in->next_reserve, 1);
+    atomic_fetch_sub(&in->next_release, 1);
+    ctx->common->ipc_handlers[code].receive(ctx, code, ptr);
   }
-  //alright, we've walked the whole inbound array, now rewind it
-  
-  //don't just set next_reserve and next_release to 0 because they
-  //may have been modified in another thread.
-  atomic_fetch_sub(&in->next_reserve, next_reserve);
-  atomic_fetch_sub(&in->next_release, next_release);
   //no one else may modify ->first though.
   in->first = 0;
 }

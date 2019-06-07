@@ -42,6 +42,7 @@
 #define snow_break()
 #define snow_rerun_failed()
 #define snow_bail()
+#define snow_set_extra_help()
 
 #define asserteq_dbl(...)
 #define asserteq_ptr(...)
@@ -256,6 +257,8 @@ struct _snow {
 	const char *filename;
 	int linenum;
 	int bail;
+	char *extra_help;
+	int ignore_unknown_options;
 
 	struct _snow_arr desc_funcs;
 	struct _snow_arr desc_stack;
@@ -551,6 +554,11 @@ static void _snow_print_desc_end(void) {
 		_snow.opts[_SNOW_OPT_QUIET].boolval = 1; \
 		_snow.bail = 1; \
 	} while(0)
+	
+#define snow_set_extra_help(str) \
+	do { \
+		_snow.extra_help = str; \
+	} while(0)
 
 
 __attribute__((unused))
@@ -843,6 +851,10 @@ static void _snow_usage(char *argv0)
 		"    --gdb, -g:      Run the test suite on GDB, and break and re-run\n"
 		"                    test cases which fail.\n"
 		"                    Default: off.\n");
+	if(_snow.extra_help) {
+		_snow_print("Arguments specific to the tests:\n");
+		_snow_print("%s\n", _snow.extra_help);
+	}
 }
 
 /*
@@ -905,7 +917,7 @@ static int snow_main_function(int argc, char **argv) {
 			break;
 		}
 
-		if (!is_match) {
+		if (!is_match && !_snow.ignore_unknown_options) {
 			fprintf(stderr, "Unknown option: %s\n", arg);
 			return EXIT_FAILURE;
 		}
@@ -1079,9 +1091,9 @@ static int snow_main_function(int argc, char **argv) {
 	}
 
 	if (!_snow.opts[_SNOW_OPT_LIST].boolval) {
-		int should_print_total =
-			_snow.opts[_SNOW_OPT_QUIET].boolval ||
-			total_descs_ran > 1;
+		int should_print_total = !_snow.bail && 
+			(_snow.opts[_SNOW_OPT_QUIET].boolval ||
+			total_descs_ran > 1);
 
 		if (!_snow.opts[_SNOW_OPT_QUIET].boolval)
 			_snow_print("\n");

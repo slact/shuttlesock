@@ -174,7 +174,11 @@ bool shuso_spawn_manager(shuso_t *ctx) {
 }
 
 bool shuso_is_forked_manager(shuso_t *ctx) {
-  return (ctx->procnum == SHUTTLESOCK_MANAGER);
+  return ctx->procnum == SHUTTLESOCK_MANAGER;
+}
+
+bool shuso_is_master(shuso_t *ctx) {
+  return ctx->procnum == SHUTTLESOCK_MASTER;
 }
 
 static void stop_manager_timer_cb(EV_P_ ev_timer *w, int revents) {
@@ -253,9 +257,8 @@ bool shuso_stop(shuso_t *ctx, shuso_stop_t forcefulness) {
     return false;
   }
   if(ctx->procnum != SHUTTLESOCK_MASTER) {
-    return shuso_ipc_send(ctx, &ctx->common->process.manager, SHUTTLESOCK_IPC_CMD_SHUTDOWN, (void *)(intptr_t )forcefulness);
+    return shuso_ipc_send(ctx, &ctx->common->process.master, SHUTTLESOCK_IPC_CMD_SHUTDOWN, (void *)(intptr_t )forcefulness);
   }
-  *ctx->process->state = SHUSO_PROCESS_STATE_STOPPING;
   //TODO: implement forced shutdown
   if(*ctx->common->process.manager.state == SHUSO_PROCESS_STATE_RUNNING) {
     if(!shuso_stop_manager(ctx, forcefulness)) {

@@ -4,6 +4,7 @@
 #include <shuttlesock.h>
 #include <shuttlesock/log.h>
 #include <stdio.h>
+#include <stdatomic.h>
 #define SNOW_ENABLED 1
 #include "snow.h"
 #include <signal.h>

@@ -130,13 +130,15 @@ shuso_t *shuso_create(unsigned int ev_loop_flags, shuso_handlers_t *handlers, sh
 bool shuso_destroy(shuso_t *ctx);
 bool shuso_run(shuso_t *);
 bool shuso_stop(shuso_t *ctx, shuso_stop_t forcefulness);
-bool shuso_is_forked_manager(shuso_t *ctx);
 bool shuso_spawn_manager(shuso_t *ctx);
 bool shuso_stop_manager(shuso_t *ctx, shuso_stop_t forcefulness);
 bool shuso_spawn_worker(shuso_t *ctx, shuso_process_t *proc);
 bool shuso_stop_worker(shuso_t *ctx, shuso_process_t *proc, shuso_stop_t
  forcefulness);
 bool shuso_stop_manager(shuso_t *ctx, shuso_stop_t forcefulness);
+
+bool shuso_is_master(shuso_t *ctx);
+bool shuso_is_forked_manager(shuso_t *ctx);
 
 bool shuso_set_log_fd(shuso_t *ctx, int fd);
 

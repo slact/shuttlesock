@@ -30,7 +30,7 @@ static void signal_cancel(shuso_t *ctx, const uint8_t code, void *ptr) {
 static void shutdown_handle(shuso_t *ctx, const uint8_t code, void *ptr) {
   shuso_stop_t stop_type = (shuso_stop_t )(intptr_t )ptr;
   if(ctx->procnum == SHUTTLESOCK_MASTER) {
-    //do nothing i guess?
+    shuso_stop(ctx, stop_type);
   }
   else if(ctx->procnum == SHUTTLESOCK_MANAGER) {
     //forward it to all the workers
@@ -48,13 +48,6 @@ static void reconfigure_handle(shuso_t *ctx, const uint8_t code, void *ptr) {
   
 }
 static void reconfigure_cancel(shuso_t *ctx, const uint8_t code, void *ptr) {
-  
-}
-
-static void reconfigure_response_handle(shuso_t *ctx, const uint8_t code, void *ptr) {
-  
-}
-static void reconfigure_response_cancel(shuso_t *ctx, const uint8_t code, void *ptr) {
   
 }
 
