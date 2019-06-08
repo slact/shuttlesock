@@ -57,6 +57,8 @@ shuso_t *shuso_create(unsigned int ev_loop_flags, shuso_handlers_t *handlers, sh
     .common  = common_ctx
   };
   
+  common_ctx->log.fd = fileno(stdout);
+  
   if(config) {
     common_ctx->config = *config;
   }
