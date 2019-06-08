@@ -48,6 +48,9 @@ for opt in $*; do
     verbose)
       TEST_OPT+=("--verbose")
       ;;
+    *)
+      TEST_OPT+=("$opt")
+      ;;
   esac
 done
 
