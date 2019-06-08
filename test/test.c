@@ -51,21 +51,25 @@ describe(shuttlesock_init_and_shutdown) {
 #define IPC_ECHO 130
 
 typedef struct {
-  _Atomic(bool)   failure;
-  char            err[1024];
-  _Atomic(int)    sent;
-  _Atomic(int)    received;
-  _Atomic(int)    seq;
-  int             seq_stop_at;
-  float           sleep_at_master;
-  float           sleep_at_manager;
-  float           sleep_step;
+  int   procnum;
+  int   barrage_received;
+  float sleep;
+  float slept;
   
-  int             ping_procnum;
-  int             pong_procnum;
+} ipc_check_oneway_t;
+
+typedef struct {
+  _Atomic(bool)       failure;
+  char                err[1024];
+  _Atomic(int)        sent;
+  _Atomic(int)        received;
+  _Atomic(intptr_t)   seq;
+  int                 seq_stop_at;
+  int                 barrage;
+  float               sleep_step;
   
-  int             ping_extra;
-  int             pong_extra;
+  ipc_check_oneway_t ping;
+  ipc_check_oneway_t pong;
 } ipc_check_t;
 
 static void ipc_load_test(EV_P_ ev_timer *w, int rev) {
@@ -75,7 +79,7 @@ static void ipc_load_test(EV_P_ ev_timer *w, int rev) {
   }
   ipc_check_t   *chk = ctx->data;
   chk->sent++;
-  assert(chk->ping_procnum == SHUTTLESOCK_MANAGER);
+  assert(chk->ping.procnum == SHUTTLESOCK_MANAGER);
   shuso_ipc_send(ctx, &ctx->common->process.manager, IPC_ECHO, (void *)(intptr_t )0);
 }
 #define check_ipc(test, ctx, chk, ...) \
@@ -94,33 +98,48 @@ void ipc_echo_receive(shuso_t *ctx, const uint8_t code, void *ptr) {
   chk->received++;
   
   check_ipc(chk->received == chk->sent, ctx, chk, "sent - received mismatch: send %d received %d", chk->sent, chk->received);
-  check_ipc(seq == chk->seq, ctx, chk, "seq mismatch: expected %d, got %ld", chk->seq, seq);
+  check_ipc(seq == chk->seq, ctx, chk, "seq mismatch: expected %ld, got %ld", chk->seq, seq);
   chk->seq++;
   
   if(chk->seq >= chk->seq_stop_at) {
     shuso_stop(ctx, SHUSO_STOP_INSIST);
     return;
   }
+  shuso_process_t *procs = ctx->common->process.worker;
+  int reply_procnum;
+  ipc_check_oneway_t *self;
+  if(ctx->procnum == chk->ping.procnum) {
+    self = &chk->ping;
+    reply_procnum = chk->pong.procnum;
+  }
+  else if(ctx->procnum == chk->pong.procnum) {
+    self = &chk->pong;
+    reply_procnum = chk->ping.procnum;
+  }
+  else {
+    check_ipc(false, ctx, chk, "am i pinging or ponging?");
+  }
+  shuso_process_t *dst = &procs[reply_procnum];
   
   float sleeptime = 0;
-  if(shuso_is_master(ctx) && chk->sleep_at_master > 0) {
-    sleeptime = chk->sleep_step == 0 ? chk->sleep_at_master : chk->sleep_step;
-    chk->sleep_at_master += -sleeptime;
+  if(self->sleep > 0 && self->slept < self->sleep) {
+    sleeptime = chk->sleep_step == 0 ? self->sleep : chk->sleep_step;
+    self->slept -= sleeptime;
   }
-  if(shuso_is_forked_manager(ctx) && chk->sleep_at_manager > 0) {
-    sleeptime = chk->sleep_step == 0 ? chk->sleep_at_manager : chk->sleep_step;
-    chk->sleep_at_manager += -sleeptime;
-  }
-  if(sleeptime) {
+  if(sleeptime > 0) {
     ev_sleep(sleeptime);
   }
-  shuso_process_t *procs = ctx->common->process.worker;
-  int              dst_procnum = chk->seq %2 == 0 ? chk->ping_procnum : chk->pong_procnum;
-  shuso_process_t *dst = &procs[dst_procnum];
+
   
+  self->barrage_received++;
+  if(self->barrage_received < (chk->barrage ? chk->barrage : 1)) {
+    //don't reply yet
+    return;
+  }
+  self->barrage_received = 0;
   chk->sent++;
   bool sent_ok = shuso_ipc_send(ctx, dst, IPC_ECHO, (void *)chk->seq);
-  check_ipc(sent_ok, ctx, chk, "failed to send ipc message to procnum %d", dst_procnum);
+  check_ipc(sent_ok, ctx, chk, "failed to send ipc message to procnum %d", reply_procnum);
 }
 #undef check_ipc
 
@@ -150,9 +169,10 @@ describe(ipc) {
     }
   }
   test("simple round-trip") {
-    ipc_check->ping_procnum = SHUTTLESOCK_MANAGER;
-    ipc_check->pong_procnum = SHUTTLESOCK_MASTER;
-    ipc_check->seq_stop_at = 100;
+    ipc_check->ping.procnum = SHUTTLESOCK_MANAGER;
+    ipc_check->pong.procnum = SHUTTLESOCK_MASTER;
+    ipc_check->seq_stop_at = 1000;
+    ipc_check->barrage = 1;
 
     shuso_add_timer_watcher(ss, ipc_load_test, NULL, 0.1, 0.0);
     shuso_ipc_add_handler(ss, "echo", IPC_ECHO, ipc_echo_receive, ipc_echo_cancel);
@@ -160,10 +180,11 @@ describe(ipc) {
     assert_shuso(ss);
   }
   
-  test("one-sided round-trip (2-1)") {
-    ipc_check->ping_procnum = SHUTTLESOCK_MANAGER;
-    ipc_check->pong_procnum = SHUTTLESOCK_MASTER;
+  test("one-sided round-trip (2:1)") {
+    ipc_check->ping.procnum = SHUTTLESOCK_MANAGER;
+    ipc_check->pong.procnum = SHUTTLESOCK_MASTER;
     ipc_check->seq_stop_at = 100;
+    ipc_check->barrage = 1;
 
     shuso_add_timer_watcher(ss, ipc_load_test, NULL, 0.1, 0.0);
     shuso_ipc_add_handler(ss, "echo", IPC_ECHO, ipc_echo_receive, ipc_echo_cancel);
