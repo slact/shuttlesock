@@ -124,7 +124,6 @@ void ipc_echo_send(shuso_t *ctx) {
   for(int i=0; i<dst->barrage; i++) {
     if(chk->sent >= chk->received_stop_at) {
       //we're done;
-      shuso_log(ctx, "it's time to stop sending");
       return;
     }
     dst->seq++;
@@ -166,6 +165,7 @@ static void ipc_load_test(EV_P_ ev_timer *w, int rev) {
   ipc_echo_srcdst(ctx, &self, &dst);
   
   while(self->init_sleep_flag) {
+    shuso_log(ctx, "sleep some");
     ev_sleep(0.05);
   }
   
@@ -225,12 +225,26 @@ describe(ipc) {
     assert_shuso(ss);
   }
   
-  test("one-sided round-trip (10:1)") {
+  test("one-sided round-trip (250:1)") {
     ipc_check->received_stop_at = 1000;
     ipc_check->ping.procnum = SHUTTLESOCK_MANAGER;
     ipc_check->pong.procnum = SHUTTLESOCK_MASTER;
-    ipc_check->ping.barrage = 10;
+    ipc_check->ping.barrage = 250;
     ipc_check->pong.barrage = 1;
+
+    shuso_add_timer_watcher(ss, ipc_load_test, NULL, 0.1, 0.0);
+    shuso_ipc_add_handler(ss, "echo", IPC_ECHO, ipc_echo_receive, ipc_echo_cancel);
+    shuso_run(ss);
+    assert_shuso(ss);
+  }
+  
+  test("buffer fill (500:1)") {
+    ipc_check->received_stop_at = 10000;
+    ipc_check->ping.procnum = SHUTTLESOCK_MANAGER;
+    ipc_check->pong.procnum = SHUTTLESOCK_MASTER;
+    ipc_check->ping.barrage = 400;
+    ipc_check->pong.barrage = 1;
+    ipc_check->ping.init_sleep_flag = 1;
 
     shuso_add_timer_watcher(ss, ipc_load_test, NULL, 0.1, 0.0);
     shuso_ipc_add_handler(ss, "echo", IPC_ECHO, ipc_echo_receive, ipc_echo_cancel);
@@ -246,11 +260,9 @@ int main(int argc, char **argv) {
   dev_null = open("/dev/null", O_WRONLY);
   child_result = shmalloc(child_result);
   assert(child_result);
-  printf("yeah\n");
   if(!set_test_options(&argc, argv)) {
     return 1;
   }
-  printf("yeah\n");
   pid_t pid = getpid();
   int rc = snow_main_function(argc, argv);
   if(getpid() != pid) {

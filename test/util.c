@@ -85,6 +85,5 @@ void stop_timer(EV_P_ ev_timer *w, int revent) {
   if(desired_procnum == SHUTTLESOCK_WORKER && ctx->procnum < SHUTTLESOCK_WORKER) {
     return;
   }
-  shuso_log(ctx, "STOP timer hit!");
   shuso_stop(ctx, SHUSO_STOP_ASK);
 }
