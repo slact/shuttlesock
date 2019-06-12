@@ -71,7 +71,7 @@ if(CMAKE_BUILD_TYPE MATCHES "^Debug")
   
   add_compiler_flags(-Wall -Wextra -pedantic -Wno-unused-parameter -Wpointer-sign -Wpointer-arith -Wshadow -Wnested-externs -Wsign-compare -ggdb -O${OPTIMIZE_LEVEL} -fno-omit-frame-pointer)
   if ("${CMAKE_C_COMPILER_ID}" STREQUAL "GNU")
-    add_compiler_flags(-fdiagnostics-color=always -Wmaybe-uninitialized -fvar-tracking-assignments -Wimplicit-fallthrough)
+    add_compiler_flags(-fdiagnostics-color=always -Wmaybe-uninitialized -fvar-tracking-assignments)
   elseif("${CMAKE_C_COMPILER_ID}" STREQUAL "Clang")
     add_compiler_flags()
   endif()
@@ -85,7 +85,7 @@ set( CMAKE_BUILD_TYPE "${CMAKE_BUILD_TYPE}" CACHE
 )
 
 find_program(CCACHE_PROGRAM ccache)
-if(CCACHE_PROGRAM)
+if(CCACHE_PROGRAM AND NOT DISABLE_CCACHE)
   set(CMAKE_C_COMPILER_LAUNCHER  ${CCACHE_PROGRAM})
   set(CMAKE_CXX_COMPILER_LAUNCHER ${CCACHE_PROGRAM})
 endif()
