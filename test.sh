@@ -1,7 +1,7 @@
 #!/bin/zsh
 VALGRIND_OPT=( "--tool=memcheck" "--track-origins=yes" "--read-var-info=yes" )
 
-VG_MEMCHECK_OPT=( "--leak-check=full" "--show-leak-kinds=all" "--leak-check-heuristics=all" "--keep-stacktraces=alloc-and-free" "--suppressions=${DEVDIR}/vg.supp" )
+VG_MEMCHECK_OPT=( "--leak-check=full" "--show-leak-kinds=all" "--leak-check-heuristics=all" "--keep-stacktraces=alloc-and-free")
 
 #expensive definedness checks (newish option)
 VG_MEMCHECK_OPT+=( "--expensive-definedness-checks=yes")
