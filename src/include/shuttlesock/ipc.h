@@ -14,13 +14,12 @@ struct shuso_s;
 struct shuso_process_s;
 
 typedef struct {
-  size_t             sz;
-  _Atomic size_t     first;
-  _Atomic size_t     next_reserve;
-  _Atomic size_t     next_release;
-  _Atomic uint8_t   *code;
-  _Atomic(void *)   *ptr;
-} shuso_ipc_inbuf_t;
+  _Atomic uint8_t    next_read;
+  _Atomic uint8_t    next_reserve;
+  _Atomic uint8_t    next_release;
+  _Atomic uint8_t    code[256];
+  _Atomic(void *)    ptr[256];
+} shuso_ipc_ringbuf_t;
 
 typedef void shuso_ipc_receive_fn(struct shuso_s *, const uint8_t code, void *ptr);
 typedef void shuso_ipc_cancel_fn(struct shuso_s *, const uint8_t code, void *ptr);
@@ -53,7 +52,7 @@ typedef struct {
 typedef struct {
   int                   fd[2];
   ev_io                 receive;
-  shuso_ipc_inbuf_t    *buf;
+  shuso_ipc_ringbuf_t  *buf;
 } shuso_ipc_channel_shared_t;
 
 

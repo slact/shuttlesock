@@ -193,12 +193,15 @@ static void stop_master_timer_cb(EV_P_ ev_timer *w, int revents) {
 }
 
 bool shuso_stop_manager(shuso_t *ctx, shuso_stop_t forcefulness) {
-  if(ctx->procnum == SHUTTLESOCK_MASTER) {   
+  if(ctx->procnum == SHUTTLESOCK_MASTER) {
+    //shuso_log(ctx, "shuso_stop_manager from master");
     if(!shuso_ipc_send(ctx, &ctx->common->process.manager, SHUTTLESOCK_IPC_CMD_SHUTDOWN, (void *)(intptr_t )forcefulness)) {
       return false;
     }
     return true;
   }
+  
+  //shuso_log(ctx, "shuso_stop_manager from manager");
   
   if(*ctx->process->state == SHUSO_PROCESS_STATE_RUNNING) {
     *ctx->process->state = SHUSO_PROCESS_STATE_STOPPING;
@@ -238,7 +241,6 @@ bool shuso_run(shuso_t *ctx) {
   *ctx->process->state = SHUSO_PROCESS_STATE_STARTING;
   ctx->common->phase_handlers.start_master(ctx, ctx->common->phase_handlers.privdata);
   *ctx->process->state = SHUSO_PROCESS_STATE_RUNNING;
-  
   if(!shuso_spawn_manager(ctx)) {
     return set_error(ctx, "failed to spawn manager process");
   }
@@ -256,17 +258,24 @@ bool shuso_run(shuso_t *ctx) {
 bool shuso_stop(shuso_t *ctx, shuso_stop_t forcefulness) {
   if(*ctx->process->state != SHUSO_PROCESS_STATE_RUNNING && *ctx->process->state != SHUSO_PROCESS_STATE_STOPPING) {
     //no need to stop
+    shuso_log(ctx, "nostop");
     return false;
   }
+
   if(ctx->procnum != SHUTTLESOCK_MASTER) {
     return shuso_ipc_send(ctx, &ctx->common->process.master, SHUTTLESOCK_IPC_CMD_SHUTDOWN, (void *)(intptr_t )forcefulness);
   }
+  
   //TODO: implement forced shutdown
-  if(*ctx->common->process.manager.state == SHUSO_PROCESS_STATE_RUNNING) {
+  if(*ctx->process->state == SHUSO_PROCESS_STATE_RUNNING && *ctx->common->process.manager.state == SHUSO_PROCESS_STATE_RUNNING) {
     if(!shuso_stop_manager(ctx, forcefulness)) {
       return false;
     }
     shuso_add_timer_watcher(ctx, stop_master_timer_cb, ctx, 0.1, 0.5);
+  }
+  
+  if(*ctx->process->state == SHUSO_PROCESS_STATE_RUNNING) {
+    *ctx->process->state = SHUSO_PROCESS_STATE_STOPPING;
   }
   
   if(*ctx->common->process.manager.state == SHUSO_PROCESS_STATE_DEAD) {
