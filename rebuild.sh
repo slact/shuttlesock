@@ -2,14 +2,20 @@
 MY_PATH="`dirname \"$0\"`"
 MY_PATH="`( cd \"$MY_PATH\" && pwd )`"
 _src_dir=${MY_PATH}/src
-  
+
+ALL_OFF="\e[1;0m"
+BLUE="${BOLD}\e[1;34m"
+GREEN="${BOLD}\e[1;32m"
+RED="${BOLD}\e[1;31m"
+YELLOW="${BOLD}\e[1;33m"
+
 OPTS=()
 compiler=""
 build_dir="./build"
-ANALYZE_FLAGS=( --use-cc=clang -maxloop 100 -enable-checker alpha.clone -enable-checker alpha.core -enable-checker alpha.deadcode -enable-checker alpha.security -enable-checker alpha.unix -enable-checker nullability )
-
+ANALYZE_FLAGS=( --use-cc=clang -maxloop 100 -enable-checker alpha.clone -enable-checker alpha.core -enable-checker alpha.deadcode -enable-checker alpha.security -enable-checker alpha.unix -enable-checker nullability --view )
+ANALYZE=()
 export CLICOLOR_FORCE=1
-
+build_type=Debug
 for opt in $*; do
   case $opt in
     clang)
@@ -21,6 +27,10 @@ for opt in $*; do
     sanitize-address)
       compuler=clang
       build_type=DebugASan
+      ;;
+    sanitize-threads|sanitize-thread)
+      compuler=clang
+      build_type=DebugTSan
       ;;
     no-ccache)
       disable_ccache=1
@@ -46,23 +56,36 @@ for opt in $*; do
       optimize_level=g;;
     clang-analyzer|analyzer|scan|analyze)
       clean=1
+      clean_after=1
       clang_analyze=1
       disable_ccache=1
       ;;
-    verbose)
+    verbose|-v|v)
       verbose="-v"
       ;;
     coverage)
       compiler=gcc
+      run_test=1
       build_type=DebugCoverage
       ;;
     clang-coverage)
       compiler=clang
+      run_test=1
       build_type=DebugCoverage
       ;;
     gcc-coverage)
       compiler=gcc
+      run_test=1
       build_type=DebugCoverage
+      ;;
+    release)
+      build_type=Release
+      ;;
+    release-debug)
+      build_type=RelWithDebInfo
+      ;;
+    test|runtest)
+      run_test=1
       ;;
     *)
       OPTS+=( "$opt" )
@@ -87,18 +110,47 @@ if [[ -n $disable_ccache ]]; then
   OPTS+=( "-DDISABLE_CCACHE=1" )
 fi
 
+if [[ -n $clang_analyze ]]; then
+  ANALYZE=("scan-build")
+  ANALYZE+=($ANALYZE_FLAGS)
+fi
 
-echo cmake $OPTS -B$build_dir
+TRAPINT() {
+  if [[ -n $scan_view_pid ]]; then
+    kill -s INT $scan_view_pid
+  else
+    exit 1
+  fi
+}
+
+echo $BLUE $ANALYZE $YELLOW cmake $GREEN $OPTS $YELLOW -B$build_dir $ALL_OFF
+$ANALYZE cmake $OPTS -B$build_dir
+if ! [ $? -eq 0 ]; then;
+  exit 1
+fi
+echo $BLUE $ANALYZE $YELLOW cmake $YELLOW --build $build_dir $verbose $ALL_OFF
 
 if [[ -n $clang_analyze ]]; then
-  scan-build $ANALYZE_FLAGS --view cmake $OPTS -B$build_dir
-  scan-build $ANALYZE_FLAGS --view cmake --build $build_dir $verbose
+  $ANALYZE cmake --build $build_dir $verbose &
+  scan_view_pid=$!
+  wait $scan_view_pid
+  scan_view_pid=""
 else
-  cmake $OPTS -B$build_dir
-  cmake --build $build_dir $verbose
+  $ANALYZE cmake --build $build_dir $verbose
 fi
+
+if ! [ $? -eq 0 ]; then;
+  exit 1
+fi
+
+if [[ -n $run_test ]]; then
+  pushd $build_dir
+  ./shuso_test
+  popd $build_dir
+fi
+
 if [[ $build_type == "DebugCoverage" ]]; then
-  cd $build_dir
+  pushd $build_dir
   ./shuso_test
   #ls CMakeFiles/shuttlesock.dir/src -alh
   #ls ../src -alh
@@ -111,5 +163,9 @@ if [[ $build_type == "DebugCoverage" ]]; then
   fi
 
   xdg-open ./coverage-report/index.html
-  
+  popd $build_dir
+fi
+
+if [[ -n $clean_after ]]; then
+  rm -Rf $build_dir
 fi
