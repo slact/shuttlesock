@@ -249,7 +249,6 @@ static void ipc_receive(shuso_t *ctx, shuso_process_t *proc) {
   uint_fast8_t          code;
   void                 *ptr;
   uint8_t               i;
-  int                   aa=0;
   //shuso_log(ctx, "ipc_receive at dst %p", (void *)proc);
   //shuso_log(ctx, "first: %d next_reserve %d next_release %d", (int )in->next_read, (int )in->next_reserve, (int )in->next_release);
   for(i=in->next_read; i!=in->next_release; i++) {

@@ -22,10 +22,10 @@
 #endif
 
 int shuso_system_cores_online(void) {
-  uint32_t cores;
+  long cores;
 #ifdef _SC_NPROCESSORS_ONLN
   cores = sysconf(_SC_NPROCESSORS_ONLN);
-  if (cores < 1 || cores > (uint32_t )(1<<(uint32_t )31)) {
+  if (cores < 1 || cores > ((long )1<<31)) {
     cores = sysconf(_SC_NPROCESSORS_CONF);
   }
 #else
@@ -39,7 +39,7 @@ int shuso_system_cores_online(void) {
     sysctl(nm, 2, &cores, &len, NULL, 0);
   }
 #endif
-  if (cores < 1 || cores > (uint32_t )(1<<31)) {
+  if (cores < 1 || cores > ((long )1<<31)) {
     cores = 4;
   }
   return cores;

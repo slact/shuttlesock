@@ -119,7 +119,8 @@ void ipc_echo_send(shuso_t *ctx) {
   
   self->barrage_received = 0;
   
-  shuso_process_t *dst_process = &ctx->common->process.worker[dst->procnum];
+  shuso_process_t *processes = ctx->common->process.worker;
+  shuso_process_t *dst_process = &processes[dst->procnum];
   
   for(int i=0; i<dst->barrage; i++) {
     if(chk->sent >= chk->received_stop_at) {
