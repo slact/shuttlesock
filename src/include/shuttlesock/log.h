@@ -7,7 +7,7 @@
 
 
 #define shuso_log(ctx, ...) do { \
-  char ___log[2048]; \
+  char ___log[512]; \
   char *___cur = ___log; \
   ___cur += sprintf(___cur, "[%d %s", getpid(), (ctx->procnum == SHUTTLESOCK_NOPROCESS ? "none     " : (ctx->procnum == SHUTTLESOCK_MASTER ? "master   " : (ctx->procnum == SHUTTLESOCK_MANAGER ? "manager  " : "worker ")))); \
   if(ctx->procnum >= SHUTTLESOCK_WORKER) { \
