@@ -34,8 +34,8 @@ add_build_mode(DebugASan
   "-fsanitize=address -fsanitize=undefined -lubsan"
 )
 add_build_mode(DebugMSan 
-  "-fsanitize=memory -fsanitize=undefined"
-  "-fsanitize=memory -fsanitize=undefined -lubsan"
+  "-fsanitize=memory -fsanitize-memory-track-origins=2 -fsanitize=undefined"
+  "-fsanitize=memory -fsanitize-memory-track-origins=2 -fsanitize=undefined -lubsan"
 )
 add_build_mode(DebugTSan
   "-fsanitize=thread -fsanitize=undefined"
