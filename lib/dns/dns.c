@@ -8234,7 +8234,7 @@ void dns_ai_close(struct dns_addrinfo *ai) {
 
 
 static int dns_ai_setent(struct addrinfo **ent, union dns_any *any, enum dns_type type, struct dns_addrinfo *ai) {
-	union { struct sockaddr saddr; struct sockaddr_in sin; struct sockaddr_in6 sin6; } saddr = {0};
+	union { struct sockaddr saddr; struct sockaddr_in sin; struct sockaddr_in6 sin6; } saddr = {{0}};
 	const char *cname;
 	size_t clen;
 
