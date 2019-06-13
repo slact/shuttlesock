@@ -55,6 +55,9 @@ int dev_null;
 #define shmalloc(ptr) mmap(NULL, sizeof(*ptr), PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_SHARED,-1, 0)
 #define shmfree(ptr) munmap(ptr, sizeof(*ptr))
 
+#define shmalloc_sz(ptr, sz) mmap(NULL, sz, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_SHARED,-1, 0)
+#define shmfree_sz(ptr, sz) munmap(ptr, sz)
+
 #define assert_shuso(ctx) \
 do { \
   snow_fail_update(); \
