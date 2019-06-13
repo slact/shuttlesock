@@ -28,6 +28,11 @@ target_include_directories(shuttlesock PUBLIC src/include)
 target_include_directories(shuttlesock PUBLIC ${PROJECT_BINARY_DIR}/src/include)
 target_include_directories(shuttlesock PRIVATE src)
 
+#wahern's asynchrnous dns.c library
+add_library(dns.c STATIC lib/dns/dns.c)
+target_compile_features(dns.c PRIVATE c_std_11 c_static_assert c_variadic_macros)
+target_include_directories(shuttlesock PRIVATE lib/dns)
+
 #ptrheads
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
