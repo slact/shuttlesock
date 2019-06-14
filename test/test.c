@@ -296,6 +296,9 @@ describe(ipc) {
   }
 }
 
+describe(stack_allocator) {
+  test("page header alignment") {
+    asserteq(sizeof(shuso_stalloc_page_t) % sizeof(void *), 0, "page header struct must be native pointer size aligned");
   }
 }
 

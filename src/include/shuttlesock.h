@@ -10,6 +10,7 @@
 #include <shuttlesock/sbuf.h>
 #include <shuttlesock/llist.h>
 #include <shuttlesock/ipc.h>
+#include <shuttlesock/stalloc.h>
 #include <pthread.h>
 
 #define SHUTTLESOCK_MAX_WORKERS 1024

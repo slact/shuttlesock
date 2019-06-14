@@ -19,6 +19,7 @@ set(libsrc
   src/ipc.c
   src/ipc_commands.c
   src/sysutil.c
+  src/stalloc.c
 )
 
 add_library(shuttlesock SHARED ${libsrc})
