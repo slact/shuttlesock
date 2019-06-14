@@ -51,6 +51,7 @@ describe(shuttlesock_init_and_shutdown) {
 #define IPC_ECHO 130
 
 typedef struct {
+  int   active;
   int   procnum;
   int   barrage;
   int   barrage_received;
@@ -73,6 +74,19 @@ typedef struct {
   ipc_check_oneway_t ping;
   ipc_check_oneway_t pong;
 } ipc_check_t;
+
+
+typedef struct {
+  _Atomic(bool)       failure;
+  char                err[1024];
+  _Atomic(int)        sent;
+  _Atomic(int)        received;
+  
+  ipc_check_oneway_t  manager;
+  ipc_check_oneway_t  worker[16];
+  
+} ipc_one_to_many_check_t;
+
 
 #define check_ipc(test, ctx, chk, ...) \
 do { \
@@ -101,12 +115,6 @@ void ipc_echo_send(shuso_t *ctx) {
   
   ipc_check_oneway_t *self, *dst;
   ipc_echo_srcdst(ctx, &self, &dst);
-  
-  self->barrage_received++;
-  if(self->barrage_received < self->barrage) {
-    //don't reply yet
-    return;
-  }
   
   float sleeptime = 0;
   if(self->sleep > 0 && self->slept < self->sleep) {
@@ -156,6 +164,13 @@ void ipc_echo_receive(shuso_t *ctx, const uint8_t code, void *ptr) {
     return;
   }
   
+  self->barrage_received++;
+  if(self->barrage_received < self->barrage) {
+    //don't reply yet
+    return;
+  }
+  self->barrage_received = 0;
+  
   ipc_echo_send(ctx);
 }
 
@@ -166,7 +181,6 @@ static void ipc_load_test(EV_P_ ev_timer *w, int rev) {
   ipc_echo_srcdst(ctx, &self, &dst);
   
   while(self->init_sleep_flag) {
-    shuso_log(ctx, "sleep some");
     ev_sleep(0.05);
   }
   
@@ -192,65 +206,96 @@ void ipc_echo_cancel(shuso_t *ctx, const uint8_t code, void *ptr) { }
 
 describe(ipc) {
   static shuso_t *ss = NULL;
+  subdesc(one_to_one) {
   static ipc_check_t *ipc_check = NULL;
-  
-  before_each() {
-    ss = NULL;
-    ipc_check = shmalloc(ipc_check);
-    ss = runcheck_shuso_create(EVFLAG_AUTO, NULL);
-    ss->data = ipc_check;
-  }
-  after_each() {
-    if(ss) {
-      test_runcheck_t *runcheck = ss->common->phase_handlers.privdata;
-      shuso_destroy(ss);
-      if(runcheck) {
-        shmfree(runcheck);
-      }
+    before_each() {
       ss = NULL;
+      ipc_check = shmalloc(ipc_check);
+      ss = runcheck_shuso_create(EVFLAG_AUTO, NULL);
+      ss->data = ipc_check;
     }
-    if(ipc_check) {
-      shmfree(ipc_check);
+    after_each() {
+      if(ss) {
+        test_runcheck_t *runcheck = ss->common->phase_handlers.privdata;
+        shuso_destroy(ss);
+        if(runcheck) {
+          shmfree(runcheck);
+        }
+        ss = NULL;
+      }
+      if(ipc_check) {
+        shmfree(ipc_check);
+      }
     }
-  }
-  test("simple round-trip") {
-    ipc_check->received_stop_at = 1000;
-    ipc_check->ping.procnum = SHUTTLESOCK_MANAGER;
-    ipc_check->pong.procnum = SHUTTLESOCK_MASTER;
-    ipc_check->ping.barrage = 1;
-    ipc_check->pong.barrage = 1;
+    test("simple round-trip") {
+      ipc_check->received_stop_at = 1000;
+      ipc_check->ping.procnum = SHUTTLESOCK_MANAGER;
+      ipc_check->pong.procnum = SHUTTLESOCK_MASTER;
+      ipc_check->ping.barrage = 1;
+      ipc_check->pong.barrage = 1;
 
-    shuso_add_timer_watcher(ss, ipc_load_test, NULL, 0.1, 0.0);
-    shuso_ipc_add_handler(ss, "echo", IPC_ECHO, ipc_echo_receive, ipc_echo_cancel);
-    shuso_run(ss);
-    assert_shuso(ss);
+      shuso_add_timer_watcher(ss, ipc_load_test, NULL, 0.1, 0.0);
+      shuso_ipc_add_handler(ss, "echo", IPC_ECHO, ipc_echo_receive, ipc_echo_cancel);
+      shuso_run(ss);
+      assert_shuso(ss);
+    }
+    
+    test("one-sided round-trip (250:1)") {
+      ipc_check->received_stop_at = 1000;
+      ipc_check->ping.procnum = SHUTTLESOCK_MANAGER;
+      ipc_check->pong.procnum = SHUTTLESOCK_MASTER;
+      ipc_check->ping.barrage = 250;
+      ipc_check->pong.barrage = 1;
+
+      shuso_add_timer_watcher(ss, ipc_load_test, NULL, 0.1, 0.0);
+      shuso_ipc_add_handler(ss, "echo", IPC_ECHO, ipc_echo_receive, ipc_echo_cancel);
+      shuso_run(ss);
+      assert_shuso(ss);
+    }
+    
+    test("buffer fill (500:1)") {
+      ipc_check->received_stop_at = 10000;
+      ipc_check->ping.procnum = SHUTTLESOCK_MANAGER;
+      ipc_check->pong.procnum = SHUTTLESOCK_MASTER;
+      ipc_check->ping.barrage = 400;
+      ipc_check->pong.barrage = 1;
+      ipc_check->ping.init_sleep_flag = 1;
+
+      shuso_add_timer_watcher(ss, ipc_load_test, NULL, 0.1, 0.0);
+      shuso_ipc_add_handler(ss, "echo", IPC_ECHO, ipc_echo_receive, ipc_echo_cancel);
+      shuso_run(ss);
+      assert_shuso(ss);
+    }
   }
   
-  test("one-sided round-trip (250:1)") {
-    ipc_check->received_stop_at = 1000;
-    ipc_check->ping.procnum = SHUTTLESOCK_MANAGER;
-    ipc_check->pong.procnum = SHUTTLESOCK_MASTER;
-    ipc_check->ping.barrage = 250;
-    ipc_check->pong.barrage = 1;
+  subdesc(many_to_one) {
+    ipc_one_to_many_check_t *ipc_check;
+    before_each() {
+      ss = NULL;
+      ipc_check = shmalloc(ipc_check);
+      ss = runcheck_shuso_create(EVFLAG_AUTO, NULL);
+      ss->data = ipc_check;
+    }
+    after_each() {
+      if(ss) {
+        test_runcheck_t *runcheck = ss->common->phase_handlers.privdata;
+        shuso_destroy(ss);
+        if(runcheck) {
+          shmfree(runcheck);
+        }
+        ss = NULL;
+      }
+      if(ipc_check) {
+        shmfree(ipc_check);
+      }
+    }
+    skip("4 workers to manager") {
 
-    shuso_add_timer_watcher(ss, ipc_load_test, NULL, 0.1, 0.0);
-    shuso_ipc_add_handler(ss, "echo", IPC_ECHO, ipc_echo_receive, ipc_echo_cancel);
-    shuso_run(ss);
-    assert_shuso(ss);
+    }
+    
   }
-  
-  test("buffer fill (500:1)") {
-    ipc_check->received_stop_at = 10000;
-    ipc_check->ping.procnum = SHUTTLESOCK_MANAGER;
-    ipc_check->pong.procnum = SHUTTLESOCK_MASTER;
-    ipc_check->ping.barrage = 400;
-    ipc_check->pong.barrage = 1;
-    ipc_check->ping.init_sleep_flag = 1;
+}
 
-    shuso_add_timer_watcher(ss, ipc_load_test, NULL, 0.1, 0.0);
-    shuso_ipc_add_handler(ss, "echo", IPC_ECHO, ipc_echo_receive, ipc_echo_cancel);
-    shuso_run(ss);
-    assert_shuso(ss);
   }
 }
 
