@@ -52,7 +52,7 @@ check_symbol_exists(eventfd "sys/eventfd.h" SHUTTLESOCK_HAVE_EVENTFD)
 cmake_reset_check_state()
 
 include(TestPthreadSetname)
-test_pthread_setname(${CMAKE_THREAD_LIBS_INIT}
+test_pthread_setname("${CMAKE_THREAD_LIBS_INIT}"
   SHUTTLESOCK_PTHREAD_SETNAME_STYLE
   SHUTTLESOCK_PTHREAD_SETNAME_INCLUDE_PTRHEAD_NP
 )
