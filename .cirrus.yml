@@ -33,7 +33,7 @@ osx_task:
     image: mojave-xcode-10.1
   setup_script:
     - ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)" < /dev/null
-    - brew install gcc ccache libev zsh
+    - brew install ccache libev zsh cmake
   test_basic_script:
     - ./rebuild.sh
     - ./test.sh
