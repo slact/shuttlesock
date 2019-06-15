@@ -113,7 +113,7 @@ void ipc_echo_srcdst(shuso_t *ctx, ipc_check_oneway_t **self, ipc_check_oneway_t
 void ipc_echo_send(shuso_t *ctx) {
   ipc_check_t   *chk = ctx->data;
   
-  ipc_check_oneway_t *self, *dst;
+  ipc_check_oneway_t *self = NULL, *dst = NULL;
   ipc_echo_srcdst(ctx, &self, &dst);
   
   float sleeptime = 0;
@@ -146,7 +146,7 @@ void ipc_echo_send(shuso_t *ctx) {
 }
 
 void ipc_echo_receive(shuso_t *ctx, const uint8_t code, void *ptr) {
-  ipc_check_oneway_t *self, *dst;
+  ipc_check_oneway_t *self = NULL, *dst = NULL;
   ipc_echo_srcdst(ctx, &self, &dst);
   
   ipc_check_t   *chk = ctx->data;
@@ -177,7 +177,7 @@ void ipc_echo_receive(shuso_t *ctx, const uint8_t code, void *ptr) {
 static void ipc_load_test(EV_P_ ev_timer *w, int rev) {
   shuso_t *ctx = ev_userdata(EV_A);
   ipc_check_t   *chk = ctx->data;
-  ipc_check_oneway_t *self, *dst;
+  ipc_check_oneway_t *self = NULL, *dst = NULL;
   ipc_echo_srcdst(ctx, &self, &dst);
   
   while(self->init_sleep_flag) {
@@ -269,7 +269,7 @@ describe(ipc) {
   }
   
   subdesc(many_to_one) {
-    ipc_one_to_many_check_t *ipc_check;
+    ipc_one_to_many_check_t *ipc_check = NULL;
     before_each() {
       ss = NULL;
       ipc_check = shmalloc(ipc_check);
