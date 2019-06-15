@@ -26,7 +26,7 @@
 #ifndef SNOW_H
 #define SNOW_H
 
-#ifndef SNOW_ENABLED
+#if !defined(SNOW_ENABLED) || defined __clang_analyzer__
 
 #define describe(name) __attribute__((unused)) static void _snow_unused_##name()
 #define subdesc(...) while (0)
@@ -193,7 +193,9 @@ static void *_snow_arr_top(struct _snow_arr *arr) {
 
 __attribute__((unused))
 static void _snow_arr_reset(struct _snow_arr *arr) {
-	free(arr->elems);
+	if(arr->elems) {
+      free(arr->elems);
+    }
 	arr->elems = NULL;
 	arr->length = 0;
 	arr->allocated = 0;
@@ -330,7 +332,9 @@ static char *_snow_spaces(int depth) {
 	if (depth != _snow_spaces_depth_prev) {
 		_snow_arr_grow(&_snow.bufs.spaces, depth * 2 + 1);
 		_snow.bufs.spaces.elems[depth * 2] = '\0';
-		memset(_snow.bufs.spaces.elems, ' ', depth * 2);
+		if(depth > 0) {
+          memset(_snow.bufs.spaces.elems, ' ', depth * 2);
+        }
 		_snow_spaces_depth_prev = depth;
 	}
 
