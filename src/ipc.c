@@ -140,7 +140,7 @@ static bool ipc_send_direct(shuso_t *ctx, shuso_process_t *src, shuso_process_t 
 #else
   //shuso_log(ctx, "write to pipe %d %d", dst->ipc.fd[0], dst->ipc.fd[1]);
   //just write to the pipe
-  written = write(dst->ipc.fd[1], code, 1);
+  written = write(dst->ipc.fd[1], &code, 1);
   assert(written == 1);
 #endif
   return true;
