@@ -13,6 +13,7 @@ linux_task:
     - ./rebuild.sh gcc-coverage no-display-coverage
     - pwd
     - ls -alh
+    - ls -alh build/CMakeFiles/shuttlesock.dir/src/
     - bash <(curl -s https://codecov.io/bash)
   test_optimized_script:
     - ./rebuild.sh O3
