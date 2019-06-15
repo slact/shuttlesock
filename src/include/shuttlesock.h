@@ -4,9 +4,9 @@
 #include <ev.h>
 #include <shuttlesock/configure.h>
 #include <pthread.h>
-#include <stdbool.h>
 #include <stdint.h>
 #include <fcntl.h>
+#include <stdbool.h>
 #include <shuttlesock/sbuf.h>
 #include <shuttlesock/llist.h>
 #include <shuttlesock/ipc.h>
