@@ -40,15 +40,17 @@ if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Debug)
 endif()
 
-#add DebugASan mode
-add_build_mode(DebugASan 
-  "-fsanitize-address-use-after-scope -fsanitize=address -fsanitize=undefined  -fsanitize=leak"
-  "-fsanitize=address -fsanitize=undefined -lubsan"
-)
-add_build_mode(DebugMSan 
-  "-fsanitize=memory -fsanitize-memory-track-origins=2 -fsanitize=undefined"
-  "-fsanitize=memory -fsanitize-memory-track-origins=2 -fsanitize=undefined -lubsan"
-)
+if("${CMAKE_C_COMPILER_ID}" STREQUAL "AppleClang")
+  add_build_mode(DebugASan 
+    "-fsanitize-address-use-after-scope -fsanitize=address -fsanitize=undefined"
+    "-fsanitize=address -fsanitize=undefined -lubsan"
+  )
+else()
+  add_build_mode(DebugMSan 
+    "-fsanitize=memory -fsanitize-memory-track-origins=2 -fsanitize=undefined -fsanitize=leak"
+    "-fsanitize=memory -fsanitize-memory-track-origins=2 -fsanitize=undefined -lubsan"
+  )
+endif()
 add_build_mode(DebugTSan
   "-fsanitize=thread -fsanitize=undefined"
   "-fsanitize=thread -fsanitize=undefined -lubsan"
