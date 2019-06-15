@@ -2,7 +2,8 @@ include(CheckCSourceCompiles)
 include(CMakePushCheckState)
 
 function(test_pthread_setname thread_libs style_var pthread_np_var)
-  if(DEFINED CACHE{${style_var}} AND DEFINED CACHE{${pthread_np_var}})
+  if(DEFINED ${style_var} AND DEFINED ${pthread_np_var})
+    #I'd rather use DEFINED CACHE{$var}, but that only got added in 3.14
     return()
   endif()
   message(STATUS "Finding pthread setname style")

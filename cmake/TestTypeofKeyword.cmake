@@ -2,7 +2,8 @@ include(CheckCSourceCompiles)
 include(CMakePushCheckState)
 
 function(test_typeof_keyword typeof_keyword_var)
-  if(DEFINED CACHE{${typeof_keyword_var}})
+  if(DEFINED ${typeof_keyword_var})
+    #I'd rather use DEFINED CACHE{$var}, but that only got added in 3.14
     return()
   endif()
   message(STATUS "Check if __typeof__() exist")
