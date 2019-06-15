@@ -70,7 +70,7 @@ for opt in $*; do
       sanitize=1
       ;;
     verbose|-v|v)
-      verbose="-v"
+      verbose_build=1
       ;;
     coverage)
       compiler=clang
@@ -117,7 +117,7 @@ if [[ -n $invalid_options ]]; then
 fi
 
 if [[ -n $clean ]]; then
-  echo "${YELLOW}>> rm -Rf $build_dir"
+  echo "${YELLOW}>> rm -Rf $build_dir${ALL_OFF}"
   rm -Rf $build_dir
 fi
 
@@ -152,6 +152,16 @@ TRAPINT() {
   fi
 }
 
+if [[ -n $verbose_build ]]; then
+  cmake_build_help=$(cmake --build 2>&1)
+  if [[ "$cmake_build_help" == *" --verbose "* ]]; then
+    verbose_build_flag="--verbose"
+  else
+    #cmake is disgusting
+    OPTS+=( "-DCMAKE_VERBOSE_MAKEFILE=1" )
+  fi
+fi
+
 cmake_help=$(cmake --help)
 if [[ "$cmake_help" == *" -B "* ]]; then
   #relatively modern cmake
@@ -185,15 +195,15 @@ fi
 if ! [ $? -eq 0 ]; then;
   exit 1
 fi
-echo "\n$YELLOW>> ${BLUE}${ANALYZE}${YELLOW}cmake ${YELLOW}--build $build_dir $verbose $ALL_OFF\n"
+echo "\n$YELLOW>> ${BLUE}${ANALYZE}${YELLOW}cmake ${YELLOW}--build $build_dir ${verbose_build_flag}$ALL_OFF\n"
 
 if [[ -n $clang_analyze ]]; then
-  $ANALYZE cmake --build $build_dir $verbose &
+  $ANALYZE cmake --build $build_dir $verbose_build_flag &
   scan_view_pid=$!
   wait $scan_view_pid
   scan_view_pid=""
 else
-  $ANALYZE cmake --build $build_dir $verbose
+  $ANALYZE cmake --build $build_dir $verbose_build_flag
 fi
 
 if ! [ $? -eq 0 ]; then;
