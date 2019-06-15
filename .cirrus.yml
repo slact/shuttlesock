@@ -1,0 +1,56 @@
+linux_task:
+  container:
+    image: gcc:latest
+  env:
+    CODECOV_TOKEN: f0a2eca9-3983-4103-a6f4-02b1caf4cbb5
+  setup_script:
+    - apt-get update
+    - apt-get install -y --no-install-recommends valgrind ccache clang cmake libev
+  test_basic_script:
+    - ./rebuild.sh gcc
+    - ./test.sh
+  test_optimized_script:
+    - ./rebuild.sh gcc O3
+    - ./test.sh
+  test_optimized_valgrind:
+    - ./rebuild.sh gcc O2 valgrind
+    - ./test.sh valgrind
+  test_optimized_stalloc_stats_tracking_valgrind:
+    - ./rebuild.sh stalloc_track_space gcc O2 valgrind
+    - ./test.sh valgrind
+  test_no_eventfd_valgrind:
+    - ./rebuild.sh no-eventfd gcc O2
+    - ./test.sh valgrind
+  codecov_script:
+    - ./rebuild.sh gcc-coverage no-display-coverage
+    - bash <(curl -s https://codecov.io/bash)
+
+osx_task:
+  osx_instance:
+    image: mojave-xcode-10.1
+  setup_script:
+    - ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)" < /dev/null
+    - brew install gcc ccache libev
+  test_basic_script:
+    - ./rebuild.sh
+    - ./test.sh
+  test_optimized_script:
+    - ./rebuild.sh O3
+    - ./test.sh
+  test_sanitized_script:
+    - ./rebuild.sh O2 sanitize-address
+    - ./test.sh
+
+freebsd_task:
+  freebsd_instance:
+    image: freebsd-12-0-release-amd64
+  setup_script: pkg install -y gmake cmake ccache libev valgrind
+   test_basic_script:
+    - ./rebuild.sh
+    - ./test.sh
+  test_optimized_script:
+    - ./rebuild.sh O3
+    - ./test.sh
+  test_sanitized_script:
+    - ./rebuild.sh O2 stalloc_track_space valgrind
+    - ./test.sh valgrind
