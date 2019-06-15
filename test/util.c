@@ -96,7 +96,7 @@ void fill_stalloc(shuso_stalloc_t *st, test_stalloc_stats_t *stats, size_t minsz
   char *chr;
   int stacknum = 0;
   int stack_push_interval = total_items / stack_push_count;
-  assert(stack_push_count + st->stack.count < SHUTTLESOCK_STALLOC_STACK_SIZE);
+  assert(stack_push_count + st->stack.count <= SHUTTLESOCK_STALLOC_STACK_SIZE);
   srand(0);
   size_t largesz = st->page.size + 10;
   stats->largesz = largesz;
