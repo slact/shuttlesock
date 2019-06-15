@@ -31,7 +31,7 @@ target_include_directories(shuttlesock PRIVATE src)
 
 #wahern's asynchrnous dns.c library
 add_library(dns.c STATIC lib/dns/dns.c)
-set_property(TARGET dns.c PROPERTY C_STANDARD 11)
+set_property(TARGET dns.c PROPERTY C_STANDARD 99)
 target_include_directories(shuttlesock PRIVATE lib/dns)
 
 #typeof() check
