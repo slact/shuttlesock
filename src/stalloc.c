@@ -234,9 +234,9 @@ bool shuso_stalloc_pop_to(shuso_stalloc_t *st, int stackpos) {
 #ifdef SHUTTLESOCK_STALLOC_TRACK_SPACE
     st->space = (struct shuso_stalloc_space_s ){0};
 #endif
-    st->page = (struct shuso_stalloc_pages_s ){0};
-    st->allocd = (struct shuso_stalloc_allocds_s ){0};
-    st->stack = (struct shuso_stalloc_stackframes_s ){{0}, 0};
+    st->page = (struct shuso_stalloc_pages_s ){0,0,NULL,NULL};
+    st->allocd = (struct shuso_stalloc_allocds_s ){NULL};
+    st->stack = (struct shuso_stalloc_stackframes_s ){{NULL}, 0};
     return true;
   }
   frame = st->stack.stack[stackpos - 1];
