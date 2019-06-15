@@ -152,14 +152,36 @@ TRAPINT() {
   fi
 }
 
-print -n "\n${YELLOW}>> ${BLUE}${ANALYZE}${YELLOW}cmake${ALL_OFF}"
+cmake_help=$(cmake --help)
+if [[ "$cmake_help" == *" -B "* ]]; then
+  #relatively modern cmake
+  print -n "\n${YELLOW}>> ${BLUE}${ANALYZE}${YELLOW}cmake${ALL_OFF}"
+  for opt in $OPTS ; do
+    print -n " ${GREEN}\\\\\n $opt${ALL_OFF}"
+  done
+  print -n " ${GREEN}\\\\\n ${YELLOW}-B$build_dir $ALL_OFF\n\n"
+  $ANALYZE cmake $OPTS -B$build_dir
+else
+  #shitty old cmake
+  if [[ ! -d "$build_dir" ]]; then
+    echo "${YELLOW}>> mkdir $build_dir${ALL_OFF}"
+    mkdir "$build_dir"
+  fi
+  echo "${YELLOW}>> cd $build_dir${ALL_OFF}"
+  cd $build_dir
+  print -n "${YELLOW}>> ${BLUE}${ANALYZE}${YELLOW}cmake${ALL_OFF}"
+  for opt in $OPTS ; do
+    print -n " ${GREEN}\\\\\n $opt${ALL_OFF}"
+  done
+  print -n " ${GREEN}\\\\\n ${YELLOW}../ $ALL_OFF\n\n"
+  $ANALYZE cmake $OPTS ../
+  echo "${YELLOW}>> cd ../${ALL_OFF}"
+  cd ../
+fi
 
-for opt in $OPTS ; do
-  print -n " ${GREEN}\\\\\n $opt${ALL_OFF}"
-done
-print -n " ${GREEN}\\\\\n ${YELLOW}-B$build_dir $ALL_OFF\n\n"
 
-$ANALYZE cmake $OPTS -B$build_dir
+
+
 if ! [ $? -eq 0 ]; then;
   exit 1
 fi

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.4)
-set(CMAKE_MODULE_PATH "./cmake")
+set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/cmake" )
 include(SetProjectCompiler)
 
 project(shuttlesock LANGUAGES "C" VERSION 0.0.1)
