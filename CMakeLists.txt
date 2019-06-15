@@ -44,7 +44,6 @@ find_package(Threads REQUIRED)
 target_link_libraries(shuttlesock PUBLIC ${CMAKE_THREAD_LIBS_INIT})
 
 target_require_package(shuttlesock PUBLIC ev)
-target_require_package(shuttlesock PRIVATE atomic_ops)
 
 test_big_endian(SHUTTLESOCK_BIG_ENDIAN)
 
