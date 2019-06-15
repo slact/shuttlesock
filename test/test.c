@@ -1,5 +1,5 @@
 #include "test.h"
-
+#ifndef __clang_analyzer__
 bool set_test_options(int *argc, char **argv) {
   snow_set_extra_help(""
     "    --verbose:      Verbose test output.\n"
@@ -295,10 +295,94 @@ describe(ipc) {
     
   }
 }
+#define MEM_DEFINED(addr) \
+ (VALGRIND_CHECK_MEM_IS_ADDRESSABLE(addr) == 0 && VALGRIND_CHECK_MEM_IS_DEFINED(addr) == 0)
 
 describe(stack_allocator) {
+  static shuso_stalloc_t st;
+  before_each() {
+    shuso_stalloc_init(&st, 0);
+  }
+  after_each() {
+    shuso_stalloc_empty(&st);
+  }
+  
   test("page header alignment") {
     asserteq(sizeof(shuso_stalloc_page_t) % sizeof(void *), 0, "page header struct must be native pointer size aligned");
+  }
+  test("handful of pointer-size allocs") {
+    void *ptr[10];
+    for(int i=0; i<10; i++) {
+      ptr[i] = shuso_stalloc(&st, sizeof(void *));
+      ptr[i] = (void *)(intptr_t)i;
+      ptr[i] = &((char *)&ptr[i])[1];
+      for(int j=0; j<i; j++) {
+        assertneq(ptr[i], ptr[j], "those should be different allocations");
+      }
+    }
+    asserteq(st.allocd.last, NULL, "nothing allocd");
+  }
+  
+  test("some very large allocs") {
+    char *chr[10];
+    size_t sz = st.page.size + 10;
+    for(int i=0; i<10; i++) {
+      chr[i] = shuso_stalloc(&st, sz);
+      memset(chr[i], 0x12, sz);
+      for(int j=0; j<i; j++) {
+        assertneq((void *)chr[i], (void *)chr[j], "those should be different allocations");
+      }
+      assertneq(st.allocd.last, NULL, "alloc shouldn't be NULL");
+      asserteq((void *)st.allocd.last->data, (void *)chr[i], "wrong last alloc");
+    }
+  }
+  
+  test("a few pages' worth") {
+    char *chr[500];
+    size_t sz = st.page.size / 5;
+    for(int i=0; i<500; i++) {
+      chr[i] = shuso_stalloc(&st, sz);
+      memset(chr[i], 0x12, sz);
+      for(int j=0; j<i; j++) {
+        assertneq((void *)chr[i], (void *)chr[j], "those should be different allocations");
+      }
+      asserteq(st.allocd.last, NULL, "nothing allocd");
+    }
+    assert(st.page.count>1, "should have more than 1 page");
+  }
+  subdesc(stack) {
+    static test_stalloc_stats_t stats;
+    before_each() {
+      shuso_stalloc_init(&st, 0);
+      memset(&stats, 0x00, sizeof(stats));
+    }
+    after_each() {
+      shuso_stalloc_empty(&st);
+    }
+    
+    
+    test("push") {
+      fill_stalloc(&st, &stats, 1, 256, 30, 1000, 8);
+    }
+    
+    test("push/pop") {
+      fill_stalloc(&st, &stats, 1, 256, 30, 1000, 8);
+      shuso_stalloc_pop_to(&st, 3);
+      assert(st.allocd.last == stats.stack[2].allocd);
+      assert(st.page.last == stats.stack[2].page);
+      assert(st.page.cur == stats.stack[2].page_cur);
+      shuso_stalloc_pop_to(&st, 0);
+    }
+  }
+  
+  subdesc(space_tracking) {
+    test("track space cumulatively") {
+      
+    }
+    
+    test("track space after stack manupulation") {
+      
+    }
   }
 }
 
@@ -322,3 +406,5 @@ int main(int argc, char **argv) {
   close(dev_null);
   return rc;
 }
+
+#endif //__clang_analyzer__

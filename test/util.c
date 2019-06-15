@@ -1,4 +1,5 @@
 #include "test.h"
+#ifndef __clang_analyzer__
 
 static void start_master(shuso_t *ctx, void *pd) {
   test_runcheck_t *chk = pd;
@@ -87,3 +88,54 @@ void stop_timer(EV_P_ ev_timer *w, int revent) {
   }
   shuso_stop(ctx, SHUSO_STOP_ASK);
 }
+
+#define randrange(min, max) \
+  (min + rand() / (RAND_MAX / (max - min + 1) + 1))
+
+void fill_stalloc(shuso_stalloc_t *st, test_stalloc_stats_t *stats, size_t minsz, size_t maxsz, int large_alloc_interval, int total_items, int stack_push_count) {
+  char *chr;
+  int stacknum = 0;
+  int stack_push_interval = total_items / stack_push_count;
+  assert(stack_push_count + st->stack.count < SHUTTLESOCK_STALLOC_STACK_SIZE);
+  srand(0);
+  size_t largesz = st->page.size + 10;
+  stats->largesz = largesz;
+  for(int i=1; i<=total_items; i++) {
+    if(large_alloc_interval > 0 && i % large_alloc_interval == 0) {
+      chr = shuso_stalloc(st, largesz);
+      stats->used += largesz;
+      memset(chr, 0x31, largesz);
+      assertneq((void *)st->allocd.last->data, NULL);
+      asserteq((void *)chr, (void *)st->allocd.last->data);
+      stats->count++;
+      stats->large++;
+    }
+    else {
+      size_t sz = randrange(minsz, maxsz);
+      assert(sz < st->page.size);
+      assert(sz > 0);
+      chr = shuso_stalloc(st, sz);
+      assert(chr != NULL);
+      stats->used += sz;
+      stats->count++;
+      if(st->allocd.last) {
+        assert(st->allocd.last->data != chr);
+      }
+    }
+    if(stack_push_interval > 0 && i%stack_push_interval == 0) {
+      int nextstack = shuso_stalloc_push(st);
+      assert(nextstack > 0);
+      stacknum++;
+      asserteq(stacknum, nextstack);
+      stats->stack_count++;
+      if(nextstack <= SHUTTLESOCK_STALLOC_STACK_SIZE) {
+        stats->stack[nextstack-1] = *st->stack.stack[nextstack-1];
+      }
+      else {
+        snow_fail("stack out of bounds");
+      }
+    }
+  }
+  
+}
+#endif //__clang_analyzer__
