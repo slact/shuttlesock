@@ -57,18 +57,16 @@ add_build_mode(DebugTSan
   "-fsanitize=thread -fsanitize=undefined ${link_ubsan}"
 )
 
-if("${CMAKE_C_COMPILER_ID}" STREQUAL "GNU")
-  add_build_mode(DebugCoverage
-    "-fprofile-arcs -ftest-coverage"
-    "-fprofile-arcs -ftest-coverage"
-  )
-elseif("${CMAKE_C_COMPILER_ID}" MATCHES "^(Apple)?Clang$")
+if("${CMAKE_C_COMPILER_ID}" MATCHES "^(Apple)?Clang$")
   add_build_mode(DebugCoverage
     "-fprofile-instr-generate -fcoverage-mapping"
     "-fprofile-instr-generate -fcoverage-mapping"
   )
 else()
-  message(WARNING "Don't know how to generate coverage for \"${CMAKE_C_COMPILER_ID}\" compiler")
+  add_build_mode(DebugCoverage
+    "-fprofile-arcs -ftest-coverage"
+    "-fprofile-arcs -ftest-coverage"
+  )
 endif()
 
 if(CMAKE_BUILD_TYPE MATCHES "^Debug")
