@@ -45,7 +45,7 @@ freebsd_task:
   freebsd_instance:
     image: freebsd-12-0-release-amd64
   setup_script: pkg install -y gmake cmake ccache libev valgrind
-   test_basic_script:
+  test_basic_script:
     - ./rebuild.sh
     - ./test.sh
   test_optimized_script:
