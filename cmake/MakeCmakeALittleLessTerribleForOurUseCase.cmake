@@ -67,7 +67,7 @@ if("${CMAKE_C_COMPILER_ID}" STREQUAL "GNU")
     "-fprofile-arcs -ftest-coverage"
     "-fprofile-arcs -ftest-coverage"
   )
-elseif("${CMAKE_C_COMPILER_ID}" STREQUAL "Clang")
+elseif("${CMAKE_C_COMPILER_ID}" MATCHES "^(Apple)?Clang$")
   add_build_mode(DebugCoverage
     "-fprofile-instr-generate -fcoverage-mapping"
     "-fprofile-instr-generate -fcoverage-mapping"
@@ -84,7 +84,7 @@ if(CMAKE_BUILD_TYPE MATCHES "^Debug")
   add_compiler_flags(-Wall -Wextra -Wpedantic -Wno-unused-parameter -Wpointer-sign -Wpointer-arith -Wshadow -Wnested-externs -Wsign-compare -ggdb -O${OPTIMIZE_LEVEL} -fno-omit-frame-pointer)
   if ("${CMAKE_C_COMPILER_ID}" STREQUAL "GNU")
     add_compiler_flags(-fdiagnostics-color=always -Wmaybe-uninitialized -fvar-tracking-assignments)
-  elseif("${CMAKE_C_COMPILER_ID}" STREQUAL "Clang")
+  elseif("${CMAKE_C_COMPILER_ID}" MATCHES "^(Apple)?Clang$")
     add_compiler_flags()
   endif()
 endif()
