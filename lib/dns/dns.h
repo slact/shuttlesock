@@ -156,7 +156,7 @@ DNS_PUBLIC int *dns_debug_p(void);
 
 #define dns_quietinit(...) \
 	DNS_PRAGMA_PUSH DNS_PRAGMA_QUIET __VA_ARGS__ DNS_PRAGMA_POP
-#elif (__GNUC__ == 4 && __GNUC_MINOR__ >= 6) || __GNUC__ > 4
+#elif defined(__GNUC__) && __GNUC__ < 9 &&((__GNUC__ == 4 && __GNUC_MINOR__ >= 6) || __GNUC__ > 4)
 #define DNS_PRAGMA_PUSH _Pragma("GCC diagnostic push")
 #define DNS_PRAGMA_QUIET _Pragma("GCC diagnostic ignored \"-Woverride-init\"")
 #define DNS_PRAGMA_POP _Pragma("GCC diagnostic pop")
@@ -1056,8 +1056,11 @@ DNS_PUBLIC void dns_cache_close(struct dns_cache *);
 #define DNS_OPTS_INITIALIZER  { DNS_OPTS_INITIALIZER_ }
 #define DNS_OPTS_INIT(...)    { DNS_OPTS_INITIALIZER_, __VA_ARGS__ }
 
+#if defined(__GNUC__) && !defined(__clang__) && __GNUC__ >= 9
+#define dns_opts(...) (&(struct dns_options){ __VA_ARGS__ })
+#else
 #define dns_opts(...) (&dns_quietinit((struct dns_options)DNS_OPTS_INIT(__VA_ARGS__)))
-
+#endif
 struct dns_options {
 	/*
 	 * If the callback closes *fd, it must set it to -1. Otherwise, the
