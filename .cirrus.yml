@@ -5,7 +5,7 @@ linux_task:
     CODECOV_TOKEN: 47866546-4d0f-4b92-8359-083764e1123f
   setup_script:
     - apt-get update
-    - apt-get install -y --no-install-recommends valgrind ccache clang cmake libev-dev
+    - apt-get install -y --no-install-recommends valgrind ccache clang cmake libev-dev zsh
   test_basic_script:
     - ./rebuild.sh gcc
     - ./test.sh
@@ -30,7 +30,7 @@ osx_task:
     image: mojave-xcode-10.1
   setup_script:
     - ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)" < /dev/null
-    - brew install gcc ccache libev
+    - brew install gcc ccache libev zsh
   test_basic_script:
     - ./rebuild.sh
     - ./test.sh
@@ -44,7 +44,7 @@ osx_task:
 freebsd_task:
   freebsd_instance:
     image: freebsd-12-0-release-amd64
-  setup_script: pkg install -y gmake cmake ccache libev valgrind
+  setup_script: pkg install -y gmake cmake ccache libev valgrind zsh
   test_basic_script:
     - ./rebuild.sh
     - ./test.sh
