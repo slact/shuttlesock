@@ -7,7 +7,7 @@ linux_task:
     - apt-get update
     - apt-get install -y --no-install-recommends valgrind ccache clang cmake libev-dev zsh
   test_basic_script:
-    - ./rebuild.sh
+    - ./rebuild.sh verbose
     - ./test.sh
   test_optimized_script:
     - ./rebuild.sh O3
