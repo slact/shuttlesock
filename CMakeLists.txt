@@ -49,6 +49,11 @@ test_big_endian(SHUTTLESOCK_BIG_ENDIAN)
 
 cmake_push_check_state(RESET)
 check_symbol_exists(eventfd "sys/eventfd.h" SHUTTLESOCK_HAVE_EVENTFD)
+if(NOT SHUTTLESOCK_HAVE_EVENTFD)
+  set(SHUTTLESOCK_USE_EVENTFD "" CACHE INTERNAL "use eventfd if present" FORCE)
+else()
+  set(SHUTTLESOCK_USE_EVENTFD "TRUE" CACHE INTERNAL "use eventfd if present")
+endif()
 cmake_reset_check_state()
 
 include(TestPthreadSetname)

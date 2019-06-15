@@ -6,7 +6,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <assert.h>
-#ifdef SHUTTLESOCK_HAVE_EVENTFD
+#ifdef SHUTTLESOCK_USE_EVENTFD
 #include <sys/eventfd.h>
 #endif
 
@@ -27,7 +27,7 @@ bool shuso_ipc_channel_shared_create(shuso_t *ctx, shuso_process_t *proc) {
   proc->ipc.buf = ptr;
   
   int fds[2]={-1, -1};
-#ifdef SHUTTLESOCK_HAVE_EVENTFD
+#ifdef SHUTTLESOCK_USE_EVENTFD
   //straight out of libev
   fds[1] = eventfd(0, 0);
   if(fds[1] == -1) {
@@ -132,7 +132,7 @@ static bool ipc_send_direct(shuso_t *ctx, shuso_process_t *src, shuso_process_t 
   //shuso_log(ctx, "write! code at %d %d ptr %d", (int )next, buf->code[next], (int )(intptr_t )buf->ptr[next]);
   atomic_fetch_add(&buf->next_release, 1);
   //shuso_log(ctx, "after write: next_reserve %d next_release %d", (int )buf->next_reserve, (int )buf->next_release);
-#ifdef SHUTTLESOCK_HAVE_EVENTFD
+#ifdef SHUTTLESOCK_USE_EVENTFD
   //shuso_log(ctx, "write to eventfd %d %d", dst->ipc.fd[0], dst->ipc.fd[1]);
   static const uint64_t incr = 1;
   written = write(dst->ipc.fd[1], &incr, sizeof(incr));
@@ -261,7 +261,7 @@ static void ipc_receive_cb(EV_P_ ev_io *w, int revents) {
   shuso_t            *ctx = ev_userdata(EV_A);
   shuso_process_t    *proc = w->data;
   
-#ifdef SHUTTLESOCK_HAVE_EVENTFD
+#ifdef SHUTTLESOCK_USE_EVENTFD
   uint64_t buf;
   ssize_t readsize = read(proc->ipc.fd[1], &buf, sizeof(buf));
   if(readsize <= 0) {

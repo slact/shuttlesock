@@ -95,6 +95,9 @@ for opt in $*; do
     test|runtest)
       run_test=1
       ;;
+    no-eventfd)
+      disable_eventfd=1
+      ;;
     -*)
       OPTS+=( "$opt" )
       ;;
@@ -126,6 +129,10 @@ OPTS+=( "-DSHUTTLESOCK_STALLOC_TRACK_SPACE=${stalloc_track_space}" )
 OPTS+=( "-DSHUTTLESOCK_VALGRIND=${valgrind}" )
 OPTS+=( "-DSHUTTLESOCK_SANITIZE=${sanitize}" )
 OPTS+=( "-DDISABLE_CCACHE=${disable_ccache}" )
+
+if [[ -n $disable_eventfd ]]; then
+  OPTS+=( "-DSHUTTLESOCK_USE_EVENTFD=NO" )
+fi
 
 if [[ -n $clang_analyze ]]; then
   ANALYZE=("scan-build")
