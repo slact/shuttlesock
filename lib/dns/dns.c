@@ -82,6 +82,7 @@
 
 #include "dns.h"
 
+#ifndef __clang_analyzer__
 
 /*
  * C O M P I L E R  V E R S I O N  &  F E A T U R E  D E T E C T I O N
@@ -6537,6 +6538,9 @@ static _Bool dns_so_tcp_keep(struct dns_socket *so) {
 #if defined __clang__
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Warray-bounds"
+#elif DNS_GNUC_PREREQ(4,6,0)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Warray-bounds"
 #endif
 
 static int dns_so_tcp_send(struct dns_socket *so) {
@@ -6601,8 +6605,10 @@ static int dns_so_tcp_recv(struct dns_socket *so) {
 	return 0;
 } /* dns_so_tcp_recv() */
 
-#if __clang__
+#if defined __clang__
 #pragma clang diagnostic pop
+#elif DNS_GNUC_PREREQ(4,6,0)
+#pragma GCC diagnostic pop
 #endif
 
 
@@ -9975,3 +9981,4 @@ int main(int argc, char **argv) {
 #pragma GCC diagnostic pop
 #endif
 
+#endif /* __clang_analyzer__ */
