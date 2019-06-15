@@ -7,19 +7,23 @@ linux_task:
     - apt-get update
     - apt-get install -y --no-install-recommends valgrind ccache clang cmake libev-dev zsh
   test_basic_script:
-    - ./rebuild.sh gcc
+    - ./rebuild.sh
     - ./test.sh
   test_optimized_script:
-    - ./rebuild.sh gcc O3
+    - ./rebuild.sh O3
     - ./test.sh
   test_optimized_valgrind_script:
-    - ./rebuild.sh gcc O2 valgrind
+    - ./rebuild.sh O2 valgrind
     - ./test.sh valgrind
   test_optimized_stalloc_stats_tracking_valgrind_script:
-    - ./rebuild.sh stalloc_track_space gcc O2 valgrind
+    - ./rebuild.sh stalloc_track_space O2 valgrind
     - ./test.sh valgrind
   test_no_eventfd_valgrind_script:
-    - ./rebuild.sh no-eventfd gcc O2
+    - ./rebuild.sh no-eventfd O2
+    - ./test.sh valgrind
+  test_release_valgrind_script:
+    - ./rebuild.sh release O2
+    - ./test.sh
     - ./test.sh valgrind
   codecov_script:
     - ./rebuild.sh gcc-coverage no-display-coverage
