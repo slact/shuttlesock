@@ -10,7 +10,7 @@ linux_task:
     - ./rebuild.sh
     - ./test.sh
   codecov_script:
-    - ./rebuild.sh gcc-coverage no-display-coverage
+    - ./rebuild.sh gcc-coverage no-display-coverage verbose
     - pwd
     - ls -alh
     - ls -alh build/CMakeFiles/shuttlesock.dir/src/
