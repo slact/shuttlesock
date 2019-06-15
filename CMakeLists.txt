@@ -23,7 +23,7 @@ set(libsrc
 )
 
 add_library(shuttlesock SHARED ${libsrc})
-target_compile_features(shuttlesock PRIVATE c_std_11 c_static_assert c_variadic_macros)
+set_property(TARGET shuttlesock PROPERTY C_STANDARD 11)
 
 target_include_directories(shuttlesock PUBLIC src/include)
 target_include_directories(shuttlesock PUBLIC ${PROJECT_BINARY_DIR}/src/include)
@@ -31,7 +31,7 @@ target_include_directories(shuttlesock PRIVATE src)
 
 #wahern's asynchrnous dns.c library
 add_library(dns.c STATIC lib/dns/dns.c)
-target_compile_features(dns.c PRIVATE c_std_11 c_static_assert c_variadic_macros)
+set_property(TARGET dns.c PROPERTY C_STANDARD 11)
 target_include_directories(shuttlesock PRIVATE lib/dns)
 
 #typeof() check
