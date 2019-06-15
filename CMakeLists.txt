@@ -33,8 +33,7 @@ target_include_directories(shuttlesock PRIVATE src)
 add_library(dns.c STATIC lib/dns/dns.c)
 set_property(TARGET dns.c PROPERTY C_STANDARD 11)
 if ("${CMAKE_C_COMPILER_ID}" STREQUAL "GNU" AND CMAKE_C_COMPILER_VERSION VERSION_GREATER 9.0)
-  message(WARNING "oh hello")
-  #GCC 9 does things a little differently...
+  #GCC 9 does things a little differently... and dns.c is a little weird too
   target_compile_options(dns.c PRIVATE -Wno-override-init)
 endif()
 target_include_directories(shuttlesock PRIVATE lib/dns)
