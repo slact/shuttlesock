@@ -1368,6 +1368,7 @@ static int _snow_assert_fake(int invert, ...) {
 		const char *explanation = "" expl; \
 		_Pragma("GCC diagnostic push") \
 		_Pragma("GCC diagnostic ignored \"-Wpragmas\"") \
+		_Pragma("GCC diagnostic ignored \"-Wunknown-warning-option\"") \
 		_Pragma("GCC diagnostic ignored \"-Wpointer-arith\"") \
 		_Pragma("GCC diagnostic ignored \"-Wnull-pointer-arithmetic\"") \
 		typeof ((a)+0) _a = a; \
