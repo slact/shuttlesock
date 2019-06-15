@@ -10,6 +10,7 @@ linux_task:
     - ./rebuild.sh
     - ./test.sh
   codecov_script:
+    - cmake --version
     - ./rebuild.sh gcc-coverage no-display-coverage verbose
     - pwd
     - ls -alh
