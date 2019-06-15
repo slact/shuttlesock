@@ -1,11 +1,15 @@
 #ifndef SHUTTLESOCK_LLIST_H
 #define SHUTTLESOCK_LLIST_H
+#include <shuttlesock/configure.h>
 #include <stddef.h>
 #include <assert.h>
 
+
+
 #ifndef container_of
-#define container_of(ptr, type, member) ((type *)((char *)(1 ? (ptr) : &((type *)0)->member) - offsetof(type, member)))
+#define container_of(ptr, type, member) ((type *)(void *)((char *)(1 ? (ptr) : &((type *)0)->member) - offsetof(type, member)))
 #endif
+
 
 #define llist_init(ll) \
   (ll).head = NULL;   \
@@ -71,10 +75,10 @@ typedef struct type##_link_s { \
 } type##_link_t
 
 #define LLIST_STRUCT(type) \
-struct { \
+struct type##_list_s { \
   type##_link_t *head; \
   type##_link_t *tail; \
   size_t         count; \
 }
-  
+
 #endif //SHUTTLESOCK_LLIST_H
