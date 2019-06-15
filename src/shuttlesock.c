@@ -8,6 +8,7 @@
 #include "shuttlesock_private.h"
 #include <shuttlesock/log.h>
 #include <shuttlesock/sysutil.h>
+#include <stdio.h>
 
 static void shuso_cleanup_loop(shuso_t *ctx);
 static void signal_watcher_cb(EV_P_ ev_signal *w, int revents);
