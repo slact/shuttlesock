@@ -25,11 +25,11 @@ for opt in $*; do
       build_type=DebugMSan
       ;;
     sanitize-address)
-      compuler=clang
+      compiler=clang
       build_type=DebugASan
       ;;
     sanitize-threads|sanitize-thread)
-      compuler=clang
+      compiler=clang
       build_type=DebugTSan
       ;;
     no-ccache)
