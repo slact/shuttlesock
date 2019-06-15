@@ -34,6 +34,10 @@ add_library(dns.c STATIC lib/dns/dns.c)
 target_compile_features(dns.c PRIVATE c_std_11 c_static_assert c_variadic_macros)
 target_include_directories(shuttlesock PRIVATE lib/dns)
 
+#typeof() check
+include(TestTypeofKeyword)
+test_typeof_keyword(SHUTTLESOCK_HAVE_TYPEOF)
+
 #ptrheads
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
