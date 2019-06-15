@@ -41,27 +41,20 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 
 if("${CMAKE_C_COMPILER_ID}" STREQUAL "AppleClang")
-  add_build_mode(DebugASan 
-    "-fsanitize-address-use-after-scope -fsanitize=address -fsanitize=undefined"
-    "-fsanitize=address -fsanitize=undefined -lubsan"
-  )
+  set(link_ubsan "")
+  set(leak_sanitizer "")
 else()
-  add_build_mode(DebugMSan 
-    "-fsanitize=memory -fsanitize-memory-track-origins=2 -fsanitize=undefined -fsanitize=leak"
-    "-fsanitize=memory -fsanitize-memory-track-origins=2 -fsanitize=undefined -lubsan"
-  )
+  set(link_ubsan "-lubsan")
+  set(leak_sanitizer "-fsanitize=leak")
 endif()
+
+add_build_mode(DebugMSan 
+  "-fsanitize=memory -fsanitize-memory-track-origins=2 -fsanitize=undefined ${leak_sanitizer}"
+  "-fsanitize=memory -fsanitize-memory-track-origins=2 -fsanitize=undefined ${link_ubsan}"
+)
 add_build_mode(DebugTSan
   "-fsanitize=thread -fsanitize=undefined"
-  "-fsanitize=thread -fsanitize=undefined -lubsan"
-)
-add_build_mode(DebugCoverageGCC
-  "-fprofile-arcs -ftest-coverage"
-  "-fprofile-arcs -ftest-coverage"
-)
-add_build_mode(DebugCoverageClang
-  "-fprofile-instr-generate -fcoverage-mapping"
-  "-fprofile-instr-generate -fcoverage-mapping"
+  "-fsanitize=thread -fsanitize=undefined ${link_ubsan}"
 )
 
 if("${CMAKE_C_COMPILER_ID}" STREQUAL "GNU")
@@ -75,7 +68,7 @@ elseif("${CMAKE_C_COMPILER_ID}" MATCHES "^(Apple)?Clang$")
     "-fprofile-instr-generate -fcoverage-mapping"
   )
 else()
-  message(FATAL_ERROR "Don't know how to generate coverage for \"${CMAKE_C_COMPILER_ID}\" compiler")
+  message(WARNING "Don't know how to generate coverage for \"${CMAKE_C_COMPILER_ID}\" compiler")
 endif()
 
 if(CMAKE_BUILD_TYPE MATCHES "^Debug")
