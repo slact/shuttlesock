@@ -73,6 +73,7 @@ for opt in $*; do
       verbose="-v"
       ;;
     coverage)
+      compiler=clang
       run_test=1
       build_type=DebugCoverage
       ;;
@@ -80,6 +81,9 @@ for opt in $*; do
       compiler=clang
       run_test=1
       build_type=DebugCoverage
+      ;;
+    no-display-coverage)
+      no_display_coverage=1
       ;;
     gcc-coverage)
       compiler=gcc
@@ -189,16 +193,20 @@ if [[ $build_type == "DebugCoverage" ]]; then
   pushd $build_dir
   #ls CMakeFiles/shuttlesock.dir/src -alh
   #ls ../src -alh
-  echo "\n${GREEN}>> Preparing coverage results...${ALL_OFF}"
-  if [[ $compiler == "gcc" ]]; then
-    mkdir coverage-report 2>/dev/null
-    gcovr --root ../src --html-details -o coverage-report/index.html ./
-  elif [[ $compiler == "clang" ]]; then
-    llvm-profdata merge -sparse *.profraw -o .profdata
-    llvm-cov show -format="html" -output-dir="coverage-report" -instr-profile=".profdata"  -ignore-filename-regex="test/.*" -ignore-filename-regex="lib/.*" "libshuttlesock.so" -object "shuso_test"
+  if [[ -z $no_display_coverage ]]; then
+    print -n  "\n${GREEN}>> Preparing coverage results...${ALL_OFF}"
+    if [[ $compiler == "gcc" ]]; then
+      mkdir coverage-report 2>/dev/null
+      gcovr --root ../src --html-details -o coverage-report/index.html ./
+    elif [[ $compiler == "clang" ]]; then
+      llvm-profdata merge -sparse *.profraw -o .profdata
+      llvm-cov show -format="html" -output-dir="coverage-report" -instr-profile=".profdata"  -ignore-filename-regex="test/.*" -ignore-filename-regex="lib/.*" "libshuttlesock.so" -object "shuso_test"
+    fi
+    print -n  "${GREEN}done.${ALL_OFF}\n\n"
+    xdg-open ./coverage-report/index.html
+  else
+    echo "\n${GREEN}>> Coverage generated.${ALL_OFF}\n"
   fi
-
-  xdg-open ./coverage-report/index.html
   popd $build_dir
 fi
 
