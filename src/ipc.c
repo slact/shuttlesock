@@ -11,7 +11,6 @@
 #endif
 
 static void ipc_send_retry_cb(EV_P_ ev_timer *w, int revents);
-static void ipc_receive_retry_cb(EV_P_ ev_timer *w, int revents);
 static void ipc_receive_cb(EV_P_ ev_io *w, int revents);
 
 bool shuso_ipc_channel_shared_create(shuso_t *ctx, shuso_process_t *proc) {
@@ -34,23 +33,19 @@ bool shuso_ipc_channel_shared_create(shuso_t *ctx, shuso_process_t *proc) {
   if(fds[1] == -1) {
     return set_error(ctx, "failed to create IPC channel eventfd");
   }
+  fcntl(fds[1], F_SETFL, O_NONBLOCK);
+  ev_io_init(&proc->ipc.receive, ipc_receive_cb, fds[1], EV_READ);
 #else
   if(pipe(fds) == -1) {
     return set_error(ctx, "failed to create IPC channel pipe");
   }
+  fcntl(fds[0], F_SETFL, O_NONBLOCK);
+  fcntl(fds[1], F_SETFL, O_NONBLOCK);
+  ev_io_init(&proc->ipc.receive, ipc_receive_cb, fds[0], EV_READ);
 #endif
   proc->ipc.fd[0] = fds[0];
   proc->ipc.fd[1] = fds[1];
   //shuso_log(ctx, "created shared IPC channel fds: %d %d", fds[0], fds[1]);
-  
-  fcntl(fds[1], F_SETFL, O_NONBLOCK);
-  if(fds[0] != -1) { //using pipe()
-    fcntl(fds[0], F_SETFL, O_NONBLOCK);
-    ev_io_init(&proc->ipc.receive, ipc_receive_cb, fds[0], EV_READ);
-  }
-  else { //using eventfd
-    ev_io_init(&proc->ipc.receive, ipc_receive_cb, fds[1], EV_READ);
-  }
   
   proc->ipc.receive.data = ctx->process;
   
@@ -82,9 +77,6 @@ bool shuso_ipc_channel_shared_destroy(shuso_t *ctx, shuso_process_t *proc) {
 bool shuso_ipc_channel_local_init(shuso_t *ctx) {
   ev_timer_init(&ctx->ipc.send_retry, ipc_send_retry_cb, 0.0, ctx->common->config.ipc_send_retry_delay);
   ctx->ipc.send_retry.data = ctx->process;
-  
-  ev_timer_init(&ctx->ipc.receive_retry, ipc_receive_retry_cb, 0.0, ctx->common->config.ipc_receive_retry_delay);
-  ctx->ipc.receive_retry.data = ctx->process;
   return true;
 }
 
@@ -103,9 +95,6 @@ bool shuso_ipc_channel_local_stop(shuso_t *ctx) {
   ctx->ipc.buf.last = NULL;
   if(ev_is_active(&ctx->ipc.send_retry) || ev_is_pending(&ctx->ipc.send_retry)) {
     ev_timer_stop(ctx->ev.loop, &ctx->ipc.send_retry);
-  }
-  if(ev_is_active(&ctx->ipc.receive_retry) || ev_is_pending(&ctx->ipc.receive_retry)) {
-    ev_timer_stop(ctx->ev.loop, &ctx->ipc.receive_retry);
   }
   return true;
 }
@@ -266,12 +255,6 @@ static void ipc_receive(shuso_t *ctx, shuso_process_t *proc) {
   }
   //no one else may modify ->first though.
   in->next_read = i;
-}
-
-static void ipc_receive_retry_cb(EV_P_ ev_timer *w, int revents) {
-  shuso_t            *ctx = ev_userdata(EV_A);
-  shuso_process_t    *proc = w->data;
-  ipc_receive(ctx, proc);
 }
 
 static void ipc_receive_cb(EV_P_ ev_io *w, int revents) {

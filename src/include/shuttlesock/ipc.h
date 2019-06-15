@@ -42,7 +42,6 @@ typedef struct shuso_ipc_outbuf_s {
 
 typedef struct {
   ev_timer              send_retry;
-  ev_timer              receive_retry;
   struct {
     shuso_ipc_outbuf_t   *first;
     shuso_ipc_outbuf_t   *last;
