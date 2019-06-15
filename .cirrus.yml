@@ -12,13 +12,13 @@ linux_task:
   test_optimized_script:
     - ./rebuild.sh gcc O3
     - ./test.sh
-  test_optimized_valgrind:
+  test_optimized_valgrind_script:
     - ./rebuild.sh gcc O2 valgrind
     - ./test.sh valgrind
-  test_optimized_stalloc_stats_tracking_valgrind:
+  test_optimized_stalloc_stats_tracking_valgrind_script:
     - ./rebuild.sh stalloc_track_space gcc O2 valgrind
     - ./test.sh valgrind
-  test_no_eventfd_valgrind:
+  test_no_eventfd_valgrind_script:
     - ./rebuild.sh no-eventfd gcc O2
     - ./test.sh valgrind
   codecov_script:
