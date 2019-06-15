@@ -152,16 +152,6 @@ TRAPINT() {
   fi
 }
 
-if [[ -n $verbose_build ]]; then
-  cmake_build_help=$(cmake --build 2>&1)
-  if [[ "$cmake_build_help" == *" --verbose "* ]]; then
-    verbose_build_flag="--verbose"
-  else
-    #cmake is disgusting
-    OPTS+=( "-DCMAKE_VERBOSE_MAKEFILE=1" )
-  fi
-fi
-
 cmake_help=$(cmake --help)
 if [[ "$cmake_help" == *" -B "* ]]; then
   #relatively modern cmake
@@ -189,21 +179,42 @@ else
   cd ../
 fi
 
-
-
+if [[ -n $verbose_build ]]; then
+  cmake_build_help=$(cmake --build 2>&1)
+  if [[ "$cmake_build_help" == *" --verbose "* ]]; then
+    verbose_build_flag="--verbose"
+  else
+    direct_makefile_build=1
+    verbose_build_flag="VERBOSE=1"
+  fi
+fi
 
 if ! [ $? -eq 0 ]; then;
   exit 1
 fi
-echo "\n$YELLOW>> ${BLUE}${ANALYZE}${YELLOW}cmake ${YELLOW}--build $build_dir ${verbose_build_flag}$ALL_OFF\n"
+
+
+if [[ -n $direct_makefile_build ]]; then
+  echo "\n$YELLOW>> cd $build_dir"
+  cd ./build
+  MAKE_COMMAND=( make ${verbose_build_flag} )
+else
+  echo ""
+  MAKE_COMMAND=( cmake --build $build_dir $verbose_build_flag )
+fi
+echo "$YELLOW>> ${BLUE}${ANALYZE}${YELLOW}${MAKE_COMMAND}${ALL_OFF}\n"
 
 if [[ -n $clang_analyze ]]; then
-  $ANALYZE cmake --build $build_dir $verbose_build_flag &
+  $ANALYZE $MAKE_COMMAND &
   scan_view_pid=$!
   wait $scan_view_pid
   scan_view_pid=""
 else
-  $ANALYZE cmake --build $build_dir $verbose_build_flag
+  $ANALYZE $MAKE_COMMAND
+fi
+if [[ -n $direct_makefile_build ]]; then
+  echo "\n$YELLOW>> cd .."
+  cd ..
 fi
 
 if ! [ $? -eq 0 ]; then;
