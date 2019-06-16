@@ -102,6 +102,12 @@ for opt in $*; do
     no-eventfd)
       disable_eventfd=1
       ;;
+    cmake-debug)
+      OPTS+=( --debug-output )
+      ;;
+    cmake-trace-expand)
+      OPTS+=( --trace-expand )
+      ;;
     -*)
       OPTS+=( "$opt" )
       ;;
@@ -116,15 +122,29 @@ if [[ -n $invalid_options ]]; then
   exit 1
 fi
 
+# we need this stupid hack because cmake the idiot forgets its command-line defines if
+#  CMAKE_C_COMPILER is changed on a pre-existing build
+last_used_compiler_file=$build_dir/.last_used_compiler.because_cmake_is_terrible
+if [[ -f $last_used_compiler_file ]] && [[ ! "$compiler" == "$(cat $last_used_compiler_file)" ]]; then
+  echo "${YELLOW}>> cmake build must be reset because a different compiler than"
+  echo "${YELLOW}>> initially configured This is because cmake is utterly terrible.\n"
+  clean=1
+fi
+
 if [[ -n $clean ]]; then
   echo "${YELLOW}>> rm -Rf $build_dir${ALL_OFF}"
   rm -Rf $build_dir
 fi
+mkdir $build_dir 2>1 >/dev/null
+echo ${compiler} > $last_used_compiler_file
+
+if [[ -n $compiler ]]; then
+  PREFIX=( "CC=$compiler" )
+  export CC=${compiler}
+fi
 
 OPTS+=( "-DCMAKE_BUILD_TYPE=$build_type" )
-if [[ -n $compiler ]]; then
-  OPTS+=( "-DCMAKE_C_COMPILER=$compiler" )
-fi
+
 if [[ -n $optimize_level ]]; then
   OPTS+=( "-DOPTIMIZE_LEVEL=$optimize_level" )
 fi
@@ -155,7 +175,7 @@ TRAPINT() {
 cmake_help=$(cmake --help)
 if [[ "$cmake_help" == *" -B "* ]]; then
   #relatively modern cmake
-  print -n "\n${YELLOW}>> ${BLUE}${ANALYZE}${YELLOW}cmake${ALL_OFF}"
+  print -n "\n${YELLOW}>> ${PREFIX} ${BLUE}${ANALYZE}${YELLOW}cmake${ALL_OFF}"
   for opt in $OPTS ; do
     print -n " ${GREEN}\\\\\n $opt${ALL_OFF}"
   done
@@ -169,7 +189,7 @@ else
   fi
   echo "${YELLOW}>> cd $build_dir${ALL_OFF}"
   cd $build_dir
-  print -n "${YELLOW}>> ${BLUE}${ANALYZE}${YELLOW}cmake${ALL_OFF}"
+  print -n "${YELLOW}>> ${PREFIX} ${BLUE}${ANALYZE}${YELLOW}cmake${ALL_OFF}"
   for opt in $OPTS ; do
     print -n " ${GREEN}\\\\\n $opt${ALL_OFF}"
   done
