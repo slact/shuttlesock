@@ -287,7 +287,6 @@ bool shuso_stop(shuso_t *ctx, shuso_stop_t forcefulness) {
   return true;
 }
  static void *shuso_run_worker(void *arg) {
-  pthread_detach(pthread_self());
    shuso_t   *ctx = arg;
   assert(ctx);
   
@@ -332,6 +331,7 @@ bool shuso_spawn_worker(shuso_t *ctx, shuso_process_t *proc) {
   if(pthread_attr_init(&pthread_attr) != 0) {
     return set_error(ctx, "can't spawn worker: pthread_attr_init() failed");
   }
+  pthread_attr_setdetachstate(&pthread_attr, PTHREAD_CREATE_DETACHED);
   
   shuso_t          *threadctx = calloc(1, sizeof(*ctx));
   if(!threadctx) {
