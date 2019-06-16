@@ -53,6 +53,3 @@ freebsd_task:
   test_optimized_script:
     - zsh ./rebuild.sh O3
     - zsh ./test.sh
-  test_sanitized_script:
-    - zsh ./rebuild.sh O2 stalloc_track_space valgrind
-    - zsh ./test.sh valgrind
