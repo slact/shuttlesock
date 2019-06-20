@@ -56,14 +56,13 @@ typedef struct {
 
 #define SHUTTLESOCK_CONFIG_DEFAULT_IPC_BUFFER_SIZE  32
 #define SHUTTLESOCK_CONFIG_DEFAULT_IPC_SEND_RETRY_DELAY  0.050
-#define SHUTTLESOCK_CONFIG_DEFAULT_IPC_RECEIVE_RETRY_DELAY  0.010
 #define SHUTTLESOCK_CONFIG_DEFAULT_IPC_SEND_TIMEOUT 0.500
 
 typedef struct {
-  size_t              ipc_buffer_size;
-  float               ipc_send_retry_delay;
-  float               ipc_receive_retry_delay;
-  float               ipc_send_timeout;
+  struct {          //ipc
+    float               send_retry_delay;
+    float               send_timeout;
+  }                   ipc;
   int                 workers;
 } shuso_config_t;
 

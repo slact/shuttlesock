@@ -63,10 +63,8 @@ shuso_t *shuso_create(unsigned int ev_loop_flags, shuso_handlers_t *handlers, sh
   if(config) {
     common_ctx->config = *config;
   }
-  set_default_config(ctx, ipc_buffer_size, SHUTTLESOCK_CONFIG_DEFAULT_IPC_BUFFER_SIZE);
-  set_default_config(ctx, ipc_send_retry_delay, SHUTTLESOCK_CONFIG_DEFAULT_IPC_SEND_RETRY_DELAY);
-  set_default_config(ctx, ipc_receive_retry_delay, SHUTTLESOCK_CONFIG_DEFAULT_IPC_RECEIVE_RETRY_DELAY);
-  set_default_config(ctx, ipc_send_timeout, SHUTTLESOCK_CONFIG_DEFAULT_IPC_SEND_TIMEOUT);
+  set_default_config(ctx, ipc.send_retry_delay, SHUTTLESOCK_CONFIG_DEFAULT_IPC_SEND_RETRY_DELAY);
+  set_default_config(ctx, ipc.send_timeout, SHUTTLESOCK_CONFIG_DEFAULT_IPC_SEND_TIMEOUT);
   set_default_config(ctx, workers, shuso_system_cores_online());
   
   if(handlers) {

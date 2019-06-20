@@ -75,7 +75,7 @@ bool shuso_ipc_channel_shared_destroy(shuso_t *ctx, shuso_process_t *proc) {
 }
 
 bool shuso_ipc_channel_local_init(shuso_t *ctx) {
-  ev_timer_init(&ctx->ipc.send_retry, ipc_send_retry_cb, 0.0, ctx->common->config.ipc_send_retry_delay);
+  ev_timer_init(&ctx->ipc.send_retry, ipc_send_retry_cb, 0.0, ctx->common->config.ipc.send_retry_delay);
   ctx->ipc.send_retry.data = ctx->process;
   return true;
 }
