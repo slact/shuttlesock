@@ -38,6 +38,19 @@ if ("${CMAKE_C_COMPILER_ID}" STREQUAL "GNU" AND CMAKE_C_COMPILER_VERSION VERSION
 endif()
 target_include_directories(shuttlesock PRIVATE lib/dns)
 
+
+#liburing
+add_library(uring STATIC 
+  lib/liburing/src/queue.c
+  lib/liburing/src/register.c
+  lib/liburing/src/setup.c
+  lib/liburing/src/syscall.c
+)
+if("${CMAKE_C_COMPILER_ID}" MATCHES "^(GNU)|((Apple)?Clang)$")
+  target_compile_options(uring PRIVATE -Wno-pointer-arith)
+endif()
+target_include_directories(shuttlesock PRIVATE lib/liburing/src)  
+
 #typeof() check
 include(TestTypeofKeyword)
 test_typeof_keyword(SHUTTLESOCK_HAVE_TYPEOF)
