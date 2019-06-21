@@ -63,6 +63,9 @@ typedef struct {
     float               send_retry_delay;
     float               send_timeout;
   }                   ipc;
+  struct {          //features
+    int                 io_uring;
+  }                   features;
   int                 workers;
 } shuso_config_t;
 
@@ -80,6 +83,11 @@ typedef struct {
   struct {          //log
     int                 fd;
   }                   log;
+  struct {          //features
+#ifdef SHUTTLESOCK_USE_IO_URING
+    bool                io_uring;
+#endif
+  }                   features;
   struct {          //shm
     void               *ptr;
     size_t              sz;

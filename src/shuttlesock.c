@@ -13,6 +13,8 @@
 static void shuso_cleanup_loop(shuso_t *ctx);
 static void signal_watcher_cb(EV_P_ ev_signal *w, int revents);
 static void child_watcher_cb(EV_P_ ev_child *w, int revents);
+static bool test_features(shuso_t *ctx, const char **errmsg);
+
 
 static void do_nothing(void) {}
 #define init_phase_handler(ctx, phase) \
@@ -106,6 +108,10 @@ shuso_t *shuso_create(unsigned int ev_loop_flags, shuso_handlers_t *handlers, sh
     common_ctx->process.worker[i].state = &states[i+2];
   }
   
+  if(!test_features(ctx, &errmsg)) {
+    goto fail;
+  }
+  
   return ctx;
   
 fail:
@@ -115,6 +121,14 @@ fail:
   if(common_ctx) free(common_ctx);
   if(err) *err = errmsg;
   return NULL;
+}
+
+static bool test_features(shuso_t *ctx, const char **errmsg) {
+  if(ctx->common->io_uring) {
+    
+  }
+  
+  
 }
 
 bool shuso_destroy(shuso_t *ctx) {

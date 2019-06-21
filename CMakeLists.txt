@@ -39,17 +39,20 @@ endif()
 target_include_directories(shuttlesock PRIVATE lib/dns)
 
 
-#liburing
-add_library(uring STATIC 
-  lib/liburing/src/queue.c
-  lib/liburing/src/register.c
-  lib/liburing/src/setup.c
-  lib/liburing/src/syscall.c
-)
-if("${CMAKE_C_COMPILER_ID}" MATCHES "^(GNU)|((Apple)?Clang)$")
-  target_compile_options(uring PRIVATE -Wno-pointer-arith)
+if("${SHUTTLESOCK_USE_IO_URING}" OR NOT DEFINED SHUTTLESOCK_USE_IO_URING)
+  #liburing
+  add_library(uring STATIC 
+    lib/liburing/src/queue.c
+    lib/liburing/src/register.c
+    lib/liburing/src/setup.c
+    lib/liburing/src/syscall.c
+  )
+  if("${CMAKE_C_COMPILER_ID}" MATCHES "^(GNU)|((Apple)?Clang)$")
+    target_compile_options(uring PRIVATE -Wno-pointer-arith)
+  endif()
+  target_include_directories(shuttlesock PRIVATE lib/liburing/src)  
+  set(SHUTTLESOCK_USE_IO_URING ON CACHE INTERNAL "try to use Linux Kernel's io_uring. If we're not on linux, that's ok, we can still try and fail gracefully.")
 endif()
-target_include_directories(shuttlesock PRIVATE lib/liburing/src)  
 
 #typeof() check
 include(TestTypeofKeyword)
