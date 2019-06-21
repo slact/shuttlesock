@@ -124,11 +124,10 @@ fail:
 }
 
 static bool test_features(shuso_t *ctx, const char **errmsg) {
-  if(ctx->common->io_uring) {
-    
+  if(ctx->common->config.features.io_uring) {
+    //TODO: set ctx->common.features.io_uring
   }
-  
-  
+  return true;
 }
 
 bool shuso_destroy(shuso_t *ctx) {
