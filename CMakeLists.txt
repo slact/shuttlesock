@@ -20,6 +20,7 @@ set(libsrc
   src/ipc_commands.c
   src/sysutil.c
   src/stalloc.c
+  src/resolver.c
 )
 
 add_library(shuttlesock SHARED ${libsrc})
@@ -28,15 +29,6 @@ set_property(TARGET shuttlesock PROPERTY C_STANDARD 11)
 target_include_directories(shuttlesock PUBLIC src/include)
 target_include_directories(shuttlesock PUBLIC ${PROJECT_BINARY_DIR}/src/include)
 target_include_directories(shuttlesock PRIVATE src)
-
-#wahern's asynchrnous dns.c library
-add_library(dns.c STATIC lib/dns/dns.c)
-set_property(TARGET dns.c PROPERTY C_STANDARD 11)
-if ("${CMAKE_C_COMPILER_ID}" STREQUAL "GNU" AND CMAKE_C_COMPILER_VERSION VERSION_GREATER 9.0)
-  #GCC 9 does things a little differently... and dns.c is a little weird too
-  target_compile_options(dns.c PRIVATE -Wno-override-init)
-endif()
-target_include_directories(shuttlesock PRIVATE lib/dns)
 
 
 if("${SHUTTLESOCK_USE_IO_URING}" OR NOT DEFINED SHUTTLESOCK_USE_IO_URING)
@@ -58,12 +50,13 @@ endif()
 include(TestTypeofKeyword)
 test_typeof_keyword(SHUTTLESOCK_HAVE_TYPEOF)
 
-#ptrheads
+#pthreads
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
 target_link_libraries(shuttlesock PUBLIC ${CMAKE_THREAD_LIBS_INIT})
 
 target_require_package(shuttlesock PUBLIC ev)
+
 
 test_big_endian(SHUTTLESOCK_BIG_ENDIAN)
 
@@ -81,6 +74,26 @@ test_pthread_setname("${CMAKE_THREAD_LIBS_INIT}"
   SHUTTLESOCK_PTHREAD_SETNAME_STYLE
   SHUTTLESOCK_PTHREAD_SETNAME_INCLUDE_PTRHEAD_NP
 )
+
+#c-ares
+include(TestC-aresVersion)
+#version 1.13.0 is where ares_set_socket_functions got added, which we need
+target_require_package(shuttlesock PUBLIC cares HEADER_NAME ares.h OPTIONAL C_ARES_FOUND)
+if(C_ARES_FOUND)
+  test_c_ares_version_min(C_ARES_VERSION_OK 1 13 0)
+endif()
+if(C_ARES_FOUND AND C_ARES_VERSION_OK)
+  target_require_package(shuttlesock PUBLIC cares ares.h)
+  target_link_libraries(shuttlesock PUBLIC cares)
+else()
+  set(CARES_STATIC ON CACHE BOOL "build c-ares as static lib" FORCE)
+  set(CARES_SHARED OFF CACHE BOOL "build c-ares as shared lib" FORCE)
+  set(CMAKE_POSITION_INDEPENDENT_CODE ON CACHE INTERNAL "-fPIC" FORCE)
+  message(STATUS "Build bundled version of c-ares")
+  add_subdirectory(lib/c-ares EXCLUDE_FROM_ALL)
+  target_include_directories(shuttlesock PUBLIC lib/c-ares)
+  target_link_libraries(shuttlesock PUBLIC c-ares)
+endif()
 
 find_program(CCACHE_PROGRAM ccache)
 if(CCACHE_PROGRAM)
