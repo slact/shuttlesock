@@ -1,7 +1,6 @@
 #include <shuttlesock.h>
 #include <shuttlesock/ipc.h>
 #include <shuttlesock/log.h>
-#include "shuttlesock_private.h"
 #include <sys/mman.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -14,7 +13,7 @@ static void ipc_send_retry_cb(EV_P_ ev_timer *w, int revents);
 static void ipc_receive_cb(EV_P_ ev_io *w, int revents);
 
 bool shuso_ipc_channel_shared_create(shuso_t *ctx, shuso_process_t *proc) {
-  int               procnum = process_to_procnum(ctx, proc);
+  int               procnum = shuso_process_to_procnum(ctx, proc);
   void             *ptr;
   
   if(procnum == SHUTTLESOCK_MASTER || procnum == SHUTTLESOCK_MANAGER) {
@@ -31,13 +30,13 @@ bool shuso_ipc_channel_shared_create(shuso_t *ctx, shuso_process_t *proc) {
   //straight out of libev
   fds[1] = eventfd(0, 0);
   if(fds[1] == -1) {
-    return set_error(ctx, "failed to create IPC channel eventfd");
+    return shuso_set_error(ctx, "failed to create IPC channel eventfd");
   }
   fcntl(fds[1], F_SETFL, O_NONBLOCK);
   ev_io_init(&proc->ipc.receive, ipc_receive_cb, fds[1], EV_READ);
 #else
   if(pipe(fds) == -1) {
-    return set_error(ctx, "failed to create IPC channel pipe");
+    return shuso_set_error(ctx, "failed to create IPC channel pipe");
   }
   fcntl(fds[0], F_SETFL, O_NONBLOCK);
   fcntl(fds[1], F_SETFL, O_NONBLOCK);
@@ -53,7 +52,7 @@ bool shuso_ipc_channel_shared_create(shuso_t *ctx, shuso_process_t *proc) {
 }
 
 bool shuso_ipc_channel_shared_destroy(shuso_t *ctx, shuso_process_t *proc) {
-  int               procnum = process_to_procnum(ctx, proc);
+  int               procnum = shuso_process_to_procnum(ctx, proc);
   if(procnum == SHUTTLESOCK_MASTER || procnum == SHUTTLESOCK_MANAGER) {
     //shuso_log(ctx, "destroy shared IPC for %s", procnum == SHUTTLESOCK_MASTER ? "master" : "manager");
     munmap(proc->ipc.buf, sizeof(shuso_ipc_ringbuf_t));

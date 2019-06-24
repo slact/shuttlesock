@@ -19,7 +19,7 @@ static bool test_features(shuso_t *ctx, const char **errmsg);
 static void do_nothing(void) {}
 #define init_phase_handler(ctx, phase) \
   if(!ctx->common->phase_handlers.phase) \
-    ctx->common->phase_handlers.start_master = (shuso_callback_fn *)do_nothing
+    ctx->common->phase_handlers.start_master = (shuso_cb_fn *)do_nothing
 
 #define set_default_config(ctx, conf, default_val) do {\
   if(!(bool )((ctx)->common->config.conf)) { \
@@ -254,7 +254,7 @@ bool shuso_run(shuso_t *ctx) {
   ctx->common->phase_handlers.start_master(ctx, ctx->common->phase_handlers.privdata);
   *ctx->process->state = SHUSO_PROCESS_STATE_RUNNING;
   if(!shuso_spawn_manager(ctx)) {
-    return set_error(ctx, "failed to spawn manager process");
+    return shuso_set_error(ctx, "failed to spawn manager process");
   }
   shuso_init_signal_watchers(ctx);
   shuso_ipc_channel_local_init(ctx);
@@ -328,26 +328,26 @@ bool shuso_stop(shuso_t *ctx, shuso_stop_t forcefulness) {
 }
 
 bool shuso_spawn_worker(shuso_t *ctx, shuso_process_t *proc) {
-  int               procnum = process_to_procnum(ctx, proc);
+  int               procnum = shuso_process_to_procnum(ctx, proc);
   assert(proc);
   assert(procnum >= SHUTTLESOCK_WORKER);
   
   if(*proc->state > SHUSO_PROCESS_STATE_NIL) {
-    return set_error(ctx, "can't spawn worker here, it looks like there's a running worker already");
+    return shuso_set_error(ctx, "can't spawn worker here, it looks like there's a running worker already");
   }
   
   int               prev_proc_state = *proc->state;
   *proc->state = SHUSO_PROCESS_STATE_STARTING;
   pthread_attr_t    pthread_attr;
   if(pthread_attr_init(&pthread_attr) != 0) {
-    return set_error(ctx, "can't spawn worker: pthread_attr_init() failed");
+    return shuso_set_error(ctx, "can't spawn worker: pthread_attr_init() failed");
   }
   pthread_attr_setdetachstate(&pthread_attr, PTHREAD_CREATE_DETACHED);
   
   shuso_t          *threadctx = calloc(1, sizeof(*ctx));
   if(!threadctx) {
     pthread_attr_destroy(&pthread_attr);
-    return set_error(ctx, "can't spawn worker: failed to malloc() shuttlesock context");
+    return shuso_set_error(ctx, "can't spawn worker: failed to malloc() shuttlesock context");
   }
   threadctx->common = ctx->common;
   threadctx->ev.flags = ctx->ev.flags;
@@ -358,7 +358,7 @@ bool shuso_spawn_worker(shuso_t *ctx, shuso_process_t *proc) {
     if(!shuso_ipc_channel_shared_create(ctx, proc)) {
       pthread_attr_destroy(&pthread_attr);
       free(threadctx);
-      return set_error(ctx, "can't spawn worker: failed to create shared IPC buffer");
+      return shuso_set_error(ctx, "can't spawn worker: failed to create shared IPC buffer");
     }
   }
   if(prev_proc_state == SHUSO_PROCESS_STATE_DEAD) {
@@ -373,7 +373,7 @@ bool shuso_spawn_worker(shuso_t *ctx, shuso_process_t *proc) {
   if(pthread_create(&proc->tid, &pthread_attr, shuso_run_worker, threadctx) != 0) {
     pthread_attr_destroy(&pthread_attr);
     free(threadctx);
-    return set_error(ctx, "can't spawn worker: failed to create thread");
+    return shuso_set_error(ctx, "can't spawn worker: failed to create thread");
   }
   
   return true;
@@ -401,13 +401,13 @@ bool shuso_stop_worker(shuso_t *ctx, shuso_process_t *proc, shuso_stop_t forcefu
   }
 }
 
-bool set_error(shuso_t *ctx, const char *err) {
+bool shuso_set_error(shuso_t *ctx, const char *err) {
   ctx->errmsg = err;
   shuso_log(ctx, "%s", err);
   return false;
 }
 
-shuso_process_t *procnum_to_process(shuso_t *ctx, int procnum) {
+shuso_process_t *shuso_procnum_to_process(shuso_t *ctx, int procnum) {
  if(procnum < SHUTTLESOCK_MASTER || procnum > SHUTTLESOCK_MAX_WORKERS) {
    return NULL;
  }
@@ -416,7 +416,7 @@ shuso_process_t *procnum_to_process(shuso_t *ctx, int procnum) {
  return &ctx->common->process.worker[procnum]; 
 }
 
-int process_to_procnum(shuso_t *ctx, shuso_process_t *proc) {
+int shuso_process_to_procnum(shuso_t *ctx, shuso_process_t *proc) {
   if(proc == &ctx->common->process.master) {
     return SHUTTLESOCK_MASTER;
   }

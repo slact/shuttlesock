@@ -43,14 +43,15 @@ typedef struct shuso_process_s {
 } shuso_process_t;
 
 typedef struct shuso_s shuso_t;
-typedef void shuso_callback_fn(shuso_t *ctx, void *pd);
+typedef void shuso_io_cb_fn(EV_P_ ev_io *, int);
+typedef void shuso_cb_fn(shuso_t *ctx, void *pd);
 typedef struct {
-  shuso_callback_fn *start_master;
-  shuso_callback_fn *stop_master;
-  shuso_callback_fn *start_manager;
-  shuso_callback_fn *stop_manager;
-  shuso_callback_fn *start_worker;
-  shuso_callback_fn *stop_worker;
+  shuso_cb_fn *start_master;
+  shuso_cb_fn *stop_master;
+  shuso_cb_fn *start_manager;
+  shuso_cb_fn *stop_manager;
+  shuso_cb_fn *start_worker;
+  shuso_cb_fn *stop_worker;
   void   *privdata;
 } shuso_handlers_t;
 
@@ -149,6 +150,10 @@ bool shuso_is_master(shuso_t *ctx);
 bool shuso_is_forked_manager(shuso_t *ctx);
 
 bool shuso_set_log_fd(shuso_t *ctx, int fd);
+
+bool shuso_set_error(shuso_t *ctx, const char *err);
+shuso_process_t *shuso_procnum_to_process(shuso_t *ctx, int procnum);
+int shuso_process_to_procnum(shuso_t *ctx, shuso_process_t *proc);
 
 
 #define SHUSO_EACH_WORKER(ctx, cur) \
