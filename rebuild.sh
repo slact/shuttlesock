@@ -135,7 +135,10 @@ if [[ -n $clean ]]; then
   echo "${YELLOW}>> rm -Rf $build_dir${ALL_OFF}"
   rm -Rf $build_dir
 fi
-mkdir $build_dir 2>1 >/dev/null
+if [[ ! -e $build_dir ]]; then
+  echo "${YELLOW}>> mkdir $build_dir${ALL_OFF}"
+  mkdir $build_dir
+fi
 echo ${compiler} > $last_used_compiler_file
 
 if [[ -n $compiler ]]; then
