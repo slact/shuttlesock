@@ -39,14 +39,14 @@ typedef struct shuso_stalloc_allocd_s {
 #endif
 } shuso_stalloc_allocd_t;
 
-typedef struct shuso_stalloc_stack_s {
+typedef struct shuso_stalloc_frame_s {
   shuso_stalloc_page_t   *page;
   char                   *page_cur;
 #ifdef SHUTTLESOCK_STALLOC_TRACK_SPACE
   shuso_stalloc_page_space_t page_space;
 #endif
   shuso_stalloc_allocd_t *allocd;
-} shuso_stalloc_stack_t;
+} shuso_stalloc_frame_t;
 
 typedef struct shuso_stalloc_s {
 #ifdef SHUTTLESOCK_STALLOC_TRACK_SPACE
@@ -68,7 +68,7 @@ typedef struct shuso_stalloc_s {
     shuso_stalloc_allocd_t *last;
   }         allocd;
   struct shuso_stalloc_stackframes_s {
-    shuso_stalloc_stack_t  *stack[SHUTTLESOCK_STALLOC_STACK_SIZE];
+    shuso_stalloc_frame_t  *stack[SHUTTLESOCK_STALLOC_STACK_SIZE];
     uint_fast8_t            count;
   }         stack;
 } shuso_stalloc_t;

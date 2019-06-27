@@ -147,7 +147,7 @@ typedef struct {
   off_t  large;
   size_t used;
   int    stack_count;
-  shuso_stalloc_stack_t stack[SHUTTLESOCK_STALLOC_STACK_SIZE];
+  shuso_stalloc_frame_t stack[SHUTTLESOCK_STALLOC_STACK_SIZE];
 } test_stalloc_stats_t;
 
 void fill_stalloc(shuso_stalloc_t *st, test_stalloc_stats_t *stats, size_t minsz, size_t maxsz, int large_alloc_interval, int total_items, int stack_push_count);

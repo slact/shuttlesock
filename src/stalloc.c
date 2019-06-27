@@ -198,8 +198,11 @@ void *shuso_stalloc_unaligned(shuso_stalloc_t *st, size_t sz) {
   return shuso_stalloc_with_alignment(st, sz, false);
 }
 
-int shuso_stalloc_push(shuso_stalloc_t *st) {
-  shuso_stalloc_stack_t cur_frame = {
+int shuso_stalloc_push(shuso_stalloc_t *st) { 
+  shuso_stalloc_frame_t *frame = shuso_stalloc(st, sizeof(*frame));
+  
+  if(!frame) return 0;
+  *frame = (shuso_stalloc_frame_t ){
     .page = st->page.last,
     .page_cur = st->page.cur,
 #ifdef SHUTTLESOCK_STALLOC_TRACK_SPACE
@@ -207,11 +210,6 @@ int shuso_stalloc_push(shuso_stalloc_t *st) {
 #endif
     .allocd = st->allocd.last
   };
-  
-  shuso_stalloc_stack_t *frame = shuso_stalloc(st, sizeof(*frame));
-  
-  if(!frame) return 0;
-  *frame = cur_frame;
   
   assert(st->stack.count < SHUTTLESOCK_STALLOC_STACK_SIZE);
   st->stack.stack[st->stack.count]=frame;
@@ -223,7 +221,7 @@ int shuso_stalloc_push(shuso_stalloc_t *st) {
 // stackpos is NOT the number of frames to pop, but an absolute position for the stack to reach down to.
 // that is why this function is weirdly named 'pop_to' instead of 'pop', which expects a number of frames to pop
 bool shuso_stalloc_pop_to(shuso_stalloc_t *st, int stackpos) {
-  shuso_stalloc_stack_t *frame;
+  shuso_stalloc_frame_t *frame;
   if(stackpos > st->stack.count || stackpos < 0) {
     return false;
   }

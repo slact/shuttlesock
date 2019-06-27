@@ -2,16 +2,17 @@
 #define SHUTTLESOCK_H
 
 #include <ev.h>
-#include <shuttlesock/configure.h>
 #include <pthread.h>
 #include <stdint.h>
 #include <fcntl.h>
 #include <stdbool.h>
+#include <netinet/in.h>
+#include <shuttlesock/configure.h>
 #include <shuttlesock/sbuf.h>
 #include <shuttlesock/llist.h>
 #include <shuttlesock/ipc.h>
 #include <shuttlesock/stalloc.h>
-#include <pthread.h>
+
 
 #define SHUTTLESOCK_MAX_WORKERS 1024
 
