@@ -61,6 +61,21 @@ typedef struct {
 #define SHUTTLESOCK_CONFIG_DEFAULT_IPC_SEND_TIMEOUT 0.500
 
 typedef struct {
+  const char        *name;
+  union {
+    struct in6_addr addr6;
+    struct in_addr  addr;
+    const char     *path;
+  };
+  uint16_t          addr_family; //address family: AF_INET/AF_INET6/AF_UNIX
+  uint16_t          port; //CPU-native port
+  int               fd;
+  unsigned          udp:1; //TCP or UDP?
+} shuso_host_t;
+
+
+//the shuso_config struct is designed to be zeroed on initialization
+typedef struct shuso_config_s {
   struct {          //ipc
     float               send_retry_delay;
     float               send_timeout;
@@ -68,6 +83,12 @@ typedef struct {
   struct {          //features
     int                 io_uring;
   }                   features;
+  struct {          //resolver
+    int                 timeout; //milliseconds
+    int                 tries;
+    shuso_host_t       *hosts;
+    off_t               hosts_count;
+  }                   resolver;
   int                 workers;
 } shuso_config_t;
 

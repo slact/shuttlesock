@@ -6,7 +6,7 @@
 typedef struct shuso_resolver_s {
   int                  options_mask;
   struct ares_options  options;
-  struct ares_channel *channel;
+  ares_channel         channel;
 } shuso_resolver_t;
 
 bool shuso_resolver_global_init(const char **err);

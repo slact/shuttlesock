@@ -18,7 +18,7 @@ bool shuso_resolver_global_cleanup(void) {
 const struct ares_socket_functions ares_sockfuncs;
 
 bool shuso_resolver_init(shuso_t *ctx, shuso_resolver_t *ares) {
-  int rc = ares_init_options(ares->channel, &ares->options, ares->options_mask);
+  int rc = ares_init_options(&ares->channel, &ares->options, ares->options_mask);
   if(rc == ARES_EFILE) {
     return shuso_set_error(ctx, "DNS resolver initialization failed: a configuration file could not be read.");
   }
