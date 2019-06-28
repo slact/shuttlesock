@@ -35,6 +35,11 @@ bool shuso_resolver_init(shuso_t *ctx, shuso_resolver_t *ares) {
   return true;
 }
 
+bool shuso_resolver_cleanup(struct shuso_s *ctx, shuso_resolver_t *resolver) {
+  ares_destroy(resolver->channel);
+  return true;
+}
+
 
 static ares_socket_t ares_socket_open(int domain, int type, int protocol, void * user_data) {
   return -1;

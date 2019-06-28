@@ -27,6 +27,7 @@ static void do_nothing(void) {}
   } \
 } while(0)
 
+
 shuso_t *shuso_create(unsigned int ev_loop_flags, shuso_handlers_t *handlers, shuso_config_t *config, const char **err) {
   shuso_common_t     *common_ctx = NULL;
   shuso_t            *ctx = NULL;
@@ -112,14 +113,21 @@ shuso_t *shuso_create(unsigned int ev_loop_flags, shuso_handlers_t *handlers, sh
     goto fail;
   }
   
+  bool stalloc_initialized = shuso_stalloc_init(&ctx->stalloc, 0);
+  if(!stalloc_initialized) {
+    goto fail;
+  }
+  
   return ctx;
   
 fail:
   if(master_ipc_created) shuso_ipc_channel_shared_destroy(ctx, &common_ctx->process.master);
   if(manager_ipc_created) shuso_ipc_channel_shared_destroy(ctx, &common_ctx->process.manager);
+  if(stalloc_initialized) shuso_stalloc_empty(&ctx->stalloc);
   if(ctx) free(ctx);
   if(common_ctx) free(common_ctx);
   if(err) *err = errmsg;
+
   return NULL;
 }
 
@@ -159,6 +167,7 @@ static bool shuso_init_signal_watchers(shuso_t *ctx) {
 }
 
 bool shuso_spawn_manager(shuso_t *ctx) {
+  int failed_worker_spawns = 0;
   pid_t pid = fork();
   if(pid > 0) {
     //master
@@ -181,10 +190,14 @@ bool shuso_spawn_manager(shuso_t *ctx) {
   ctx->common->process.workers_end = ctx->common->process.workers_start;
   
   for(int i=0; i<ctx->common->config.workers; i++) {
-    shuso_spawn_worker(ctx, &ctx->common->process.worker[i]);
-    ctx->common->process.workers_end++;
+    if(shuso_spawn_worker(ctx, &ctx->common->process.worker[i])) {
+      ctx->common->process.workers_end++;
+    }
+    else {
+      failed_worker_spawns ++;
+    }
   }
-  return true;
+  return failed_worker_spawns == 0;
 }
 
 bool shuso_is_forked_manager(shuso_t *ctx) {
@@ -263,6 +276,7 @@ bool shuso_run(shuso_t *ctx) {
   shuso_log(ctx, "stopping...");
   shuso_cleanup_loop(ctx);
   *ctx->process->state = SHUSO_PROCESS_STATE_DEAD;
+  shuso_stalloc_empty(&ctx->stalloc);
   shuso_log(ctx, "stopped");
   return true;
 }
@@ -298,7 +312,7 @@ bool shuso_stop(shuso_t *ctx, shuso_stop_t forcefulness) {
   return true;
 }
  static void *shuso_run_worker(void *arg) {
-   shuso_t   *ctx = arg;
+  shuso_t   *ctx = arg;
   assert(ctx);
   
   char       threadname[16];
@@ -323,31 +337,40 @@ bool shuso_stop(shuso_t *ctx, shuso_stop_t forcefulness) {
   ev_loop_destroy(ctx->ev.loop);
   ctx->ev.loop = NULL;
   shuso_log(ctx, "stopped");
+  shuso_resolver_cleanup(ctx, &ctx->resolver);
+  shuso_stalloc_empty(&ctx->stalloc);
   free(ctx);
   return NULL;
 }
 
 bool shuso_spawn_worker(shuso_t *ctx, shuso_process_t *proc) {
   int               procnum = shuso_process_to_procnum(ctx, proc);
+  const char       *err = NULL;
+  bool              pthreadattr_initialized = false;
+  bool              stalloc_initialized = false;
+  bool              resolver_initialized = false;
+  bool              shared_ipc_created = false;
   assert(proc);
   assert(procnum >= SHUTTLESOCK_WORKER);
   
   if(*proc->state > SHUSO_PROCESS_STATE_NIL) {
-    return shuso_set_error(ctx, "can't spawn worker here, it looks like there's a running worker already");
+    err = "can't spawn worker here, it looks like there's a running worker already";
+    goto fail;
   }
   
   int               prev_proc_state = *proc->state;
   *proc->state = SHUSO_PROCESS_STATE_STARTING;
   pthread_attr_t    pthread_attr;
-  if(pthread_attr_init(&pthread_attr) != 0) {
-    return shuso_set_error(ctx, "can't spawn worker: pthread_attr_init() failed");
+  if(!(pthreadattr_initialized = (pthread_attr_init(&pthread_attr) == 0))) {
+    err = "can't spawn worker: pthread_attr_init() failed";
+    goto fail;
   }
   pthread_attr_setdetachstate(&pthread_attr, PTHREAD_CREATE_DETACHED);
   
   shuso_t          *threadctx = calloc(1, sizeof(*ctx));
   if(!threadctx) {
-    pthread_attr_destroy(&pthread_attr);
-    return shuso_set_error(ctx, "can't spawn worker: failed to malloc() shuttlesock context");
+    err = "can't spawn worker: failed to malloc() shuttlesock context";
+    goto fail;
   }
   threadctx->common = ctx->common;
   threadctx->ev.flags = ctx->ev.flags;
@@ -355,10 +378,9 @@ bool shuso_spawn_worker(shuso_t *ctx, shuso_process_t *proc) {
   
   if(prev_proc_state == SHUSO_PROCESS_STATE_NIL) {
     assert(proc->ipc.buf == NULL);
-    if(!shuso_ipc_channel_shared_create(ctx, proc)) {
-      pthread_attr_destroy(&pthread_attr);
-      free(threadctx);
-      return shuso_set_error(ctx, "can't spawn worker: failed to create shared IPC buffer");
+    if(!(shared_ipc_created = shuso_ipc_channel_shared_create(ctx, proc))) {
+      err = "can't spawn worker: failed to create shared IPC buffer";
+      goto fail;
     }
   }
   if(prev_proc_state == SHUSO_PROCESS_STATE_DEAD) {
@@ -369,14 +391,30 @@ bool shuso_spawn_worker(shuso_t *ctx, shuso_process_t *proc) {
   threadctx->process = proc;
   *threadctx->process->state = SHUSO_PROCESS_STATE_NIL;
   threadctx->procnum = procnum;
+  if(!(stalloc_initialized = shuso_stalloc_init(&threadctx->stalloc, 0))) {
+    err = "can't spawn worker: failed to create context stalloc";
+    goto fail;
+  }
+  
+  if(!(resolver_initialized = shuso_resolver_init(threadctx, &threadctx->resolver))) {
+    err = "can't spawn worker: unable to initialize resolver";
+    goto fail;
+  }
   
   if(pthread_create(&proc->tid, &pthread_attr, shuso_run_worker, threadctx) != 0) {
-    pthread_attr_destroy(&pthread_attr);
-    free(threadctx);
-    return shuso_set_error(ctx, "can't spawn worker: failed to create thread");
+    err = "can't spawn worker: failed to create thread";
+    goto fail;
   }
   
   return true;
+  
+fail:
+  if(shared_ipc_created) shuso_ipc_channel_shared_destroy(ctx, proc);
+  if(pthreadattr_initialized) pthread_attr_destroy(&pthread_attr);
+  if(resolver_initialized) shuso_resolver_cleanup(ctx, &ctx->resolver);
+  if(stalloc_initialized) shuso_stalloc_empty(&ctx->stalloc);
+  if(threadctx) free(threadctx);
+  return shuso_set_error(ctx, err);
 }
 
 bool shuso_stop_worker(shuso_t *ctx, shuso_process_t *proc, shuso_stop_t forcefulness) {

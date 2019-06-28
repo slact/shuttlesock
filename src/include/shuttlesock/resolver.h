@@ -12,6 +12,7 @@ typedef struct shuso_resolver_s {
 bool shuso_resolver_global_init(const char **err);
 bool shuso_resolver_global_cleanup(void);
 
-bool shuso_resolver_init(shuso_t *ctx, shuso_resolver_t *ares);
+bool shuso_resolver_init(struct shuso_s *ctx, shuso_resolver_t *resolver);
+bool shuso_resolver_cleanup(struct shuso_s *ctx, shuso_resolver_t *resolver);
 
 #endif //SHUTTLESOCK_RESOLVER_H

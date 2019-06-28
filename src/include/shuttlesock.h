@@ -12,6 +12,7 @@
 #include <shuttlesock/llist.h>
 #include <shuttlesock/ipc.h>
 #include <shuttlesock/stalloc.h>
+#include <shuttlesock/resolver.h>
 
 
 #define SHUTTLESOCK_MAX_WORKERS 1024
@@ -145,8 +146,10 @@ struct shuso_s {
     LLIST_STRUCT(ev_timer)      timer;
     LLIST_STRUCT(ev_periodic)   periodic;
   }                           base_watchers;
-  const char                 *errmsg;
+  shuso_stalloc_t             stalloc;
+  shuso_resolver_t            resolver;
   void                       *data;  //custom data attached to this shuttlesock context
+  const char                 *errmsg;
 }; //shuso_t;
 
 typedef enum {
