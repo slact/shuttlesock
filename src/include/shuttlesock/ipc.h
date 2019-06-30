@@ -9,6 +9,8 @@
 #define SHUTTLESOCK_IPC_CMD_RECONFIGURE           4
 #define SHUTTLESOCK_IPC_CMD_RECONFIGURE_RESPONSE  5
 #define SHUTTLESOCK_IPC_CMD_SET_LOG_FD            6
+#define SHUTTLESOCK_IPC_CMD_LISTEN_PORT           7
+#define SHUTTLESOCK_IPC_CMD_LISTEN_PORT_RESPONSE  8
 
 struct shuso_s;
 struct shuso_process_s;
@@ -49,6 +51,7 @@ typedef struct {
 } shuso_ipc_channel_local_t;
 
 typedef struct {
+  int                   fd_socketpipe[2];
   int                   fd[2];
   ev_io                 receive;
   shuso_ipc_ringbuf_t  *buf;

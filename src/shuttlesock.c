@@ -33,6 +33,7 @@ shuso_t *shuso_create(unsigned int ev_loop_flags, shuso_handlers_t *handlers, sh
   shuso_t            *ctx = NULL;
   bool                manager_ipc_created = false;
   bool                master_ipc_created = false;
+  bool                stalloc_initialized = false;
   void               *shm = NULL;
   const char         *errmsg = NULL;
   struct ev_loop     *loop;
@@ -113,7 +114,7 @@ shuso_t *shuso_create(unsigned int ev_loop_flags, shuso_handlers_t *handlers, sh
     goto fail;
   }
   
-  bool stalloc_initialized = shuso_stalloc_init(&ctx->stalloc, 0);
+  stalloc_initialized = shuso_stalloc_init(&ctx->stalloc, 0);
   if(!stalloc_initialized) {
     goto fail;
   }
@@ -350,6 +351,7 @@ bool shuso_spawn_worker(shuso_t *ctx, shuso_process_t *proc) {
   bool              stalloc_initialized = false;
   bool              resolver_initialized = false;
   bool              shared_ipc_created = false;
+  shuso_t          *threadctx = NULL;
   assert(proc);
   assert(procnum >= SHUTTLESOCK_WORKER);
   
@@ -367,7 +369,7 @@ bool shuso_spawn_worker(shuso_t *ctx, shuso_process_t *proc) {
   }
   pthread_attr_setdetachstate(&pthread_attr, PTHREAD_CREATE_DETACHED);
   
-  shuso_t          *threadctx = calloc(1, sizeof(*ctx));
+  threadctx = calloc(1, sizeof(*ctx));
   if(!threadctx) {
     err = "can't spawn worker: failed to malloc() shuttlesock context";
     goto fail;
@@ -396,7 +398,7 @@ bool shuso_spawn_worker(shuso_t *ctx, shuso_process_t *proc) {
     goto fail;
   }
   
-  if(!(resolver_initialized = shuso_resolver_init(threadctx, &threadctx->resolver))) {
+  if(!(resolver_initialized = shuso_resolver_init(threadctx, &threadctx->common->config, &threadctx->resolver))) {
     err = "can't spawn worker: unable to initialize resolver";
     goto fail;
   }

@@ -45,6 +45,8 @@ typedef struct shuso_process_s {
 } shuso_process_t;
 
 typedef struct shuso_s shuso_t;
+typedef struct shuso_config_s shuso_config_t;
+
 typedef void shuso_io_cb_fn(EV_P_ ev_io *, int);
 typedef void shuso_cb_fn(shuso_t *ctx, void *pd);
 typedef struct {
@@ -57,10 +59,6 @@ typedef struct {
   void   *privdata;
 } shuso_handlers_t;
 
-#define SHUTTLESOCK_CONFIG_DEFAULT_IPC_BUFFER_SIZE  32
-#define SHUTTLESOCK_CONFIG_DEFAULT_IPC_SEND_RETRY_DELAY  0.050
-#define SHUTTLESOCK_CONFIG_DEFAULT_IPC_SEND_TIMEOUT 0.500
-
 typedef struct {
   const char        *name;
   union {
@@ -70,13 +68,23 @@ typedef struct {
   };
   uint16_t          addr_family; //address family: AF_INET/AF_INET6/AF_UNIX
   uint16_t          port; //CPU-native port
-  int               fd;
   unsigned          udp:1; //TCP or UDP?
-} shuso_host_t;
+} shuso_hostinfo_t;
 
+typedef struct {
+  shuso_hostinfo_t  host;
+  int               fd;
+  //TODO:  read_handler
+  //TODO:  write_handler
+  //TODO   cleanup_handler(s)
+  void              *data;
+} shuso_socket_t;
 
 //the shuso_config struct is designed to be zeroed on initialization
-typedef struct shuso_config_s {
+#define SHUTTLESOCK_CONFIG_DEFAULT_IPC_SEND_RETRY_DELAY  0.050
+#define SHUTTLESOCK_CONFIG_DEFAULT_IPC_SEND_TIMEOUT 0.500
+
+struct shuso_config_s {
   struct {          //ipc
     float               send_retry_delay;
     float               send_timeout;
@@ -87,11 +95,15 @@ typedef struct shuso_config_s {
   struct {          //resolver
     int                 timeout; //milliseconds
     int                 tries;
-    shuso_host_t       *hosts;
+    shuso_hostinfo_t   *hosts;
     off_t               hosts_count;
   }                   resolver;
+  const char         *username;
+  const char         *groupname;
+  uid_t               uid;
+  gid_t               gid;
   int                 workers;
-} shuso_config_t;
+}; // shuso_config_t
 
 typedef struct {
   shuso_handlers_t    phase_handlers;

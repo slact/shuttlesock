@@ -11,6 +11,7 @@
 
 static void ipc_send_retry_cb(EV_P_ ev_timer *w, int revents);
 static void ipc_receive_cb(EV_P_ ev_io *w, int revents);
+static void ipc_socketpipe_receive_cb(EV_P_ ev_io *w, int revents);
 
 bool shuso_ipc_channel_shared_create(shuso_t *ctx, shuso_process_t *proc) {
   int               procnum = shuso_process_to_procnum(ctx, proc);
@@ -45,6 +46,14 @@ bool shuso_ipc_channel_shared_create(shuso_t *ctx, shuso_process_t *proc) {
   proc->ipc.fd[0] = fds[0];
   proc->ipc.fd[1] = fds[1];
   //shuso_log(ctx, "created shared IPC channel fds: %d %d", fds[0], fds[1]);
+  
+  //open socket-pipe
+  if(pipe(proc->ipc.fd_socketpipe) == -1) {
+    return shuso_set_error(ctx, "failed to create IPC channel pipe");
+  }
+  fcntl(proc->ipc.fd_socketpipe[0], F_SETFL, O_NONBLOCK);
+  fcntl(proc->ipc.fd_socketpipe[1], F_SETFL, O_NONBLOCK);
+  ev_io_init(&proc->ipc.receive, ipc_socketpipe_receive_cb, proc->ipc.fd_socketpipe[0], EV_READ);
   
   proc->ipc.receive.data = ctx->process;
   
@@ -275,4 +284,8 @@ static void ipc_receive_cb(EV_P_ ev_io *w, int revents) {
 #endif
   
   ipc_receive(ctx, proc);
+}
+
+static void ipc_socketpipe_receive_cb(EV_P_ ev_io *w, int revents) {
+  //TODO
 }
