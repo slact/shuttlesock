@@ -108,6 +108,10 @@ for opt in $*; do
     cmake-trace-expand)
       OPTS+=( --trace-expand )
       ;;
+    iwyu|include-what-you-use)
+      OPTS+=( -DCMAKE_C_INCLUDE_WHAT_YOU_USE="/usr/bin/include-what-you-use;-Xiwyu;--verbose=1" )
+      compiler=clang
+      ;;
     -*)
       OPTS+=( "$opt" )
       ;;
