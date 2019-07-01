@@ -34,14 +34,12 @@ bool shuso_ipc_channel_shared_create(shuso_t *ctx, shuso_process_t *proc) {
     return shuso_set_error(ctx, "failed to create IPC channel eventfd");
   }
   fcntl(fds[1], F_SETFL, O_NONBLOCK);
-  ev_io_init(&proc->ipc.receive, ipc_receive_cb, fds[1], EV_READ);
 #else
   if(pipe(fds) == -1) {
     return shuso_set_error(ctx, "failed to create IPC channel pipe");
   }
   fcntl(fds[0], F_SETFL, O_NONBLOCK);
   fcntl(fds[1], F_SETFL, O_NONBLOCK);
-  ev_io_init(&proc->ipc.receive, ipc_receive_cb, fds[0], EV_READ);
 #endif
   proc->ipc.fd[0] = fds[0];
   proc->ipc.fd[1] = fds[1];
@@ -49,13 +47,10 @@ bool shuso_ipc_channel_shared_create(shuso_t *ctx, shuso_process_t *proc) {
   
   //open socket-pipe
   if(pipe(proc->ipc.fd_socketpipe) == -1) {
-    return shuso_set_error(ctx, "failed to create IPC channel pipe");
+    return shuso_set_error(ctx, "failed to create IPC channel fd pipe");
   }
   fcntl(proc->ipc.fd_socketpipe[0], F_SETFL, O_NONBLOCK);
   fcntl(proc->ipc.fd_socketpipe[1], F_SETFL, O_NONBLOCK);
-  ev_io_init(&proc->ipc.receive, ipc_socketpipe_receive_cb, proc->ipc.fd_socketpipe[0], EV_READ);
-  
-  proc->ipc.receive.data = ctx->process;
   
   return true;
 }
@@ -83,16 +78,32 @@ bool shuso_ipc_channel_shared_destroy(shuso_t *ctx, shuso_process_t *proc) {
 }
 
 bool shuso_ipc_channel_local_init(shuso_t *ctx) {
+  shuso_process_t  *proc = ctx->process;
   ev_timer_init(&ctx->ipc.send_retry, ipc_send_retry_cb, 0.0, ctx->common->config.ipc.send_retry_delay);
   ctx->ipc.send_retry.data = ctx->process;
+  ctx->ipc.receive.data = ctx->process;
+  ctx->ipc.socketpipe_receive.data = ctx->process;
+  
+#ifdef SHUTTLESOCK_USE_EVENTFD
+  ev_io_init(&ctx->ipc.receive, ipc_receive_cb, proc->ipc.fd[1], EV_READ);
+#else
+  ev_io_init(&ctx->ipc.receive, ipc_receive_cb, proc->ipc.fd[0], EV_READ);
+#endif
+  
+  ev_io_init(&ctx->ipc.socketpipe_receive, ipc_socketpipe_receive_cb, proc->ipc.fd_socketpipe[0], EV_READ);
   return true;
 }
 
 bool shuso_ipc_channel_local_start(shuso_t *ctx) {
   //nothing to do
+  ev_io_start(ctx->ev.loop, &ctx->ipc.receive);
+  ev_io_start(ctx->ev.loop, &ctx->ipc.socketpipe_receive);
   return true;
 }
 bool shuso_ipc_channel_local_stop(shuso_t *ctx) {
+  ev_io_stop(ctx->ev.loop, &ctx->ipc.receive);
+  ev_io_stop(ctx->ev.loop, &ctx->ipc.socketpipe_receive);
+  
   shuso_ipc_handler_t *handler = ctx->common->ipc_handlers;
   for(shuso_ipc_outbuf_t *cur = ctx->ipc.buf.first, *next; cur != NULL; cur = next) {
     next = cur->next;
@@ -108,14 +119,11 @@ bool shuso_ipc_channel_local_stop(shuso_t *ctx) {
 }
 
 bool shuso_ipc_channel_shared_start(shuso_t *ctx, shuso_process_t *proc) {
-  proc->ipc.receive.data = proc;
-  ev_io_start(ctx->ev.loop, &proc->ipc.receive);
   //shuso_log(ctx, "started shared channel, fds %d %d", proc->ipc.fd[0], proc->ipc.fd[1]);
   return true;
 }
 
 bool shuso_ipc_channel_shared_stop(shuso_t *ctx, shuso_process_t *proc) {
-  ev_io_stop(ctx->ev.loop, &proc->ipc.receive);
   return true;
 }
 

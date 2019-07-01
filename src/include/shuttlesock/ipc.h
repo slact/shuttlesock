@@ -48,12 +48,13 @@ typedef struct {
     shuso_ipc_outbuf_t   *first;
     shuso_ipc_outbuf_t   *last;
   }                     buf;
+  ev_io                 receive;
+  ev_io                 socketpipe_receive;
 } shuso_ipc_channel_local_t;
 
 typedef struct {
   int                   fd_socketpipe[2];
   int                   fd[2];
-  ev_io                 receive;
   shuso_ipc_ringbuf_t  *buf;
 } shuso_ipc_channel_shared_t;
 

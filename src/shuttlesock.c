@@ -326,6 +326,7 @@ bool shuso_stop(shuso_t *ctx, shuso_stop_t forcefulness) {
   *ctx->process->state = SHUSO_PROCESS_STATE_STARTING;
   
   shuso_ipc_channel_shared_start(ctx, ctx->process);
+  shuso_ipc_channel_local_init(ctx);
   shuso_ipc_channel_local_start(ctx);
   
   ctx->common->phase_handlers.start_worker(ctx, ctx->common->phase_handlers.privdata);
