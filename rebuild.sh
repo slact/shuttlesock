@@ -184,6 +184,9 @@ if [[ "$cmake_help" == *" -B "* ]]; then
   done
   print -n " ${GREEN}\\\\\n ${YELLOW}-B$build_dir $ALL_OFF\n\n"
   $ANALYZE cmake $OPTS -B$build_dir
+  if ! [ $? -eq 0 ]; then;
+    exit 1
+  fi
 else
   #shitty old cmake
   if [[ ! -d "$build_dir" ]]; then
@@ -198,9 +201,13 @@ else
   done
   print -n " ${GREEN}\\\\\n ${YELLOW}../ $ALL_OFF\n\n"
   $ANALYZE cmake $OPTS ../
+  if ! [ $? -eq 0 ]; then;
+    exit 1
+  fi
   echo "${YELLOW}>> cd ../${ALL_OFF}"
   cd ../
 fi
+
 
 if [[ -n $verbose_build ]]; then
   cmake_build_help=$(cmake --build 2>&1)
@@ -210,10 +217,6 @@ if [[ -n $verbose_build ]]; then
     direct_makefile_build=1
     verbose_build_flag="VERBOSE=1"
   fi
-fi
-
-if ! [ $? -eq 0 ]; then;
-  exit 1
 fi
 
 
@@ -235,13 +238,12 @@ if [[ -n $clang_analyze ]]; then
 else
   $ANALYZE $MAKE_COMMAND
 fi
+if ! [ $? -eq 0 ]; then;
+  exit 1
+fi
 if [[ -n $direct_makefile_build ]]; then
   echo "\n$YELLOW>> cd .."
   cd ..
-fi
-
-if ! [ $? -eq 0 ]; then;
-  exit 1
 fi
 
 if [[ -n $run_test ]]; then
