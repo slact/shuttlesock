@@ -120,9 +120,7 @@ typedef struct {
     int                 fd;
   }                   log;
   struct {          //features
-#ifdef SHUTTLESOCK_USE_IO_URING
     bool                io_uring;
-#endif
   }                   features;
   struct {          //shm
     void               *ptr;

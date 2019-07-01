@@ -30,22 +30,6 @@ target_include_directories(shuttlesock PUBLIC src/include)
 target_include_directories(shuttlesock PUBLIC ${PROJECT_BINARY_DIR}/src/include)
 target_include_directories(shuttlesock PRIVATE src)
 
-
-if("${SHUTTLESOCK_USE_IO_URING}" OR NOT DEFINED SHUTTLESOCK_USE_IO_URING)
-  #liburing
-  add_library(uring STATIC 
-    lib/liburing/src/queue.c
-    lib/liburing/src/register.c
-    lib/liburing/src/setup.c
-    lib/liburing/src/syscall.c
-  )
-  if("${CMAKE_C_COMPILER_ID}" MATCHES "^(GNU)|((Apple)?Clang)$")
-    target_compile_options(uring PRIVATE -Wno-pointer-arith)
-  endif()
-  target_include_directories(shuttlesock PRIVATE lib/liburing/src)  
-  set(SHUTTLESOCK_USE_IO_URING ON CACHE INTERNAL "try to use Linux Kernel's io_uring. If we're not on linux, that's ok, we can still try and fail gracefully.")
-endif()
-
 #typeof() check
 include(TestTypeofKeyword)
 test_typeof_keyword(SHUTTLESOCK_HAVE_TYPEOF)
@@ -93,6 +77,28 @@ else()
   add_subdirectory(lib/c-ares EXCLUDE_FROM_ALL)
   target_include_directories(shuttlesock PUBLIC lib/c-ares)
   target_link_libraries(shuttlesock PUBLIC c-ares)
+endif()
+
+#Linux kernel's io_uring
+include(TestIoUringHeaders)
+if("${SHUTTLESOCK_USE_IO_URING}" OR NOT DEFINED SHUTTLESOCK_USE_IO_URING)
+  target_include_directories(shuttlesock PRIVATE lib/liburing/src)
+  test_io_uring_buildable(SHUTTLESOCK_CAN_BUILD_IO_URING)
+  if(NOT "${SHUTTLESOCK_CAN_BUILD_IO_URING}")
+    set(SHUTTLESOCK_USE_IO_URING OFF CACHE INTERNAL "try to use Linux Kernel's io_uring.")
+  else()
+    #liburing
+    add_library(uring STATIC 
+      lib/liburing/src/queue.c
+      lib/liburing/src/register.c
+      lib/liburing/src/setup.c
+      lib/liburing/src/syscall.c
+    )
+    if("${CMAKE_C_COMPILER_ID}" MATCHES "^(GNU)|((Apple)?Clang)$")
+      target_compile_options(uring PRIVATE -Wno-pointer-arith)
+    endif()
+    set(SHUTTLESOCK_USE_IO_URING ON CACHE INTERNAL "try to use Linux Kernel's io_uring. If we're not on linux, that's ok, we can still try and fail gracefully.")
+  endif()
 endif()
 
 find_program(CCACHE_PROGRAM ccache)
