@@ -5,6 +5,7 @@ function(test_c_ares_version_min c_ares_version_check_result_var ver_major ver_m
   set(c_ares_var "C_ARES_VERSION_MIN_${ver_major}_${ver_minor}_${ver_patch}")
   if(DEFINED ${c_ares_var})
     #I'd rather use DEFINED CACHE{$var}, but that only got added in 3.14
+    set(${c_ares_version_check_result_var} ${${c_ares_var}} PARENT_SCOPE)
     return()
   endif()
   message(STATUS "Check if c-ares version >= ${ver_major}.${ver_minor}.${ver_patch}")
