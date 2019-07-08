@@ -1,4 +1,4 @@
 build/
 coredump/
 vgcore.*
-
+CMakeFiles/
