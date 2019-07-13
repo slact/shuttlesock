@@ -10,6 +10,9 @@
 #include <signal.h>
 #include <sys/mman.h>
 
+#include <arpa/inet.h>
+#include <netdb.h>
+
 typedef struct {
   bool    verbose;
 } test_config_t;

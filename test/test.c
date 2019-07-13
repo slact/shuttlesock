@@ -386,6 +386,45 @@ describe(stack_allocator) {
   }
 }
 
+void resolve_check_ok(shuso_resolver_result_t result, struct hostent *hostent, void *pd) {
+  assert(result == SHUSO_RESOLVER_SUCCESS);
+  //printf("Found address name %s\n", hostent->h_name);
+  char ip[INET6_ADDRSTRLEN];
+  int i = 0;
+  shuso_t *ctx = pd;
+  for (i = 0; hostent->h_addr_list[i]; ++i) {
+    inet_ntop(hostent->h_addrtype, hostent->h_addr_list[i], ip, sizeof(ip));
+    //printf("%s\n", ip);
+  }
+  shuso_stop(ctx, SHUSO_STOP_INSIST);
+}
+
+void resolve_check_start(EV_P_ ev_timer *w, int revent) {
+  shuso_t *ctx = ev_userdata(EV_A);
+  shuso_resolve_hostname(&ctx->resolver, "google.com", AF_INET, resolve_check_ok, ctx);
+}
+
+describe(resolver) {
+   static shuso_t *ss = NULL;
+  before_each() {
+    ss = NULL;
+  }
+  after_each() {
+    if(ss) {
+      shuso_destroy(ss);
+      ss = NULL;
+    }
+  }
+  test("resolve using system") {
+    ss = runcheck_shuso_create(EVFLAG_AUTO, NULL);
+    
+    shuso_add_timer_watcher(ss, resolve_check_start, 0, 0.01, 0.0);
+    
+    shuso_run(ss);
+    assert_shuso(ss);
+  }
+}
+
 snow_main_decls;
 int main(int argc, char **argv) {
   _snow.ignore_unknown_options = 1;

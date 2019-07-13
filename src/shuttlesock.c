@@ -262,11 +262,16 @@ bool shuso_run(shuso_t *ctx) {
   ctx->process = &ctx->common->process.master;
   ctx->process->pid = getpid();
   
+  if(!shuso_resolver_init(ctx, &ctx->common->config, &ctx->resolver)) {
+    return shuso_set_error(ctx, "failed to spawn manager process");
+  }
+  
   shuso_add_child_watcher(ctx, child_watcher_cb, NULL, 0, 0);
   
   *ctx->process->state = SHUSO_PROCESS_STATE_STARTING;
   ctx->common->phase_handlers.start_master(ctx, ctx->common->phase_handlers.privdata);
   *ctx->process->state = SHUSO_PROCESS_STATE_RUNNING;
+  
   if(!shuso_spawn_manager(ctx)) {
     return shuso_set_error(ctx, "failed to spawn manager process");
   }
@@ -275,7 +280,9 @@ bool shuso_run(shuso_t *ctx) {
   shuso_ipc_channel_local_start(ctx);
   ev_run(ctx->ev.loop, 0);
   shuso_log(ctx, "stopping...");
+  
   shuso_cleanup_loop(ctx);
+  shuso_resolver_cleanup(&ctx->resolver);
   *ctx->process->state = SHUSO_PROCESS_STATE_DEAD;
   shuso_stalloc_empty(&ctx->stalloc);
   shuso_log(ctx, "stopped");
@@ -339,7 +346,7 @@ bool shuso_stop(shuso_t *ctx, shuso_stop_t forcefulness) {
   ev_loop_destroy(ctx->ev.loop);
   ctx->ev.loop = NULL;
   shuso_log(ctx, "stopped");
-  shuso_resolver_cleanup(ctx, &ctx->resolver);
+  shuso_resolver_cleanup(&ctx->resolver);
   shuso_stalloc_empty(&ctx->stalloc);
   free(ctx);
   return NULL;
@@ -414,7 +421,7 @@ bool shuso_spawn_worker(shuso_t *ctx, shuso_process_t *proc) {
 fail:
   if(shared_ipc_created) shuso_ipc_channel_shared_destroy(ctx, proc);
   if(pthreadattr_initialized) pthread_attr_destroy(&pthread_attr);
-  if(resolver_initialized) shuso_resolver_cleanup(ctx, &ctx->resolver);
+  if(resolver_initialized) shuso_resolver_cleanup(&ctx->resolver);
   if(stalloc_initialized) shuso_stalloc_empty(&ctx->stalloc);
   if(threadctx) free(threadctx);
   return shuso_set_error(ctx, err);
