@@ -11,7 +11,7 @@
 
 #include <shuttlesock/configure.h>
 #include <stdint.h>
-#include <threads.h>
+#include <pthread.h>
 
 typedef struct shuso_slab_page_s  shuso_slab_page_t;
 
@@ -46,7 +46,7 @@ typedef struct {
     unsigned char       *start;
     unsigned char       *end;
 
-    mtx_t               mutex;
+    pthread_mutex_t      mutex;
 
     //unsigned char     zero;
 

@@ -104,8 +104,8 @@ uintptr_t shared_slab_exact_size = 0;
 uintptr_t shared_slab_exact_shift = 0;
 bool shared_slab_initialized = false;
 
-#define ngx_shmtx_lock mtx_lock
-#define ngx_shmtx_unlock mtx_unlock
+#define ngx_shmtx_lock pthread_mutex_lock
+#define ngx_shmtx_unlock pthread_mutex_unlock
 
 #define NGX_LOG_ALERT 0
 #define NGX_LOG_CRIT 1
