@@ -130,6 +130,7 @@ typedef struct {
   }                   shm;
 } shuso_common_t;
 
+#define SHUTTLESOCK_UNKNOWN_PROCESS  -404
 #define SHUTTLESOCK_NOPROCESS  -3
 #define SHUTTLESOCK_MASTER     -2
 #define SHUTTLESOCK_MANAGER    -1
