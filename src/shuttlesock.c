@@ -8,6 +8,7 @@
 #include "shuttlesock_private.h"
 #include <shuttlesock/log.h>
 #include <shuttlesock/sysutil.h>
+#include "ngx_slab.h"
 #include <stdio.h>
 
 static void shuso_cleanup_loop(shuso_t *ctx);
@@ -38,7 +39,7 @@ shuso_t *shuso_create(unsigned int ev_loop_flags, shuso_handlers_t *handlers, sh
   const char         *errmsg = NULL;
   struct ev_loop     *loop;
   
-  shuttlesock_system_info_initialize();
+  shuso_system_initialize();
   
   if((common_ctx = calloc(1, sizeof(*common_ctx))) == NULL) {
     errmsg = "not enough memory to allocate common_ctx";
@@ -552,4 +553,10 @@ bool shuso_set_log_fd(shuso_t *ctx, int fd) {
   }
   ctx->common->log.fd = fd;
   return true;
+}
+
+void shuso_listen(shuso_t *ctx, shuso_hostinfo_t *bind, shuso_handler_fn handler, shuso_handler_fn cleanup, void *pd) {
+  assert(ctx->procnum == SHUTTLESOCK_MASTER);
+  
+  
 }

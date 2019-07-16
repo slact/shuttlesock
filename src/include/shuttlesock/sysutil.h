@@ -4,14 +4,14 @@
 
 typedef struct {
   size_t      page_size;
-  size_t      cacheline_size;
-  size_t      page_shift;
+  size_t      page_size_shift;
+  size_t      cacheline_size; //data cacheline
   
   bool        initialized;
-} shuso_sysinfo_t;
-extern shuso_sysinfo_t shuttlesock_sysinfo;
+} shuso_system_setup_t;
+extern shuso_system_setup_t shuso_system;
 
-void shuttlesock_system_info_initialize(void);
+void shuso_system_initialize(void);
 
 int shuso_system_cores_online(void);
 bool shuso_system_thread_setname(const char *name);

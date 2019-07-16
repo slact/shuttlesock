@@ -21,6 +21,7 @@ set(libsrc
   src/sysutil.c
   src/stalloc.c
   src/resolver.c
+  src/shared_slab.c
 )
 
 add_library(shuttlesock SHARED ${libsrc})

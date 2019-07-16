@@ -27,7 +27,7 @@
 #include <assert.h>
 #include <shuttlesock/sysutil.h>
 
-shuso_sysinfo_t shuttlesock_sysinfo = {
+shuso_system_setup_t shuso_system = {
   .initialized = false
 };
 
@@ -80,7 +80,7 @@ static size_t shuso_system_cacheline_size(void) {
   sysctlbyname("hw.cachelinesize", &sz, &szsz, 0, 0);
 #elif defined(__linux__)
   FILE          *p = 0;
-  unsigned int   lineSize = 0;
+  int            lineSize = 0;
   p = fopen("/sys/devices/system/cpu/cpu0/cache/index0/coherency_line_size", "r");
   if(p) {
     fscanf(p, "%d", &lineSize);
@@ -92,13 +92,13 @@ static size_t shuso_system_cacheline_size(void) {
   return sz;
 }
 
-void shuttlesock_system_info_initialize(void) {
-  if(!shuttlesock_sysinfo.initialized) {
+void shuso_system_initialize(void) {
+  if(!shuso_system.initialized) {
     //NOT THREAD-SAFE!!
-    shuttlesock_sysinfo.page_size = sysconf(_SC_PAGESIZE);
-    shuttlesock_sysinfo.cacheline_size = shuso_system_cacheline_size();
-    shuttlesock_sysinfo.page_shift = 0;
-    for(uintptr_t n = shuttlesock_sysinfo.page_size; n >>= 1; shuttlesock_sysinfo.page_shift++) { /* void */ }
-    shuttlesock_sysinfo.initialized = 1;
+    shuso_system.page_size = sysconf(_SC_PAGESIZE);
+    shuso_system.cacheline_size = shuso_system_cacheline_size();
+    shuso_system.page_size_shift = 0;
+    for(uintptr_t n = shuso_system.page_size; n >>= 1; shuso_system.page_size_shift++) { /* void */ }
+    shuso_system.initialized = 1;
   }  
 }

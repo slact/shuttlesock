@@ -9,9 +9,10 @@
 #define shuso_log(ctx, ...) do { \
   char ___log[512]; \
   char *___cur = ___log; \
-  ___cur += sprintf(___cur, "[%d %s", getpid(), (ctx->procnum == SHUTTLESOCK_NOPROCESS ? "none     " : (ctx->procnum == SHUTTLESOCK_MASTER ? "master   " : (ctx->procnum == SHUTTLESOCK_MANAGER ? "manager  " : "worker ")))); \
-  if(ctx->procnum >= SHUTTLESOCK_WORKER) { \
-    ___cur += sprintf(___cur, "%i ", ctx->procnum); \
+  int __procnum = ctx ? ctx->procnum : SHUTTLESOCK_UNKNOWN_PROCESS; \
+  ___cur += sprintf(___cur, "[%d %s", getpid(), (__procnum == SHUTTLESOCK_NOPROCESS ? "none     " : (__procnum == SHUTTLESOCK_MASTER ? "master   " : (__procnum == SHUTTLESOCK_MANAGER ? "manager  " : "worker ")))); \
+  if(__procnum >= SHUTTLESOCK_WORKER) { \
+    ___cur += sprintf(___cur, "%i ", __procnum); \
   } \
   ___cur += sprintf(___cur, "] "); \
   ___cur += sprintf(___cur, __VA_ARGS__); \
