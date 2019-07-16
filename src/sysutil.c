@@ -88,7 +88,10 @@ static size_t shuso_system_cacheline_size(void) {
     fclose(p);
   }
 #endif
-  assert(sz != 0);
+  if(!sz) {
+    //default to 64-byte cacheline
+    sz = 64;
+  }
   return sz;
 }
 
