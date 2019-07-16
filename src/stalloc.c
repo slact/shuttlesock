@@ -1,4 +1,5 @@
 #include <shuttlesock/stalloc.h>
+#include <shuttlesock/sysutil.h>
 #include <assert.h>
 #include <unistd.h>
 #include <stdio.h>
@@ -80,7 +81,7 @@ bool shuso_stalloc_init_clean(shuso_stalloc_t *st, size_t pagesize) {
 #if defined(SHUTTLESOCK_STALLOC_NOPOOL)
   st->page.size = 0;
 #else
-  st->page.size = pagesize > 0 ? pagesize : (size_t )sysconf(_SC_PAGESIZE);
+  st->page.size = pagesize > 0 ? pagesize : shuttlesock_sysinfo.page_size;
   if(!add_page(st)) {
     return false;
   }

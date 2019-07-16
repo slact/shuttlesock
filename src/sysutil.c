@@ -13,6 +13,8 @@
 
 #ifndef _SC_NPROCESSORS_ONLN
 #include <sys/param.h>
+#endif
+#if !defined(_SC_NPROCESSORS_ONLN) || defined(__APPLE__)
 #include <sys/sysctl.h>
 #endif
 
@@ -20,6 +22,14 @@
 #ifdef SHUTTLESOCK_PTHREAD_SETNAME_INCLUDE_PTRHEAD_NP
 #include <pthread_np.h>
 #endif
+
+#include <stdio.h>
+#include <assert.h>
+#include <shuttlesock/sysutil.h>
+
+shuso_sysinfo_t shuttlesock_sysinfo = {
+  .initialized = false
+};
 
 int shuso_system_cores_online(void) {
   long cores;
@@ -55,4 +65,40 @@ bool shuso_system_thread_setname(const char *name) {
 #else
   return false;
 #endif
+}
+
+static size_t shuso_system_cacheline_size(void) {
+  size_t sz = 0;
+#ifdef _SC_LEVEL1_DCACHE_LINESIZE
+  sz = sysconf(_SC_LEVEL1_DCACHE_LINESIZE);
+  if(sz) return sz;
+#endif
+// Original Author: Nick Strupat
+// Date: October 29, 2010
+#if defined(__APPLE__)
+  size_t szsz = sizeof(sz);
+  sysctlbyname("hw.cachelinesize", &sz, &szsz, 0, 0);
+#elif defined(__linux__)
+  FILE          *p = 0;
+  unsigned int   lineSize = 0;
+  p = fopen("/sys/devices/system/cpu/cpu0/cache/index0/coherency_line_size", "r");
+  if(p) {
+    fscanf(p, "%d", &lineSize);
+    sz = lineSize;
+    fclose(p);
+  }
+#endif
+  assert(sz != 0);
+  return sz;
+}
+
+void shuttlesock_system_info_initialize(void) {
+  if(!shuttlesock_sysinfo.initialized) {
+    //NOT THREAD-SAFE!!
+    shuttlesock_sysinfo.page_size = sysconf(_SC_PAGESIZE);
+    shuttlesock_sysinfo.cacheline_size = shuso_system_cacheline_size();
+    shuttlesock_sysinfo.page_shift = 0;
+    for(uintptr_t n = shuttlesock_sysinfo.page_size; n >>= 1; shuttlesock_sysinfo.page_shift++) { /* void */ }
+    shuttlesock_sysinfo.initialized = 1;
+  }  
 }

@@ -38,6 +38,8 @@ shuso_t *shuso_create(unsigned int ev_loop_flags, shuso_handlers_t *handlers, sh
   const char         *errmsg = NULL;
   struct ev_loop     *loop;
   
+  shuttlesock_system_info_initialize();
+  
   if((common_ctx = calloc(1, sizeof(*common_ctx))) == NULL) {
     errmsg = "not enough memory to allocate common_ctx";
     goto fail;
