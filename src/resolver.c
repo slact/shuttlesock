@@ -231,7 +231,7 @@ const struct ares_socket_functions ares_sockfuncs = {
 
 
 typedef struct {
-  shuso_resolver_cb  *callback;
+  shuso_resolver_fn  *callback;
   void               *pd;
 } shuso_resolve_hostname_data_t;
 
@@ -274,7 +274,7 @@ static void shuso_resolve_hostname_callback(void *arg, int status, int timeouts
   free(arg);
 }
 
-bool shuso_resolve_hostname(shuso_resolver_t *resolver, const char *name, int addr_family, shuso_resolver_cb callback, void *pd) {
+bool shuso_resolve_hostname(shuso_resolver_t *resolver, const char *name, int addr_family, shuso_resolver_fn callback, void *pd) {
   shuso_resolve_hostname_data_t *data = malloc(sizeof(*data));
   if(!data) {
     return false;

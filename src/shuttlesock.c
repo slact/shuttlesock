@@ -19,7 +19,7 @@ static bool test_features(shuso_t *ctx, const char **errmsg);
 static void do_nothing(void) {}
 #define init_phase_handler(ctx, phase) \
   if(!ctx->common->phase_handlers.phase) \
-    ctx->common->phase_handlers.start_master = (shuso_cb_fn *)do_nothing
+    ctx->common->phase_handlers.start_master = (shuso_handler_fn *)do_nothing
 
 #define set_default_config(ctx, conf, default_val) do {\
   if(!(bool )((ctx)->common->config.conf)) { \

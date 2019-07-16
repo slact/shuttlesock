@@ -39,7 +39,7 @@ typedef enum {
   SHUSO_RESOLVER_FAILURE_CONNREFUSED = 8
 } shuso_resolver_result_t;
 
-typedef void shuso_resolver_cb(shuso_resolver_result_t result, struct hostent *hostent, void *pd);
+typedef void shuso_resolver_fn(shuso_resolver_result_t result, struct hostent *hostent, void *pd);
 
 bool shuso_resolver_global_init(const char **err);
 bool shuso_resolver_global_cleanup(void);
@@ -47,6 +47,6 @@ bool shuso_resolver_global_cleanup(void);
 bool shuso_resolver_init(struct shuso_s *ctx, struct shuso_config_s *cf, shuso_resolver_t *resolver);
 bool shuso_resolver_cleanup(shuso_resolver_t *resolver);
 
-bool shuso_resolve_hostname(shuso_resolver_t *resolver, const char *name, int addr_family, shuso_resolver_cb callback, void *pd);
+bool shuso_resolve_hostname(shuso_resolver_t *resolver, const char *name, int addr_family, shuso_resolver_fn callback, void *pd);
 
 #endif //SHUTTLESOCK_RESOLVER_H

@@ -6,6 +6,7 @@
 #include <stdint.h>
 #include <fcntl.h>
 #include <stdbool.h>
+#include <stdatomic.h>
 #include <netinet/in.h>
 #include <shuttlesock/configure.h>
 #include <shuttlesock/sbuf.h>
@@ -47,18 +48,6 @@ typedef struct shuso_process_s {
 typedef struct shuso_s shuso_t;
 typedef struct shuso_config_s shuso_config_t;
 
-typedef void shuso_io_cb_fn(EV_P_ ev_io *, int);
-typedef void shuso_cb_fn(shuso_t *ctx, void *pd);
-typedef struct {
-  shuso_cb_fn *start_master;
-  shuso_cb_fn *stop_master;
-  shuso_cb_fn *start_manager;
-  shuso_cb_fn *stop_manager;
-  shuso_cb_fn *start_worker;
-  shuso_cb_fn *stop_worker;
-  void   *privdata;
-} shuso_handlers_t;
-
 typedef struct {
   const char        *name;
   union {
@@ -71,14 +60,27 @@ typedef struct {
   unsigned          udp:1; //TCP or UDP?
 } shuso_hostinfo_t;
 
-typedef struct {
+
+typedef struct shuso_socket_s shuso_socket_t;
+typedef void shuso_socket_fn(shuso_t *ctx, shuso_socket_t *socket);
+struct shuso_socket_s {
   shuso_hostinfo_t  host;
   int               fd;
-  //TODO:  read_handler
-  //TODO:  write_handler
-  //TODO   cleanup_handler(s)
+  shuso_socket_fn  *handler;
+  shuso_socket_fn  *cheanup;
   void              *data;
-} shuso_socket_t;
+}; //shuso_socket_t;
+
+typedef void shuso_handler_fn(shuso_t *ctx, void *pd);
+typedef struct {
+  shuso_handler_fn *start_master;
+  shuso_handler_fn *stop_master;
+  shuso_handler_fn *start_manager;
+  shuso_handler_fn *stop_manager;
+  shuso_handler_fn *start_worker;
+  shuso_handler_fn *stop_worker;
+  void   *privdata;
+} shuso_handlers_t;
 
 //the shuso_config struct is designed to be zeroed on initialization
 #define SHUTTLESOCK_CONFIG_DEFAULT_IPC_SEND_RETRY_DELAY  0.050
