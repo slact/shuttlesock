@@ -8,7 +8,6 @@
 #include "shuttlesock_private.h"
 #include <shuttlesock/log.h>
 #include <shuttlesock/sysutil.h>
-#include "ngx_slab.h"
 #include <stdio.h>
 
 static void shuso_cleanup_loop(shuso_t *ctx);
