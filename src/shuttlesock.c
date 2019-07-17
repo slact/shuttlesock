@@ -144,6 +144,7 @@ static bool test_features(shuso_t *ctx, const char **errmsg) {
 bool shuso_destroy(shuso_t *ctx) {
   assert(ctx->ev.loop);
   ev_loop_destroy(ctx->ev.loop);
+  shuso_stalloc_empty(&ctx->stalloc);
   if(ctx->common->shm.ptr) {
     munmap(ctx->common->shm.ptr, ctx->common->shm.sz);
   }
