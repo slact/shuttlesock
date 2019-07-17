@@ -12,6 +12,8 @@
 #include <shuttlesock/configure.h>
 #include <stdint.h>
 #include <pthread.h>
+#include <stdbool.h>
+struct shuso_s;
 
 typedef struct shuso_slab_page_s  shuso_slab_page_t;
 
@@ -20,7 +22,6 @@ struct shuso_slab_page_s {
     shuso_slab_page_t  *next;
     uintptr_t         prev;
 };
-
 
 typedef struct {
     unsigned            total;
@@ -32,7 +33,6 @@ typedef struct {
 
 
 typedef struct {
-
     size_t              min_size;
     size_t              min_shift;
 
@@ -57,16 +57,26 @@ typedef struct {
 } shuso_slab_pool_t;
 
 
+typedef struct {
+  
+  const char        *name;
+  int                fd;
+  void              *ptr;
+  size_t             size;
+  shuso_slab_pool_t *pool;
+  
+} shuso_shared_slab_t;
+
 void shuso_shared_slab_sizes_init(void);
 
+bool shuso_shared_slab_create(struct shuso_s *ctx, shuso_shared_slab_t *shm, size_t sz, const char *name);
 
-void shuso_shared_slab_init(shuso_slab_pool_t *pool);
-void *ngx_slab_alloc(shuso_slab_pool_t *pool, size_t size);
-void *ngx_slab_alloc_locked(shuso_slab_pool_t *pool, size_t size);
-void *ngx_slab_calloc(shuso_slab_pool_t *pool, size_t size);
-void *ngx_slab_calloc_locked(shuso_slab_pool_t *pool, size_t size);
-void ngx_slab_free(shuso_slab_pool_t *pool, void *p);
-void ngx_slab_free_locked(shuso_slab_pool_t *pool, void *p);
+void *shuso_shared_slab_alloc(shuso_shared_slab_t *shm, size_t size);
+void *shuso_shared_slab_alloc_locked(shuso_shared_slab_t *shm, size_t size);
+void *shuso_shared_slab_calloc(shuso_shared_slab_t *shm, size_t size);
+void *shuso_shared_slab_calloc_locked(shuso_shared_slab_t *shm, size_t size);
+void shuso_shared_slab_free(shuso_shared_slab_t *shm, void *p);
+void shuso_shared_slab_free_locked(shuso_shared_slab_t *shm, void *p);
 
 
 #endif /* SHUTTLESOCK_SHARED_SLAB_H */

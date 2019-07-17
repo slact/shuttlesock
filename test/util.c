@@ -138,4 +138,15 @@ void fill_stalloc(shuso_stalloc_t *st, test_stalloc_stats_t *stats, size_t minsz
   }
   
 }
+
+bool allocd_ptr_value_correct(char *ptr, size_t sz) {
+  char chr = ((uintptr_t )ptr) % 0x100;
+  for(unsigned i=0; i<sz; i++) {
+    if(ptr[i] != chr) {
+      return false;
+    }
+  }
+  return true;
+}
+
 #endif //__clang_analyzer__

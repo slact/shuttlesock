@@ -7,9 +7,12 @@
 
 //#include <ngx_config.h>
 //#include <ngx_core.h>
+#include <sys/mman.h>
 
 #include <shuttlesock/shared_slab.h>
 #include <shuttlesock/sysutil.h>
+#include <shuttlesock.h>
+
 #include <string.h>
 #define ngx_memzero(buf, n)       (void) memset(buf, 0, n)
 #define ngx_debug_point(...)
@@ -103,6 +106,13 @@ uintptr_t shared_slab_max_size = 0;
 uintptr_t shared_slab_exact_size = 0;
 uintptr_t shared_slab_exact_shift = 0;
 bool shared_slab_initialized = false;
+
+void *ngx_slab_alloc(shuso_slab_pool_t *pool, size_t size);
+void *ngx_slab_alloc_locked(shuso_slab_pool_t *pool, size_t size);
+void *ngx_slab_calloc(shuso_slab_pool_t *pool, size_t size);
+void *ngx_slab_calloc_locked(shuso_slab_pool_t *pool, size_t size);
+void ngx_slab_free(shuso_slab_pool_t *pool, void *p);
+void ngx_slab_free_locked(shuso_slab_pool_t *pool, void *p);
 
 #define ngx_shmtx_lock pthread_mutex_lock
 #define ngx_shmtx_unlock pthread_mutex_unlock
@@ -844,4 +854,52 @@ ngx_slab_error(shuso_slab_pool_t *pool, ngx_uint_t level, char *text)
 
 
 
-//shuso_shm_slab_t *shuso_shared_slab_create(
+bool shuso_shared_slab_create(shuso_t *ctx, shuso_shared_slab_t *slab, size_t sz, const char *name) {
+  int                 rc;
+  shuso_slab_pool_t  *sp;
+  
+  slab->ptr = mmap(NULL, sz, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_SHARED,-1, 0);
+  if(!slab->ptr) {
+    return shuso_set_error(ctx, "failed to create shared memory slab");
+  }
+  slab->size = sz;
+  slab->name = name;
+  //yanked from ngx_cycle.c : ngx_init_zone_pool (c) Igor Sysoev, Nginx Inc. MIT Licence
+  
+  sp = slab->ptr;
+  sp->end = (unsigned char *)sp + sz;
+  sp->min_shift = 3;
+  sp->addr = sp;
+  
+  slab->pool = sp;
+  
+  if((rc = pthread_mutex_init(&sp->mutex, NULL)) != 0) {
+    munmap(slab->ptr, sz);
+    return shuso_set_error(ctx, "failed to create mutex for shared memory slab");
+  }
+  
+  ngx_slab_init(sp);
+  
+  return true;
+}
+
+void *shuso_shared_slab_alloc(shuso_shared_slab_t *shm, size_t size) {
+  return ngx_slab_alloc(shm->pool, size);
+}
+void *shuso_shared_slab_alloc_locked(shuso_shared_slab_t *shm, size_t size) {
+  return ngx_slab_alloc_locked(shm->pool, size);
+}
+void *shuso_shared_slab_calloc(shuso_shared_slab_t *shm, size_t size) {
+  return ngx_slab_calloc(shm->pool, size);
+}
+void *shuso_shared_slab_calloc_locked(shuso_shared_slab_t *shm, size_t size) {
+  return ngx_slab_calloc_locked(shm->pool, size);
+}
+
+void shuso_shared_slab_free(shuso_shared_slab_t *shm, void *p) {
+  ngx_slab_free(shm->pool, p);
+}
+void shuso_shared_slab_free_locked(shuso_shared_slab_t *shm, void *p) {
+  ngx_slab_free_locked(shm->pool, p);
+}
+

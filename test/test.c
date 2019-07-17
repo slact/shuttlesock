@@ -375,7 +375,7 @@ describe(stack_allocator) {
     }
   }
   
-  subdesc(space_tracking) {
+  /*subdesc(space_tracking) {
     test("track space cumulatively") {
       
     }
@@ -383,7 +383,7 @@ describe(stack_allocator) {
     test("track space after stack manupulation") {
       
     }
-  }
+  }*/
 }
 
 void resolve_check_ok(shuso_resolver_result_t result, struct hostent *hostent, void *pd) {
@@ -422,6 +422,62 @@ describe(resolver) {
     
     shuso_run(ss);
     assert_shuso(ss);
+  }
+}
+
+typedef struct {
+  void    *ptr;
+  uint32_t sz;
+  unsigned free:1;
+} allocd_t;
+
+describe(shared_memory_allocator) {
+  static shuso_t *ss = NULL;
+  static shuso_shared_slab_t shm;
+  before_each() {
+    shuso_system_initialize();
+    ss = runcheck_shuso_create(EVFLAG_AUTO, NULL);
+  }
+  after_each() {
+    shuso_destroy(ss);
+    ss = NULL;
+  }
+  test("single-threaded alloc/free") {
+    size_t shm_sz = 10*1024*1024;
+    unsigned total_allocs = 5000;
+    unsigned max_size = 1000;
+    unsigned allocs_before_free = total_allocs/3;
+    uint64_t i;
+    for(int rep =0; rep < 10; rep++) {
+      allocd_t *allocd = calloc(sizeof(allocd_t), total_allocs);
+      assert(allocd);
+      assert(shuso_shared_slab_create(ss, &shm, shm_sz, "single-threaded alloc/free test"));
+      for(i = 0; i < total_allocs; i++) {
+        size_t sz = rand() % max_size + 1;
+        allocd[i].free = 0;
+        allocd[i].ptr = shuso_shared_slab_calloc(&shm, sz);
+        memset(allocd[i].ptr, ((uintptr_t )allocd[i].ptr) % 0x100, sz);
+        allocd[i].sz = sz;
+        assert(allocd[i].ptr);
+        if(i > allocs_before_free) {
+          int ifree = i - 100;
+          assert(allocd[ifree].free == 0, "shouldn't have been freed yet");
+          assert(allocd_ptr_value_correct(allocd[ifree].ptr, allocd[ifree].sz), "correct value, hasn't been overwritten");
+          shuso_shared_slab_free(&shm, allocd[ifree].ptr);
+          allocd[ifree].free = 1;
+        }
+      }
+      
+      for(i=0; i < total_allocs; i++) {
+        if(!allocd[i].free) {
+          assert(allocd_ptr_value_correct(allocd[i].ptr, allocd[i].sz));
+          shuso_shared_slab_free(&shm, allocd[i].ptr);
+          allocd[i].free = 1;
+        }
+      }
+      
+      free(allocd);
+    }
   }
 }
 

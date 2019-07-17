@@ -26,6 +26,7 @@
 #include <stdio.h>
 #include <assert.h>
 #include <shuttlesock/sysutil.h>
+#include <shuttlesock/shared_slab.h>
 
 shuso_system_setup_t shuso_system = {
   .initialized = false
@@ -102,6 +103,8 @@ void shuso_system_initialize(void) {
     shuso_system.cacheline_size = shuso_system_cacheline_size();
     shuso_system.page_size_shift = 0;
     for(uintptr_t n = shuso_system.page_size; n >>= 1; shuso_system.page_size_shift++) { /* void */ }
+    
+    shuso_shared_slab_sizes_init();
     shuso_system.initialized = 1;
   }  
 }

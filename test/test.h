@@ -3,6 +3,8 @@
 
 #include <shuttlesock.h>
 #include <shuttlesock/log.h>
+#include <shuttlesock/shared_slab.h>
+#include <shuttlesock/sysutil.h>
 #include <stdio.h>
 #include <stdatomic.h>
 #define SNOW_ENABLED 1
@@ -154,5 +156,7 @@ typedef struct {
 } test_stalloc_stats_t;
 
 void fill_stalloc(shuso_stalloc_t *st, test_stalloc_stats_t *stats, size_t minsz, size_t maxsz, int large_alloc_interval, int total_items, int stack_push_count);
+
+bool allocd_ptr_value_correct(char *ptr, size_t sz);
 
 #endif //__SHUTTLESOCK_TEST_H
