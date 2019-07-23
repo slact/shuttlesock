@@ -9,11 +9,12 @@
 #define SHUTTLESOCK_IPC_CMD_RECONFIGURE           4
 #define SHUTTLESOCK_IPC_CMD_RECONFIGURE_RESPONSE  5
 #define SHUTTLESOCK_IPC_CMD_SET_LOG_FD            6
-#define SHUTTLESOCK_IPC_CMD_LISTEN_PORT           7
-#define SHUTTLESOCK_IPC_CMD_LISTEN_PORT_RESPONSE  8
+#define SHUTTLESOCK_IPC_CMD_OPEN_LISTENER_SOCKETS 7
+#define SHUTTLESOCK_IPC_CMD_OPEN_LISTENER_SOCKETS_RESPONSE 8
 
 struct shuso_s;
 struct shuso_process_s;
+struct shuso_hostinfo_s;
 
 typedef struct {
   _Atomic uint8_t    next_read;
@@ -23,13 +24,12 @@ typedef struct {
   _Atomic(void *)    ptr[256];
 } shuso_ipc_ringbuf_t;
 
-typedef void shuso_ipc_receive_fn(struct shuso_s *, const uint8_t code, void *ptr);
-typedef void shuso_ipc_cancel_fn(struct shuso_s *, const uint8_t code, void *ptr);
+typedef void shuso_ipc_fn(struct shuso_s *, const uint8_t code, void *ptr);
 
 typedef struct {
   uint8_t                code;
-  shuso_ipc_receive_fn  *receive;
-  shuso_ipc_cancel_fn   *cancel;
+  shuso_ipc_fn          *receive;
+  shuso_ipc_fn          *cancel;
   const char            *name;
 } shuso_ipc_handler_t;
 
@@ -71,6 +71,11 @@ bool shuso_ipc_channel_shared_stop(struct shuso_s *, struct shuso_process_s *);
 
 bool shuso_ipc_send(struct shuso_s *, struct shuso_process_s *, const uint8_t code, void *ptr);
 bool shuso_ipc_send_workers(struct shuso_s *, const uint8_t code, void *ptr);
-bool shuso_ipc_add_handler(struct shuso_s *,  const char *name, const uint8_t code, shuso_ipc_receive_fn *, shuso_ipc_cancel_fn *);
+bool shuso_ipc_add_handler(struct shuso_s *,  const char *name, const uint8_t code, shuso_ipc_fn *, shuso_ipc_fn *);
+
+//some built-in IPC commands
+
+bool shuso_ipc_command_open_listener_sockets(struct shuso_s *, struct shuso_hostinfo_s *, int count, void (*callback)(bool ok, struct shuso_s *, struct shuso_hostinfo_s *, int *sockets, int socket_count, void *pd), void *pd);
+
 
 #endif //SHUTTLESOCK_IPC_H

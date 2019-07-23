@@ -48,7 +48,7 @@ typedef struct shuso_process_s {
 typedef struct shuso_s shuso_t;
 typedef struct shuso_config_s shuso_config_t;
 
-typedef struct {
+typedef struct shuso_hostinfo_s {
   const char        *name;
   union {
     struct in6_addr addr6;
@@ -208,5 +208,7 @@ void shuso_remove_child_watcher(shuso_t *ctx, ev_child *w);
 void shuso_remove_io_watcher(shuso_t *ctx, ev_io *w);
 void shuso_remove_timer_watcher(shuso_t *ctx, ev_timer *w);
 void shuso_remove_periodic_watcher(shuso_t *ctx, ev_periodic *w);
+
+void shuso_listen(shuso_t *ctx, shuso_hostinfo_t *bind, shuso_handler_fn handler, shuso_handler_fn cleanup, void *pd);
   
 #endif //SHUTTLESOCK_H
