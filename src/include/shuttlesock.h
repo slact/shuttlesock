@@ -14,6 +14,7 @@
 #include <shuttlesock/ipc.h>
 #include <shuttlesock/stalloc.h>
 #include <shuttlesock/resolver.h>
+#include <shuttlesock/shared_slab.h>
 
 
 #define SHUTTLESOCK_MAX_WORKERS 1024
@@ -100,6 +101,7 @@ struct shuso_config_s {
     shuso_hostinfo_t   *hosts;
     off_t               hosts_count;
   }                   resolver;
+  size_t              shared_slab_size;
   const char         *username;
   const char         *groupname;
   uid_t               uid;
@@ -124,10 +126,7 @@ typedef struct {
   struct {          //features
     bool                io_uring;
   }                   features;
-  struct {          //shm
-    void               *ptr;
-    size_t              sz;
-  }                   shm;
+  shuso_shared_slab_t shm;
 } shuso_common_t;
 
 #define SHUTTLESOCK_UNKNOWN_PROCESS  -404
@@ -160,6 +159,7 @@ struct shuso_s {
     LLIST_STRUCT(ev_periodic)   periodic;
   }                           base_watchers;
   shuso_stalloc_t             stalloc;
+  shuso_shared_slab_t         shm;
   shuso_resolver_t            resolver;
   void                       *data;  //custom data attached to this shuttlesock context
   const char                 *errmsg;

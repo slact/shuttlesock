@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <assert.h>
+#include <shuttlesock/shared_slab.h>
 #ifdef SHUTTLESOCK_USE_EVENTFD
 #include <sys/eventfd.h>
 #endif
@@ -216,7 +217,7 @@ static void do_nothing(void) {
   //nothing at all
 }
 
-bool shuso_ipc_add_handler(shuso_t * ctx,  const char *name, const uint8_t code, shuso_ipc_receive_fn *receive, shuso_ipc_cancel_fn *cancel) {
+bool shuso_ipc_add_handler(shuso_t * ctx,  const char *name, const uint8_t code, shuso_ipc_fn *receive, shuso_ipc_fn *cancel) {
   shuso_ipc_handler_t *handlers = ctx->common->ipc_handlers;
   if(handlers[code].name != NULL) {
     //this code is already handled
@@ -226,7 +227,7 @@ bool shuso_ipc_add_handler(shuso_t * ctx,  const char *name, const uint8_t code,
     .code = code,
     .name = name ? name : "unnamed",
     .receive = receive,
-    .cancel = cancel ? cancel : (shuso_ipc_cancel_fn *)&do_nothing
+    .cancel = cancel ? cancel : (shuso_ipc_fn *)&do_nothing
   };
   return true;
 }

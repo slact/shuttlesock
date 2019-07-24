@@ -883,6 +883,10 @@ bool shuso_shared_slab_create(shuso_t *ctx, shuso_shared_slab_t *slab, size_t sz
   return true;
 }
 
+bool shuso_shared_slab_destroy(struct shuso_s *ctx, shuso_shared_slab_t *shm) {
+  return munmap(shm->ptr, shm->size) == 0;
+}
+
 void *shuso_shared_slab_alloc(shuso_shared_slab_t *shm, size_t size) {
   return ngx_slab_alloc(shm->pool, size);
 }

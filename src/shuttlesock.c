@@ -34,7 +34,7 @@ shuso_t *shuso_create(unsigned int ev_loop_flags, shuso_handlers_t *handlers, sh
   bool                manager_ipc_created = false;
   bool                master_ipc_created = false;
   bool                stalloc_initialized = false;
-  void               *shm = NULL;
+  bool                shm_slab_created = false;
   const char         *errmsg = NULL;
   struct ev_loop     *loop;
   
@@ -73,6 +73,12 @@ shuso_t *shuso_create(unsigned int ev_loop_flags, shuso_handlers_t *handlers, sh
   set_default_config(ctx, ipc.send_timeout, SHUTTLESOCK_CONFIG_DEFAULT_IPC_SEND_TIMEOUT);
   set_default_config(ctx, workers, shuso_system_cores_online());
   
+  shm_slab_created = shuso_shared_slab_create(ctx, &ctx->common->shm, ctx->common->config.shared_slab_size, "main shuttlesock slab");
+  if(!shm_slab_created) {
+    errmsg = "failed to created shared memory slab";
+    goto fail;
+  }
+  
   if(handlers) {
     common_ctx->phase_handlers = *handlers;
   }
@@ -99,13 +105,11 @@ shuso_t *shuso_create(unsigned int ev_loop_flags, shuso_handlers_t *handlers, sh
   }
   
   size_t sz = sizeof(_Atomic(shuso_process_state_t)) * (SHUTTLESOCK_MAX_WORKERS + 2);
-  if((shm = mmap(NULL, sz, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_SHARED,-1, 0)) == NULL) {
-    errmsg = "failed to initialize shared memory";
+  _Atomic(shuso_process_state_t) *states = shuso_shared_slab_calloc(&ctx->common->shm, sz);
+  if(!states) {
+    errmsg = "failed to allocate shared memory for process states";
     goto fail;
   }
-  common_ctx->shm.ptr = shm;
-  common_ctx->shm.sz = sz;
-  _Atomic(shuso_process_state_t) *states = shm;
   common_ctx->process.master.state = &states[0];
   common_ctx->process.manager.state = &states[1];
   for(int i=0; i < SHUTTLESOCK_MAX_WORKERS; i++) {
@@ -127,6 +131,7 @@ fail:
   if(master_ipc_created) shuso_ipc_channel_shared_destroy(ctx, &common_ctx->process.master);
   if(manager_ipc_created) shuso_ipc_channel_shared_destroy(ctx, &common_ctx->process.manager);
   if(stalloc_initialized) shuso_stalloc_empty(&ctx->stalloc);
+  if(shm_slab_created) shuso_shared_slab_destroy(ctx, &ctx->common->shm);
   if(ctx) free(ctx);
   if(common_ctx) free(common_ctx);
   if(err) *err = errmsg;
@@ -145,9 +150,7 @@ bool shuso_destroy(shuso_t *ctx) {
   assert(ctx->ev.loop);
   ev_loop_destroy(ctx->ev.loop);
   shuso_stalloc_empty(&ctx->stalloc);
-  if(ctx->common->shm.ptr) {
-    munmap(ctx->common->shm.ptr, ctx->common->shm.sz);
-  }
+  shuso_shared_slab_destroy(ctx, &ctx->common->shm);
   if(ctx->procnum <= SHUTTLESOCK_MANAGER) {
     free(ctx->common);
   }
