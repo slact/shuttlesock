@@ -857,9 +857,11 @@ ngx_slab_error(shuso_slab_pool_t *pool, ngx_uint_t level, char *text)
 bool shuso_shared_slab_create(shuso_t *ctx, shuso_shared_slab_t *slab, size_t sz, const char *name) {
   int                 rc;
   shuso_slab_pool_t  *sp;
-  
+  if(sz == 0) {
+    sz = SHUTTLESOCK_SHARED_SLAB_DEFAULT_SIZE;
+  }
   slab->ptr = mmap(NULL, sz, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_SHARED,-1, 0);
-  if(!slab->ptr) {
+  if(slab->ptr == MAP_FAILED) {
     return shuso_set_error(ctx, "failed to create shared memory slab");
   }
   slab->size = sz;

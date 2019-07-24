@@ -9,7 +9,7 @@
 #ifndef SHUTTLESOCK_SHARED_SLAB_H
 #define SHUTTLESOCK_SHARED_SLAB_H
 
-#define SHUTTLESOCK_SHARED_SLAB_DEFAULT_SIZE 33554432 //32M
+#define SHUTTLESOCK_SHARED_SLAB_DEFAULT_SIZE 16777216 //16M
 
 #include <shuttlesock/configure.h>
 #include <stdint.h>
