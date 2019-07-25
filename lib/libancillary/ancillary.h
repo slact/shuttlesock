@@ -42,9 +42,9 @@
  */
 
 extern int
-ancil_send_fds_with_buffer(int, const int *, unsigned, void *);
+ancil_send_fds_with_buffer(int sock, const int *fds, unsigned n_fds, const char *data, size_t data_sz, void *buffer);
 /*
- * ancil_send_fds_with_buffer(sock, n_fds, fds, buffer)
+ * ancil_send_fds_with_buffer(sock, fds, n_fds, data, data_size, buffer)
  *
  * Sends the file descriptors in the array pointed by fds, of length n_fds
  * on the socket sock.
@@ -54,9 +54,9 @@ ancil_send_fds_with_buffer(int, const int *, unsigned, void *);
  */
 
 extern int
-ancil_recv_fds_with_buffer(int, int *, unsigned, void *);
+ancil_recv_fds_with_buffer(int, int *, unsigned, char *, size_t, void *);
 /*
- * ancil_recv_fds_with_buffer(sock, n_fds, fds, buffer)
+ * ancil_recv_fds_with_buffer(sock, n_fds, fds, data_buf, data_buf_size, buffer)
  *
  * Receives *n_fds file descriptors into the array pointed by fds
  * from the socket sock.
@@ -83,20 +83,21 @@ ancil_recv_fds_with_buffer(int, int *, unsigned, void *);
  */
 
 extern int
-ancil_send_fds(int, const int *, unsigned);
+ancil_send_fds(int, const int *, unsigned, const char *, size_t);
 /*
- * ancil_send_fds(sock, n_fds, fds)
+ * ancil_send_fds(sock, fds, n_fds, data, data_size)
  *
  * Sends the file descriptors in the array pointed by fds, of length n_fds
  * on the socket sock.
  * n_fds must not be greater than ANCIL_MAX_N_FDS.
+ * data_size must be > 0
  * Returns: -1 and errno in case of error, 0 in case of success.
  */
 
 extern int
-ancil_recv_fds(int, int *, unsigned);
+ancil_recv_fds(int, int *, unsigned, char *, size_t);
 /*
- * ancil_recv_fds(sock, n_fds, fds)
+ * ancil_recv_fds(sock, fds, n_fds, data_buf, data_buf_size)
  *
  * Receives *n_fds file descriptors into the array pointed by fds
  * from the socket sock.
@@ -107,15 +108,15 @@ ancil_recv_fds(int, int *, unsigned);
 
 
 extern int
-ancil_send_fd(int, int);
-/* ancil_recv_fd(sock, fd);
+ancil_send_fd(int, int, const char *, size_t);
+/* ancil_recv_fd(sock, fd, data, data_size);
  *
  * Sends the file descriptor fd on the socket sock.
  * Returns : -1 and errno in case of error, 0 in case of success.
  */
 
 extern int
-ancil_recv_fd(int, int *);
+ancil_recv_fd(int, int *, char *, size_t);
 /* ancil_send_fd(sock, &fd);
  *
  * Receives the file descriptor fd from the socket sock.

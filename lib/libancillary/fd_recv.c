@@ -44,55 +44,58 @@
 #include "ancillary.h"
 
 int
-ancil_recv_fds_with_buffer(int sock, int *fds, unsigned n_fds, void *buffer)
+ancil_recv_fds_with_buffer(int sock, int *fds, unsigned n_fds, char *data_buf, size_t buf_sz, void *buffer)
 {
-    struct msghdr msghdr;
-    char nothing;
-    struct iovec nothing_ptr;
-    struct cmsghdr *cmsg;
-    unsigned i;
-
-    nothing_ptr.iov_base = &nothing;
-    nothing_ptr.iov_len = 1;
-    msghdr.msg_name = NULL;
-    msghdr.msg_namelen = 0;
-    msghdr.msg_iov = &nothing_ptr;
-    msghdr.msg_iovlen = 1;
-    msghdr.msg_flags = 0;
-    msghdr.msg_control = buffer;
-    msghdr.msg_controllen = sizeof(struct cmsghdr) + sizeof(int) * n_fds;
-    cmsg = CMSG_FIRSTHDR(&msghdr);
-    cmsg->cmsg_len = msghdr.msg_controllen;
-    cmsg->cmsg_level = SOL_SOCKET;
-    cmsg->cmsg_type = SCM_RIGHTS;
-    for(i = 0; i < n_fds; i++)
-	((int *)CMSG_DATA(cmsg))[i] = -1;
-    
-    if(recvmsg(sock, &msghdr, 0) < 0)
-	return(-1);
-    for(i = 0; i < n_fds; i++)
-	fds[i] = ((int *)CMSG_DATA(cmsg))[i];
-    n_fds = (cmsg->cmsg_len - sizeof(struct cmsghdr)) / sizeof(int);
-    return(n_fds);
+  struct msghdr msghdr;
+  struct iovec iov;
+  struct cmsghdr *cmsg;
+  unsigned i;
+  assert(data_buf);
+  assert(buf_sz > 0);
+  iov.iov_base = data_buf;
+  iov.iov_len = buf_sz;
+  msghdr.msg_name = NULL;
+  msghdr.msg_namelen = 0;
+  msghdr.msg_iov = &iov;
+  msghdr.msg_iovlen = 1;
+  msghdr.msg_flags = 0;
+  msghdr.msg_control = buffer;
+  msghdr.msg_controllen = sizeof(struct cmsghdr) + sizeof(int) * n_fds;
+  cmsg = CMSG_FIRSTHDR(&msghdr);
+  cmsg->cmsg_len = msghdr.msg_controllen;
+  cmsg->cmsg_level = SOL_SOCKET;
+  cmsg->cmsg_type = SCM_RIGHTS;
+  for(i = 0; i < n_fds; i++) {
+    ((int *)CMSG_DATA(cmsg))[i] = -1;
+  }
+  
+  if(recvmsg(sock, &msghdr, 0) < 0) {
+    return(-1);
+  }
+  for(i = 0; i < n_fds; i++) {
+    fds[i] = ((int *)CMSG_DATA(cmsg))[i];
+  }
+  n_fds = (cmsg->cmsg_len - sizeof(struct cmsghdr)) / sizeof(int);
+  return(n_fds);
 }
 
 #ifndef SPARE_RECV_FDS
 int
-ancil_recv_fds(int sock, int *fd, unsigned n_fds)
+ancil_recv_fds(int sock, int *fd, unsigned n_fds, char *data_buf, size_t buf_sz)
 {
     ANCIL_FD_BUFFER(ANCIL_MAX_N_FDS) buffer;
 
     assert(n_fds <= ANCIL_MAX_N_FDS);
-    return(ancil_recv_fds_with_buffer(sock, fd, n_fds, &buffer));
+    return(ancil_recv_fds_with_buffer(sock, fd, n_fds, data_buf, buf_sz, &buffer));
 }
 #endif /* SPARE_RECV_FDS */
 
 #ifndef SPARE_RECV_FD
 int
-ancil_recv_fd(int sock, int *fd)
+ancil_recv_fd(int sock, int *fd, char *data_buf, size_t buf_sz)
 {
     ANCIL_FD_BUFFER(1) buffer;
 
-    return(ancil_recv_fds_with_buffer(sock, fd, 1, &buffer) == 1 ? 0 : -1);
+    return(ancil_recv_fds_with_buffer(sock, fd, 1, data_buf, buf_sz, &buffer) == 1 ? 0 : -1);
 }
 #endif /* SPARE_RECV_FD */
