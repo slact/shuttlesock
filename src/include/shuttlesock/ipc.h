@@ -42,15 +42,32 @@ typedef struct shuso_ipc_outbuf_s {
   struct shuso_ipc_outbuf_s *next;
 } shuso_ipc_outbuf_t;
 
+typedef void shuso_ipc_receive_fd_fn(struct shuso_s *ctx, bool ok, uintptr_t ref, int fd, void *received_pd, void *pd);
+typedef struct {
+  uintptr_t                 ref;
+  shuso_ipc_receive_fd_fn  *callback;
+  void                     *pd;
+  struct {
+    int                      *array;
+    size_t                    count;
+  }                         buffered_fds;
+  const char               *description;
+} shuso_ipc_fd_receiver_t;
+
 typedef struct {
   ev_timer              send_retry;
   struct {
     shuso_ipc_outbuf_t   *first;
     shuso_ipc_outbuf_t   *last;
   }                     buf;
+  struct {
+    shuso_ipc_fd_receiver_t *array;
+    size_t                count;
+  }                     fd_receiver;
   ev_io                 receive;
   ev_io                 socketpipe_receive;
 } shuso_ipc_channel_local_t;
+
 
 typedef struct {
   int                   fd_socketpipe[2];
@@ -72,6 +89,12 @@ bool shuso_ipc_channel_shared_stop(struct shuso_s *, struct shuso_process_s *);
 bool shuso_ipc_send(struct shuso_s *, struct shuso_process_s *, const uint8_t code, void *ptr);
 bool shuso_ipc_send_workers(struct shuso_s *, const uint8_t code, void *ptr);
 bool shuso_ipc_add_handler(struct shuso_s *,  const char *name, const uint8_t code, shuso_ipc_fn *, shuso_ipc_fn *);
+
+
+bool shuso_ipc_send_fd(struct shuso_s *, struct shuso_process_s *, int fd, uintptr_t ref, void *pd);
+
+bool shuso_ipc_receive_fd_start(struct shuso_s *ctx, const char *description, shuso_ipc_receive_fd_fn *callback, uintptr_t ref, void *pd);
+bool shuso_ipc_receive_fd_finish(struct shuso_s *ctx, uintptr_t ref);
 
 //some built-in IPC commands
 
