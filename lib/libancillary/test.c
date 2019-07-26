@@ -39,74 +39,76 @@
 
 void child_process(int sock)
 {
-    int fd;
-    int fds[3], nfds;
-    char b[] = "This is on the received fd!\n";
+  int fd;
+  int fds[3], nfds;
+  char b[] = "This is on the received fd!\n";
+  size_t bytes;
+  char databuf[32];
+  
+  if(ancil_recv_fd(sock, &fd, databuf, 32, &bytes) == -1) {
+    perror("ancil_recv_fd");
+    exit(1);
+  } else {
+    printf("Received fd: %d data_bytes: %zu, data: %s\n", fd, bytes, databuf);
+  }
+  write(fd, b, sizeof(b));
+  close(fd);
+  sleep(2);
 
-    if(ancil_recv_fd(sock, &fd)) {
-	perror("ancil_recv_fd");
-	exit(1);
-    } else {
-	printf("Received fd: %d\n", fd);
-    }
-    write(fd, b, sizeof(b));
-    close(fd);
-    sleep(2);
-
-    nfds = ancil_recv_fds(sock, fds, 3);
-    if(nfds < 0) {
-	perror("ancil_recv_fds");
-	exit(1);
-    } else {
-	printf("Received %d/3 fds : %d %d %d.\n", nfds,
-	    fds[0], fds[1], fds[2]);
+  nfds = ancil_recv_fds(sock, fds, 3, databuf, 32, &bytes);
+  if(nfds < 0) {
+    perror("ancil_recv_fds");
+  exit(1);
+  } else {
+    printf("Received %d/3 fds : %d %d %d. data_bytes: %zu, data: %s\n", nfds,
+           fds[0], fds[1], fds[2], bytes, databuf);
     }
 }
 
 void parent_process(int sock)
 {
-    int fds[2] = { 1, 2 };
+  int fds[2] = { 1, 2 };
 
-    if(ancil_send_fd(sock, 1)) {
-	perror("ancil_send_fd");
-	exit(1);
-    } else {
-	printf("Sent fd.\n");
-    }
-    sleep(1);
+  if(ancil_send_fd(sock, 1, "beep", sizeof("beep"))) {
+    perror("ancil_send_fd");
+    exit(1);
+  } else {
+    printf("Sent fd.\n");
+  }
+  sleep(1);
 
-    if(ancil_send_fds(sock, fds, 2)) {
-	perror("ancil_send_fds");
-	exit(1);
-    } else {
-	printf("Sent two fds.\n");
-    }
+  if(ancil_send_fds(sock, fds, 2, "foobar", sizeof("foobar"))) {
+    perror("ancil_send_fds");
+    exit(1);
+  } else {
+    printf("Sent two fds.\n");
+  }
 }
 
 int main(void)
 {
-    int sock[2];
+  int sock[2];
 
-    if(socketpair(PF_UNIX, SOCK_STREAM, 0, sock)) {
-	perror("socketpair");
-	exit(1);
-    } else {
-	printf("Established socket pair: (%d, %d)\n", sock[0], sock[1]);
-    }
+  if(socketpair(PF_UNIX, SOCK_STREAM, 0, sock)) {
+    perror("socketpair");
+    exit(1);
+  } else {
+    printf("Established socket pair: (%d, %d)\n", sock[0], sock[1]);
+  }
 
-    switch(fork()) {
-	case 0:
-	    close(sock[0]);
-	    child_process(sock[1]);
-	    break;
-	case -1:
-	    perror("fork");
-	    exit(1);
-	default:
-	    close(sock[1]);
-	    parent_process(sock[0]);
-	    wait(NULL);
-	    break;
-    }
-    return(0);
+  switch(fork()) {
+  case 0:
+    close(sock[0]);
+    child_process(sock[1]);
+    break;
+  case -1:
+    perror("fork");
+    exit(1);
+  default:
+    close(sock[1]);
+    parent_process(sock[0]);
+    wait(NULL);
+    break;
+  }
+  return(0);
 }

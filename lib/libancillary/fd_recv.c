@@ -44,12 +44,13 @@
 #include "ancillary.h"
 
 int
-ancil_recv_fds_with_buffer(int sock, int *fds, unsigned n_fds, char *data_buf, size_t buf_sz, void *buffer)
+ancil_recv_fds_with_buffer(int sock, int *fds, unsigned n_fds, char *data_buf, size_t buf_sz, size_t *data_bytes_received, void *buffer)
 {
   struct msghdr msghdr;
   struct iovec iov;
   struct cmsghdr *cmsg;
   unsigned i;
+  int bytes;
   assert(data_buf);
   assert(buf_sz > 0);
   iov.iov_base = data_buf;
@@ -69,8 +70,14 @@ ancil_recv_fds_with_buffer(int sock, int *fds, unsigned n_fds, char *data_buf, s
     ((int *)CMSG_DATA(cmsg))[i] = -1;
   }
   
-  if(recvmsg(sock, &msghdr, 0) < 0) {
+  if((bytes = recvmsg(sock, &msghdr, 0)) < 0) {
+    if(data_bytes_received) {
+      *data_bytes_received = 0;
+    }
     return(-1);
+  }
+  if(data_bytes_received) {
+    *data_bytes_received = bytes;
   }
   for(i = 0; i < n_fds; i++) {
     fds[i] = ((int *)CMSG_DATA(cmsg))[i];
@@ -81,21 +88,21 @@ ancil_recv_fds_with_buffer(int sock, int *fds, unsigned n_fds, char *data_buf, s
 
 #ifndef SPARE_RECV_FDS
 int
-ancil_recv_fds(int sock, int *fd, unsigned n_fds, char *data_buf, size_t buf_sz)
+ancil_recv_fds(int sock, int *fd, unsigned n_fds, char *data_buf, size_t buf_sz, size_t *data_bytes_received)
 {
     ANCIL_FD_BUFFER(ANCIL_MAX_N_FDS) buffer;
 
     assert(n_fds <= ANCIL_MAX_N_FDS);
-    return(ancil_recv_fds_with_buffer(sock, fd, n_fds, data_buf, buf_sz, &buffer));
+    return(ancil_recv_fds_with_buffer(sock, fd, n_fds, data_buf, buf_sz, data_bytes_received, &buffer));
 }
 #endif /* SPARE_RECV_FDS */
 
 #ifndef SPARE_RECV_FD
 int
-ancil_recv_fd(int sock, int *fd, char *data_buf, size_t buf_sz)
+ancil_recv_fd(int sock, int *fd, char *data_buf, size_t buf_sz, size_t *data_bytes_received)
 {
     ANCIL_FD_BUFFER(1) buffer;
 
-    return(ancil_recv_fds_with_buffer(sock, fd, 1, data_buf, buf_sz, &buffer) == 1 ? 0 : -1);
+    return(ancil_recv_fds_with_buffer(sock, fd, 1, data_buf, buf_sz, data_bytes_received, &buffer) == 1 ? 0 : -1);
 }
 #endif /* SPARE_RECV_FD */
