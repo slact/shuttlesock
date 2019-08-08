@@ -1,7 +1,7 @@
 #include <shuttlesock.h>
 #include <shuttlesock/ipc.h>
 #include <shuttlesock/log.h>
-#include "shuttlesock_private.h"
+#include <shuttlesock/shared_slab.h>
 #include <stdlib.h>
 #include <signal.h>
 #include <sys/socket.h>
@@ -26,9 +26,6 @@ static void signal_handle(shuso_t *ctx, const uint8_t code, void *ptr) {
   }
 }
 
-static void signal_cancel(shuso_t *ctx, const uint8_t code, void *ptr) {
-  
-}
 
 static void shutdown_handle(shuso_t *ctx, const uint8_t code, void *ptr) {
   shuso_stop_t stop_type = (shuso_stop_t )(intptr_t )ptr;
@@ -43,36 +40,35 @@ static void shutdown_handle(shuso_t *ctx, const uint8_t code, void *ptr) {
     shuso_stop_worker(ctx, ctx->process, stop_type);
   }
 }
-static void shutdown_cancel(shuso_t *ctx, const uint8_t code, void *ptr) {
-  
-}
 
 static void reconfigure_handle(shuso_t *ctx, const uint8_t code, void *ptr) {
-  
-}
-static void reconfigure_cancel(shuso_t *ctx, const uint8_t code, void *ptr) {
   
 }
 
 static void set_log_fd_handle(shuso_t *ctx, const uint8_t code, void *ptr) {
   ctx->common->log.fd = (intptr_t )ptr;
 }
-static void set_log_fd_cancel(shuso_t *ctx, const uint8_t code, void *ptr) {
-  
-}
+
+static void open_listener_sockets_handle(shuso_t *ctx, const uint8_t code, void *ptr);
+static void open_listener_sockets_response_handle(shuso_t *ctx, const uint8_t code, void *ptr);
 
 bool shuso_ipc_commands_init(shuso_t *ctx) {
-  if(!shuso_ipc_add_handler(ctx, "signal", SHUTTLESOCK_IPC_CMD_SIGNAL, signal_handle, signal_cancel)) {
+  if(!shuso_ipc_add_handler(ctx, "signal", SHUTTLESOCK_IPC_CMD_SIGNAL, signal_handle, NULL)) {
     return false;
   }
-  if(!shuso_ipc_add_handler(ctx, "shutdown", SHUTTLESOCK_IPC_CMD_SHUTDOWN, shutdown_handle, shutdown_cancel)) {
+  if(!shuso_ipc_add_handler(ctx, "shutdown", SHUTTLESOCK_IPC_CMD_SHUTDOWN, shutdown_handle, NULL)) {
     return false;
   }
-  if(!shuso_ipc_add_handler(ctx, "reconfigure", SHUTTLESOCK_IPC_CMD_RECONFIGURE, reconfigure_handle, reconfigure_cancel)) {
+  if(!shuso_ipc_add_handler(ctx, "reconfigure", SHUTTLESOCK_IPC_CMD_RECONFIGURE, reconfigure_handle, NULL)) {
     return false;
   }
-  if(!shuso_ipc_add_handler(ctx, "set_log_fd", SHUTTLESOCK_IPC_CMD_SET_LOG_FD,
-                        set_log_fd_handle, set_log_fd_cancel)) {
+  if(!shuso_ipc_add_handler(ctx, "set_log_fd", SHUTTLESOCK_IPC_CMD_SET_LOG_FD, set_log_fd_handle, NULL)) {
+    return false;
+  }
+  if(!shuso_ipc_add_handler(ctx, "open_listener_sockets", SHUTTLESOCK_IPC_CMD_OPEN_LISTENER_SOCKETS, open_listener_sockets_handle, NULL)) {
+    return false;
+  }
+  if(!shuso_ipc_add_handler(ctx, "open_listener_sockets_response", SHUTTLESOCK_IPC_CMD_OPEN_LISTENER_SOCKETS_RESPONSE, open_listener_sockets_response_handle, NULL)) {
     return false;
   }
 
@@ -80,7 +76,10 @@ bool shuso_ipc_commands_init(shuso_t *ctx) {
 }
 
 
-bool shuso_ipc_command_open_listener_sockets(shuso_t *ctx, shuso_hostinfo_t *hostinfo, int count, void (*callback)(bool ok, shuso_t *, shuso_hostinfo_t *, int *sockets, int socket_count, void *pd), void *pd) {
+static bool command_open_listener_sockets_from_manager(shuso_t *ctx, shuso_hostinfo_t *hostinfo, int count, shuso_sockopts_t *sockopts, shuso_ipc_open_sockets_fn callback, void *pd);
+static bool command_open_listener_sockets_from_worker(shuso_t *ctx, shuso_hostinfo_t *hostinfo, int count, shuso_sockopts_t *sockopts, shuso_ipc_open_sockets_fn callback, void *pd);
+
+bool shuso_ipc_command_open_listener_sockets(shuso_t *ctx, shuso_hostinfo_t *hostinfo, int count, shuso_sockopts_t *sockopts, shuso_ipc_open_sockets_fn callback, void *pd) {
   
   int                  *opened = NULL;
   int                   i = 0;
@@ -144,16 +143,31 @@ bool shuso_ipc_command_open_listener_sockets(shuso_t *ctx, shuso_hostinfo_t *hos
         err = "failed to create listener socket";
         goto fail;
       }
+      for(unsigned j=0; j < sockopts->count; j++) {
+        shuso_sockopt_t *opt = &sockopts->array[j];
+        if(setsockopt(opened[i], opt->level, opt->name, &opt->intvalue, sizeof(opt->intvalue)) < 0) {
+          err = "failed to set sockopt on new listener socket";
+          goto fail;
+        }
+      }
+      
       shuso_set_nonblocking(opened[i]);
       if(bind(opened[i], sa, addr_len) == -1) {
         err = "failed to bind listener socket";
         goto fail;
       }
     }
+    callback(ctx, true, hostinfo, opened, count, pd);
     free(opened);
+    return true;
+  }
+  else if(ctx->procnum == SHUTTLESOCK_MANAGER) {
+    return command_open_listener_sockets_from_manager(ctx, hostinfo, count, sockopts, callback, pd);
+  }
+  else if(ctx->procnum >= SHUTTLESOCK_WORKER) {
+    return command_open_listener_sockets_from_worker(ctx, hostinfo, count, sockopts, callback, pd);
   }
   
-  return true;
 fail:
   if(err) shuso_set_error(ctx, err);
   callback(false, ctx, hostinfo, NULL, 0, pd);
@@ -166,4 +180,131 @@ fail:
     free(opened);
   }
   return false; 
+}
+
+typedef struct {
+  shuso_hostinfo_t     hostinfo;
+  char                *path;
+  shuso_ipc_open_sockets_fn *callback;
+  void                *pd;
+  bool                 ok;
+  char                 err[512];
+  int                  errno;
+  shuso_sockopts_t     sockopts;
+  unsigned             socket_count;
+  int                  sockets[];
+} ipc_open_sockets_t;
+
+
+static bool free_shared_open_sockets_struct(shuso_t *ctx, ipc_open_sockets_t *sockreq) {
+  if(sockreq->path) {
+    shuso_shared_slab_free(&ctx->common->shm, sockreq->path);
+  }
+  if(sockreq->hostinfo.name) {
+    shuso_shared_slab_free(&ctx->common->shm, (void *)sockreq->hostinfo.name);
+  }
+  if(sockreq->sockopts.array) {
+    shuso_shared_slab_free(&ctx->common->shm, (void *)sockreq->sockopts.array);
+  }
+  shuso_shared_slab_free(&ctx->common->shm, sockreq);
+  return true;
+}
+
+static bool command_open_listener_sockets_from_manager(shuso_t *ctx, shuso_hostinfo_t *hostinfo, int count, shuso_sockopts_t *sockopts, shuso_ipc_open_sockets_fn callback, void *pd) {
+  assert(ctx->procnum == SHUTTLESOCK_MANAGER);
+  const char          *err = NULL;
+  ipc_open_sockets_t  *sockreq = shuso_shared_slab_alloc(&ctx->common->shm, sizeof(*sockreq) + sizeof(int)*count);
+  if(!sockreq) {
+    err = "failed to allocate shared memory for listener socket request";
+    goto fail;
+  }
+  
+  sockreq->sockopts.array = NULL;
+  if(sockopts) {
+    sockreq->sockopts.array = shuso_shared_slab_alloc(&ctx->common->shm, sizeof(shuso_sockopt_t)*sockopts->count);
+    if(!sockreq->sockopts.array) {
+      err = "failed to allocate shared memory for listener socket sockopts";
+      goto fail;
+    }
+    sockreq->sockopts.count = sockopts->count;
+    memcpy(sockreq->sockopts.array, sockopts->array, sizeof(shuso_sockopt_t)*sockopts->count);
+  }
+  
+  sockreq->hostinfo = *hostinfo;
+  if(hostinfo->name && strlen(hostinfo->name) > 0) {
+    sockreq->hostinfo.name =  shuso_shared_slab_alloc(&ctx->common->shm, strlen(hostinfo->name)+1);
+    if(!sockreq->hostinfo.name) {
+      err = "failed to allocate shared memory for listener socket request name";
+      goto fail;
+    }
+    strcpy((char *)sockreq->hostinfo.name, hostinfo->name);
+  }
+  
+  if(hostinfo->addr_family == AF_UNIX) {
+    sockreq->path = shuso_shared_slab_alloc(&ctx->common->shm, strlen(hostinfo->path)+1);
+    if(!sockreq->path) {
+      err = "failed to allocate shared memory for listener socket request path";
+      goto fail;
+    }
+    strcpy(sockreq->path, hostinfo->path);
+    sockreq->hostinfo.path = sockreq->path;
+  }
+  
+  if(!shuso_ipc_send(ctx, &ctx->common->process.master, SHUTTLESOCK_IPC_CMD_OPEN_LISTENER_SOCKETS, sockreq)) {
+    err = "failed to send ipc request to master to open listerener sockets";
+    goto fail;
+  }
+  return true;
+fail:
+  if(err) shuso_set_error(ctx, err);
+  if(sockreq) free_shared_open_sockets_struct(ctx, sockreq);
+  callback(false, ctx, hostinfo, NULL, 0, pd);
+  return false;
+}
+
+static void open_listener_sockets_handle_callback(shuso_t *ctx, bool ok, shuso_hostinfo_t *hostinfo, int *sockets, int socket_count, void *pd) {
+  ipc_open_sockets_t *sockreq = pd;
+  sockreq->ok = ok;
+  shuso_ipc_send(ctx, &ctx->common->process.manager, SHUTTLESOCK_IPC_CMD_OPEN_LISTENER_SOCKETS_RESPONSE, sockreq);
+  if(ok) {
+    sockreq->ok = false;
+    for(int i=0; i<socket_count; i++) {
+      shuso_ipc_send_fd(ctx, &ctx->common->process.manager, sockets[i], (uintptr_t)sockreq, (void *)(intptr_t)i);
+    }
+  }
+}
+static void open_listener_sockets_handle(shuso_t *ctx, const uint8_t code, void *ptr) {
+  ipc_open_sockets_t *sockreq = ptr;
+  assert(ctx->procnum == SHUTTLESOCK_MASTER);
+  shuso_ipc_command_open_listener_sockets(ctx, &sockreq->hostinfo, sockreq->socket_count, &sockreq->sockopts, open_listener_sockets_handle_callback, sockreq);
+}
+
+static void listener_socket_receiver(shuso_t *ctx, bool ok, uintptr_t ref, int fd, void *received_pd, void *pd){
+  uintptr_t n = (uintptr_t)received_pd;
+  ipc_open_sockets_t *sockreq = pd;
+  if(ok) {
+    assert(n < sockreq->socket_count);
+    assert(fd != -1);
+    sockreq->sockets[n]=fd;
+    if(n+1 == sockreq->socket_count) { //ok, that was the last one
+      shuso_ipc_receive_fd_finish(ctx, ref);
+      sockreq->callback(ctx, true, &sockreq->hostinfo, sockreq->sockets, sockreq->socket_count, sockreq->pd);
+      free_shared_open_sockets_struct(ctx, sockreq);
+    }
+  }
+  else {
+    shuso_ipc_receive_fd_finish(ctx, ref);
+    sockreq->callback(ctx, false, &sockreq->hostinfo, NULL, 0, sockreq->pd);
+    free_shared_open_sockets_struct(ctx, sockreq);
+  }
+}
+
+static void open_listener_sockets_response_handle(shuso_t *ctx, const uint8_t code, void *ptr) {
+  shuso_ipc_receive_fd_start(ctx, "open listener sockets response", listener_socket_receiver, (uintptr_t) ptr, NULL);
+}
+
+
+static bool command_open_listener_sockets_from_worker(shuso_t *ctx, shuso_hostinfo_t *hostinfo, int count, shuso_sockopts_t *sockopts, shuso_ipc_open_sockets_fn callback, void *pd) {
+  
+  return true;
 }

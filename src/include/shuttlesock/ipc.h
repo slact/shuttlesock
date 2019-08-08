@@ -15,6 +15,7 @@
 struct shuso_s;
 struct shuso_process_s;
 struct shuso_hostinfo_s;
+struct shuso_sockopts_s;
 
 typedef struct {
   _Atomic uint8_t    next_read;
@@ -98,7 +99,9 @@ bool shuso_ipc_receive_fd_finish(struct shuso_s *ctx, uintptr_t ref);
 
 //some built-in IPC commands
 
-bool shuso_ipc_command_open_listener_sockets(struct shuso_s *, struct shuso_hostinfo_s *, int count, void (*callback)(bool ok, struct shuso_s *, struct shuso_hostinfo_s *, int *sockets, int socket_count, void *pd), void *pd);
+typedef void (shuso_ipc_open_sockets_fn)(struct shuso_s *, bool ok, struct shuso_hostinfo_s *, int *sockets, int socket_count, void *pd);
+
+bool shuso_ipc_command_open_listener_sockets(struct shuso_s *, struct shuso_hostinfo_s *, int count, struct shuso_sockopts_s *, shuso_ipc_open_sockets_fn *callback, void *pd);
 
 
 #endif //SHUTTLESOCK_IPC_H

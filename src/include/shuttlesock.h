@@ -49,6 +49,18 @@ typedef struct shuso_process_s {
 typedef struct shuso_s shuso_t;
 typedef struct shuso_config_s shuso_config_t;
 
+//params for setsockopt()
+typedef struct {
+  int           level;
+  int           name;
+  int           intvalue;
+} shuso_sockopt_t;
+
+typedef struct shuso_sockopts_s {
+  size_t           count;
+  shuso_sockopt_t *array;
+} shuso_sockopts_t;
+
 typedef struct shuso_hostinfo_s {
   const char        *name;
   union {
@@ -98,8 +110,10 @@ struct shuso_config_s {
   struct {          //resolver
     int                 timeout; //milliseconds
     int                 tries;
-    shuso_hostinfo_t   *hosts;
-    off_t               hosts_count;
+    struct {
+      off_t               count;
+      shuso_hostinfo_t   *array;
+    }                   hosts;
   }                   resolver;
   size_t              shared_slab_size;
   const char         *username;

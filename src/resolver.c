@@ -27,9 +27,9 @@ bool shuso_resolver_init(shuso_t *ctx, shuso_config_t *cf, shuso_resolver_t *res
   bool                         ares_initialized = false;
   const char                  *err = NULL;
   int                          rc;
-  shuso_hostinfo_t            *cf_host = cf->resolver.hosts;
+  shuso_hostinfo_t            *cf_host = cf->resolver.hosts.array;
   struct ares_addr_port_node  *hosts = NULL;
-  int                          hosts_count = cf->resolver.hosts_count;
+  int                          hosts_count = cf->resolver.hosts.count;
   struct ares_options          opt = resolver->options;
   int                          optmask = resolver->options_mask | ARES_OPT_SOCK_STATE_CB;
   
@@ -235,7 +235,8 @@ typedef struct {
   void               *pd;
 } shuso_resolve_hostname_data_t;
 
-static void shuso_resolve_hostname_callback(void *arg, int status, int timeouts, struct hostent *hostent) {
+static void shuso_resolve_hostname_callback(void *arg, int status,
+ int timeouts, struct hostent *hostent) {
   shuso_resolver_result_t result;
   switch(status) {
     case ARES_SUCCESS:
