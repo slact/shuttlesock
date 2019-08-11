@@ -86,6 +86,7 @@ add_library(ancillary STATIC
   lib/libancillary/fd_recv.c
   lib/libancillary/fd_send.c
 )
+target_link_libraries(shuttlesock PRIVATE ancillary)
 
 #Linux kernel's io_uring
 include(TestIoUringHeaders)

@@ -45,11 +45,15 @@ typedef struct shuso_ipc_outbuf_s {
 
 typedef void shuso_ipc_receive_fd_fn(struct shuso_s *ctx, bool ok, uintptr_t ref, int fd, void *received_pd, void *pd);
 typedef struct {
+  int      fd;
+  void    *pd;
+} shuso_ipc_buffered_fd_t;
+typedef struct {
   uintptr_t                 ref;
   shuso_ipc_receive_fd_fn  *callback;
   void                     *pd;
   struct {
-    int                      *array;
+    shuso_ipc_buffered_fd_t  *array;
     size_t                    count;
   }                         buffered_fds;
   const char               *description;
@@ -66,12 +70,12 @@ typedef struct {
     size_t                count;
   }                     fd_receiver;
   ev_io                 receive;
-  ev_io                 socketpipe_receive;
+  ev_io                 socket_transfer_receive;
 } shuso_ipc_channel_local_t;
 
 
 typedef struct {
-  int                   fd_socketpipe[2];
+  int                   socket_transfer_fd[2];
   int                   fd[2];
   shuso_ipc_ringbuf_t  *buf;
 } shuso_ipc_channel_shared_t;

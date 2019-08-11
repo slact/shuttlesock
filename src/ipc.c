@@ -7,13 +7,14 @@
 #include <assert.h>
 #include <shuttlesock/shared_slab.h>
 #include <ancillary.h>
+#include <errno.h>
 #ifdef SHUTTLESOCK_USE_EVENTFD
 #include <sys/eventfd.h>
 #endif
 
 static void ipc_send_retry_cb(EV_P_ ev_timer *w, int revents);
 static void ipc_receive_cb(EV_P_ ev_io *w, int revents);
-static void ipc_socketpipe_receive_cb(EV_P_ ev_io *w, int revents);
+static void ipc_socket_transfer_receive_cb(EV_P_ ev_io *w, int revents);
 
 bool shuso_ipc_channel_shared_create(shuso_t *ctx, shuso_process_t *proc) {
   int               procnum = shuso_process_to_procnum(ctx, proc);
@@ -47,13 +48,13 @@ bool shuso_ipc_channel_shared_create(shuso_t *ctx, shuso_process_t *proc) {
   proc->ipc.fd[1] = fds[1];
   //shuso_log(ctx, "created shared IPC channel fds: %d %d", fds[0], fds[1]);
   
-  //open socket-pipe
-  if(pipe(proc->ipc.fd_socketpipe) == -1) {
-    return shuso_set_error(ctx, "failed to create IPC channel fd pipe");
+  //open socket-transfer sockets
+  if((socketpair(PF_LOCAL, SOCK_STREAM, 0, proc->ipc.socket_transfer_fd)) == -1) {
+    return shuso_set_error(ctx, "failed to create IPC channel socket transfer socket");
   }
-  fcntl(proc->ipc.fd_socketpipe[0], F_SETFL, O_NONBLOCK);
-  fcntl(proc->ipc.fd_socketpipe[1], F_SETFL, O_NONBLOCK);
-  
+  fcntl(proc->ipc.socket_transfer_fd[0], F_SETFL, O_NONBLOCK);
+  fcntl(proc->ipc.socket_transfer_fd[1], F_SETFL, O_NONBLOCK);
+  shuso_log(ctx, "created socket_transfer_fd %p %d<=>%d", (void *)&proc->ipc.socket_transfer_fd, proc->ipc.socket_transfer_fd[0], proc->ipc.socket_transfer_fd[1]);
   return true;
 }
 
@@ -76,6 +77,14 @@ bool shuso_ipc_channel_shared_destroy(shuso_t *ctx, shuso_process_t *proc) {
     close(proc->ipc.fd[1]);
     proc->ipc.fd[1] = -1;
   }
+  if(proc->ipc.socket_transfer_fd[0] != -1) {
+    close(proc->ipc.socket_transfer_fd[0]);
+    proc->ipc.socket_transfer_fd[0] = -1;
+  }
+  if(proc->ipc.socket_transfer_fd[1] != -1) {
+    close(proc->ipc.socket_transfer_fd[1]);
+    proc->ipc.socket_transfer_fd[1] = -1;
+  }
   return true;
 }
 
@@ -84,7 +93,7 @@ bool shuso_ipc_channel_local_init(shuso_t *ctx) {
   ev_timer_init(&ctx->ipc.send_retry, ipc_send_retry_cb, 0.0, ctx->common->config.ipc.send_retry_delay);
   ctx->ipc.send_retry.data = ctx->process;
   ctx->ipc.receive.data = ctx->process;
-  ctx->ipc.socketpipe_receive.data = ctx->process;
+  ctx->ipc.socket_transfer_receive.data = ctx->process;
   ctx->ipc.fd_receiver.count = 0;
   ctx->ipc.fd_receiver.array = NULL;
   
@@ -94,19 +103,19 @@ bool shuso_ipc_channel_local_init(shuso_t *ctx) {
   ev_io_init(&ctx->ipc.receive, ipc_receive_cb, proc->ipc.fd[0], EV_READ);
 #endif
   
-  ev_io_init(&ctx->ipc.socketpipe_receive, ipc_socketpipe_receive_cb, proc->ipc.fd_socketpipe[0], EV_READ);
+  ev_io_init(&ctx->ipc.socket_transfer_receive, ipc_socket_transfer_receive_cb, proc->ipc.socket_transfer_fd[0], EV_READ);
   return true;
 }
 
 bool shuso_ipc_channel_local_start(shuso_t *ctx) {
   //nothing to do
   ev_io_start(ctx->ev.loop, &ctx->ipc.receive);
-  ev_io_start(ctx->ev.loop, &ctx->ipc.socketpipe_receive);
+  ev_io_start(ctx->ev.loop, &ctx->ipc.socket_transfer_receive);
   return true;
 }
 bool shuso_ipc_channel_local_stop(shuso_t *ctx) {
   ev_io_stop(ctx->ev.loop, &ctx->ipc.receive);
-  ev_io_stop(ctx->ev.loop, &ctx->ipc.socketpipe_receive);
+  ev_io_stop(ctx->ev.loop, &ctx->ipc.socket_transfer_receive);
   
   shuso_ipc_handler_t *handler = ctx->common->ipc_handlers;
   for(shuso_ipc_outbuf_t *cur = ctx->ipc.buf.first, *next; cur != NULL; cur = next) {
@@ -127,8 +136,8 @@ bool shuso_ipc_channel_local_stop(shuso_t *ctx) {
       cur->callback(ctx, false, cur->ref, -1, NULL, cur->pd);
     }
     for(unsigned j=0; j<cur->buffered_fds.count; j++) {
-      if(cur->buffered_fds.array[j] != -1) {
-        close(cur->buffered_fds.array[j]);
+      if(cur->buffered_fds.array[j].fd != -1) {
+        close(cur->buffered_fds.array[j].fd);
       }
     }
     if(cur->buffered_fds.array) {
@@ -301,14 +310,27 @@ static void ipc_receive(shuso_t *ctx, shuso_process_t *proc) {
 
 bool shuso_ipc_send_fd(shuso_t *ctx, shuso_process_t *dst_proc, int fd, uintptr_t ref, void *pd) {
   uintptr_t buf[2] = {ref, (uintptr_t )pd};
-  return ancil_send_fd(dst_proc->ipc.fd_socketpipe[1], fd, (const char *)buf, sizeof(buf)) == 0;
+  return ancil_send_fd(dst_proc->ipc.socket_transfer_fd[1], fd, (const char *)buf, sizeof(buf)) == 0;
 }
 
 bool shuso_ipc_receive_fd_start(shuso_t *ctx, const char *description, shuso_ipc_receive_fd_fn *callback, uintptr_t ref, void *pd) {
   for(unsigned i = 0; i<ctx->ipc.fd_receiver.count; i++) {
-    if(ctx->ipc.fd_receiver.array[i].ref == ref) {
-      shuso_log(ctx, "ipc_receive_fd_start ref already exists, has already been started");
-      return false;
+    shuso_ipc_fd_receiver_t *cur = &ctx->ipc.fd_receiver.array[i];
+    if(cur->ref == ref) {
+      if(cur->callback != NULL) {
+        shuso_log(ctx, "ipc_receive_fd_start ref already exists, has already been started");
+        return false;
+      }
+      cur->callback = callback;
+      cur->pd = pd;
+      cur->description = description;
+      
+      for(unsigned j=0; j < cur->buffered_fds.count; j++) {
+        callback(ctx, true, ref, cur->buffered_fds.array[j].fd, cur->buffered_fds.array[j].pd, pd);
+      }
+      free(cur->buffered_fds.array);
+      cur->buffered_fds.array = NULL;
+      cur->buffered_fds.count = 0;
     }
   }
   shuso_ipc_fd_receiver_t *reallocd = realloc(ctx->ipc.fd_receiver.array, sizeof(shuso_ipc_fd_receiver_t) * ctx->ipc.fd_receiver.count + 1);
@@ -338,7 +360,7 @@ bool shuso_ipc_receive_fd_finish(shuso_t *ctx, uintptr_t ref) {
     if(ctx->ipc.fd_receiver.array[i].ref == ref) {
       found = &ctx->ipc.fd_receiver.array[i];
       for(unsigned j = 0; j<found->buffered_fds.count; j++) {
-        close(found->buffered_fds.array[j]);
+        close(found->buffered_fds.array[j].fd);
       }
       if(found->buffered_fds.array) free(found->buffered_fds.array);
     }
@@ -346,14 +368,21 @@ bool shuso_ipc_receive_fd_finish(shuso_t *ctx, uintptr_t ref) {
   if(!found) {
     return false;
   }
-  shuso_ipc_fd_receiver_t *reallocd = realloc(ctx->ipc.fd_receiver.array, sizeof(shuso_ipc_fd_receiver_t) * ctx->ipc.fd_receiver.count-1);
-  if(!reallocd) {
-    shuso_log(ctx, "ipc_receive_fd_finish failed, no memory for shrinking realloc()");
+  if(ctx->ipc.fd_receiver.count == 1) {
+    free(ctx->ipc.fd_receiver.array);
+    ctx->ipc.fd_receiver.array = NULL;
+    ctx->ipc.fd_receiver.count = 0;
   }
   else {
-    ctx->ipc.fd_receiver.array = reallocd;
+    shuso_ipc_fd_receiver_t *reallocd = realloc(ctx->ipc.fd_receiver.array, sizeof(shuso_ipc_fd_receiver_t) * ctx->ipc.fd_receiver.count-1);
+    if(!reallocd) {
+      shuso_log(ctx, "ipc_receive_fd_finish failed, no memory for shrinking realloc()");
+    }
+    else {
+      ctx->ipc.fd_receiver.array = reallocd;
+    }
+    ctx->ipc.fd_receiver.count--;
   }
-  ctx->ipc.fd_receiver.count--;
   return true;
 }
 
@@ -378,66 +407,62 @@ static void ipc_receive_cb(EV_P_ ev_io *w, int revents) {
   ipc_receive(ctx, proc);
 }
 
-static void ipc_socketpipe_receive_cb(EV_P_ ev_io *w, int revents) {
+static void ipc_socket_transfer_receive_cb(EV_P_ ev_io *w, int revents) {
   shuso_t            *ctx = ev_userdata(EV_A);
   shuso_process_t    *proc = w->data;
-  
   uintptr_t databuf[2];
   uintptr_t ref;
   void     *pd;
   size_t    data_received_sz;
   int       fd = -1;
   int       rc;
-  rc = ancil_recv_fd(proc->ipc.fd_socketpipe[0], &fd, (char *)databuf, sizeof(databuf), &data_received_sz);
-  if(rc == -1) {
-    shuso_log(ctx, "failed to receive file descriptor");
-    return;
-  }
-  if(data_received_sz != sizeof(databuf)) {
-    shuso_log(ctx, "failed to receive file descriptor: incorrect data size");
-    return;
-  }
-  ref = databuf[0];
-  pd = (void *)databuf[1];
-  
-  shuso_ipc_fd_receiver_t *found = NULL;
-  for(unsigned i=0; i<ctx->ipc.fd_receiver.count; i++) {
-    if(ctx->ipc.fd_receiver.array[i].ref == ref) {
-      found = &ctx->ipc.fd_receiver.array[i];
-      break;
+  while((rc = ancil_recv_fd(proc->ipc.socket_transfer_fd[0], &fd, (char *)databuf, sizeof(databuf), &data_received_sz)) != -1) {
+    if(data_received_sz != sizeof(databuf)) {
+      shuso_log(ctx, "failed to receive file descriptor: incorrect data size");
+      continue;
     }
-  }
-  if(!found) {
-    shuso_ipc_fd_receiver_t *reallocd = realloc(ctx->ipc.fd_receiver.array, sizeof(shuso_ipc_fd_receiver_t) * (ctx->ipc.fd_receiver.count+1));
-    if(!reallocd) {
-      shuso_log(ctx, "failed to receive file descriptor: no memory for realloc()");
-      if(fd != -1) close(fd);
-      return;
+    ref = databuf[0];
+    pd = (void *)databuf[1];
+    
+    shuso_ipc_fd_receiver_t *found = NULL;
+    for(unsigned i=0; i<ctx->ipc.fd_receiver.count; i++) {
+      if(ctx->ipc.fd_receiver.array[i].ref == ref) {
+        found = &ctx->ipc.fd_receiver.array[i];
+        break;
+      }
     }
-    ctx->ipc.fd_receiver.array = reallocd;
-    found = &reallocd[ctx->ipc.fd_receiver.count];
-    *found = (shuso_ipc_fd_receiver_t) {
-      .ref = ref,
-      .callback = NULL,
-      .pd = NULL,
-      .buffered_fds.array = NULL,
-      .buffered_fds.count = 0,
-      .description = "buffered sockets waiting to be received"
-    };
-    ctx->ipc.fd_receiver.count++;
-  }
-  if(found->callback) {
-    found->callback(ctx, true, found->ref, fd, pd, found->pd);
-  }
-  else {
-    int  *reallocd = realloc(found->buffered_fds.array, sizeof(int) * (found->buffered_fds.count+1));
-    if(!reallocd) {
-      shuso_log(ctx, "failed to receive file descriptor: no memory for buffered fd");
-      if(fd != -1) close(fd);
-      return;
+    if(!found) {
+      shuso_ipc_fd_receiver_t *reallocd = realloc(ctx->ipc.fd_receiver.array, sizeof(shuso_ipc_fd_receiver_t) * (ctx->ipc.fd_receiver.count+1));
+      if(!reallocd) {
+        shuso_log(ctx, "failed to receive file descriptor: no memory for realloc()");
+        if(fd != -1) close(fd);
+        continue;
+      }
+      ctx->ipc.fd_receiver.array = reallocd;
+      found = &reallocd[ctx->ipc.fd_receiver.count];
+      *found = (shuso_ipc_fd_receiver_t) {
+        .ref = ref,
+        .callback = NULL,
+        .pd = NULL,
+        .buffered_fds.array = NULL,
+        .buffered_fds.count = 0,
+        .description = "buffered sockets waiting to be received"
+      };
+      ctx->ipc.fd_receiver.count++;
     }
-    reallocd[found->buffered_fds.count]=fd;
-    found->buffered_fds.array = reallocd;
-    found->buffered_fds.count++;
+    if(found->callback) {
+      found->callback(ctx, true, found->ref, fd, pd, found->pd);
+    }
+    else {
+      shuso_ipc_buffered_fd_t  *reallocd = realloc(found->buffered_fds.array, sizeof(shuso_ipc_buffered_fd_t) * (found->buffered_fds.count+1));
+      if(!reallocd) {
+        shuso_log(ctx, "failed to receive file descriptor: no memory for buffered fd");
+        if(fd != -1) close(fd);
+        continue;
+      }
+      reallocd[found->buffered_fds.count] = (shuso_ipc_buffered_fd_t ) {.fd = fd, .pd = pd};
+      found->buffered_fds.array = reallocd;
+      found->buffered_fds.count++;
+    }
   }
 }
