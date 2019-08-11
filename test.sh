@@ -32,6 +32,9 @@ for opt in $*; do
       VALGRIND_OPT+=( "--vgdb=yes" "--vgdb-error=1" )
       #ATTACH_DDD=1
       ;;
+    debug)
+      debugger=1
+      ;;
     sanitize-undefined)
       FSANITIZE_UNDEFINED=1
       ;;
@@ -89,19 +92,7 @@ if [[ ! -f $TEST ]]; then
 fi
 
 if [[ $debugger == 1 ]]; then
-  $SUDO $TEST $TEST_OPT
-  if ! [ $? -eq 0 ]; then; 
-    echo "failed to start shuso_test"; 
-    exit 1
-  fi
-  sleep 0.2
-  attach_debugger "$DEBUGGER_NAME" "$DEBUGGER_CMD"
-  wait $debugger_pids
-  kill $master_pid
-elif [[ $debug_master == 1 ]]; then
-  pushd $SRCDIR
   sudo kdbg -a "$TEST_OPT" "$TEST"
-  popd
 elif [[ $valgrind == 1 ]]; then
   echo $SUDO valgrind $VALGRIND_OPT $TEST $TEST_OPT
   $SUDO valgrind $VALGRIND_OPT $TEST $TEST_OPT
