@@ -133,7 +133,7 @@ bool shuso_ipc_channel_local_stop(shuso_t *ctx) {
   for(unsigned i=0; i<ctx->ipc.fd_receiver.count; i++) {
     shuso_ipc_fd_receiver_t *cur = &ctx->ipc.fd_receiver.array[i];
     if(cur->callback) {
-      cur->callback(ctx, false, cur->ref, -1, NULL, cur->pd);
+      cur->callback(ctx, SHUSO_FAIL, cur->ref, -1, NULL, cur->pd);
     }
     for(unsigned j=0; j<cur->buffered_fds.count; j++) {
       if(cur->buffered_fds.array[j].fd != -1) {
@@ -308,46 +308,71 @@ static void ipc_receive(shuso_t *ctx, shuso_process_t *proc) {
 }
 
 
+static void ipc_receive_timeout_cb(EV_P_ ev_timer *w, int revents) {
+  shuso_t                   *ctx = ev_userdata(EV_A);
+  shuso_ipc_fd_receiver_t   *cur = w->data;
+  
+  if(cur->callback) {
+    cur->callback(ctx, SHUSO_TIMEOUT, cur->ref, -1, NULL, cur->pd);
+  }
+  shuso_ipc_receive_fd_finish(ctx, cur->ref);
+}
+
 bool shuso_ipc_send_fd(shuso_t *ctx, shuso_process_t *dst_proc, int fd, uintptr_t ref, void *pd) {
   uintptr_t buf[2] = {ref, (uintptr_t )pd};
   return ancil_send_fd(dst_proc->ipc.socket_transfer_fd[1], fd, (const char *)buf, sizeof(buf)) == 0;
 }
 
-bool shuso_ipc_receive_fd_start(shuso_t *ctx, const char *description, float timeout_msec, shuso_ipc_receive_fd_fn *callback, uintptr_t ref, void *pd) {
+bool shuso_ipc_receive_fd_start(shuso_t *ctx, const char *description, float timeout_sec, shuso_ipc_receive_fd_fn *callback, uintptr_t ref, void *pd) {
+  shuso_ipc_fd_receiver_t   *found = NULL;
   for(unsigned i = 0; i<ctx->ipc.fd_receiver.count; i++) {
     shuso_ipc_fd_receiver_t *cur = &ctx->ipc.fd_receiver.array[i];
     if(cur->ref == ref) {
-      if(cur->callback != NULL) {
-        shuso_log(ctx, "ipc_receive_fd_start ref already exists, has already been started");
-        return false;
-      }
-      cur->callback = callback;
-      cur->pd = pd;
-      cur->description = description;
-      
-      for(unsigned j=0; j < cur->buffered_fds.count; j++) {
-        callback(ctx, true, ref, cur->buffered_fds.array[j].fd, cur->buffered_fds.array[j].pd, pd);
-      }
-      free(cur->buffered_fds.array);
-      cur->buffered_fds.array = NULL;
-      cur->buffered_fds.count = 0;
+      found = cur;
+      break;
     }
   }
-  shuso_ipc_fd_receiver_t *reallocd = realloc(ctx->ipc.fd_receiver.array, sizeof(shuso_ipc_fd_receiver_t) * ctx->ipc.fd_receiver.count + 1);
-  if(!reallocd) {
-    shuso_log(ctx, "ipc_receive_fd_start ref failed, no memory for realloc()");
-    return false;
+  if(found) {
+    if(found->callback != NULL) {
+      shuso_log(ctx, "ipc_receive_fd_start ref already exists, has already been started");
+      return false;
+    }
+    found->callback = callback;
+    found->pd = pd;
+    found->description = description;
+    if(ev_is_active(&found->timeout) || ev_is_pending(&found->timeout)) {
+      ev_timer_stop(ctx->ev.loop, &found->timeout);
+    }
+    if(timeout_sec > 0) {
+      found->timeout.data = found;
+      ev_timer_init(&found->timeout, ipc_receive_timeout_cb, timeout_sec, 0);
+      ev_timer_start(ctx->ev.loop, &found->timeout);
+    }
+    
+    for(unsigned j=0; j < found->buffered_fds.count; j++) {
+      callback(ctx, SHUSO_OK, ref, found->buffered_fds.array[j].fd, found->buffered_fds.array[j].pd, pd);
+    }
+    free(found->buffered_fds.array);
+    found->buffered_fds.array = NULL;
+    found->buffered_fds.count = 0;
   }
-  reallocd[ctx->ipc.fd_receiver.count] = (shuso_ipc_fd_receiver_t) {
-    .ref = ref,
-    .callback = callback,
-    .pd = pd,
-    .buffered_fds.array = NULL,
-    .buffered_fds.count = 0,
-    .description = description ? description : "?"
-  };
-  ctx->ipc.fd_receiver.array = reallocd;
-  ctx->ipc.fd_receiver.count++;
+  else {
+    shuso_ipc_fd_receiver_t *reallocd = realloc(ctx->ipc.fd_receiver.array, sizeof(shuso_ipc_fd_receiver_t) * ctx->ipc.fd_receiver.count + 1);
+    if(!reallocd) {
+      shuso_log(ctx, "ipc_receive_fd_start ref failed, no memory for realloc()");
+      return false;
+    }
+    reallocd[ctx->ipc.fd_receiver.count] = (shuso_ipc_fd_receiver_t) {
+      .ref = ref,
+      .callback = callback,
+      .pd = pd,
+      .buffered_fds.array = NULL,
+      .buffered_fds.count = 0,
+      .description = description ? description : "?"
+    };
+    ctx->ipc.fd_receiver.array = reallocd;
+    ctx->ipc.fd_receiver.count++;
+  }
   return true;
 }
 
@@ -367,6 +392,9 @@ bool shuso_ipc_receive_fd_finish(shuso_t *ctx, uintptr_t ref) {
   }
   if(!found) {
     return false;
+  }
+  if(ev_is_active(&found->timeout) || ev_is_pending(&found->timeout)) {
+    ev_timer_stop(ctx->ev.loop, &found->timeout);
   }
   if(ctx->ipc.fd_receiver.count == 1) {
     free(ctx->ipc.fd_receiver.array);
@@ -451,7 +479,7 @@ static void ipc_socket_transfer_receive_cb(EV_P_ ev_io *w, int revents) {
       ctx->ipc.fd_receiver.count++;
     }
     if(found->callback) {
-      found->callback(ctx, true, found->ref, fd, pd, found->pd);
+      found->callback(ctx, SHUSO_OK, found->ref, fd, pd, found->pd);
     }
     else {
       shuso_ipc_buffered_fd_t  *reallocd = realloc(found->buffered_fds.array, sizeof(shuso_ipc_buffered_fd_t) * (found->buffered_fds.count+1));

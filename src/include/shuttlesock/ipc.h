@@ -54,6 +54,7 @@ typedef struct {
     size_t                    count;
   }                         buffered_fds;
   const char               *description;
+  ev_timer                  timeout;
 } shuso_ipc_fd_receiver_t;
 
 typedef struct {
@@ -95,12 +96,12 @@ bool shuso_ipc_add_handler(shuso_t *,  const char *name, const uint8_t code, shu
 
 bool shuso_ipc_send_fd(shuso_t *, shuso_process_t *, int fd, uintptr_t ref, void *pd);
 
-bool shuso_ipc_receive_fd_start(shuso_t *ctx, const char *description,  float timeout_msec, shuso_ipc_receive_fd_fn *callback, uintptr_t ref, void *pd);
+bool shuso_ipc_receive_fd_start(shuso_t *ctx, const char *description,  float timeout_sec, shuso_ipc_receive_fd_fn *callback, uintptr_t ref, void *pd);
 bool shuso_ipc_receive_fd_finish(shuso_t *ctx, uintptr_t ref);
 
 //some built-in IPC commands
 
-typedef void (shuso_ipc_open_sockets_fn)(shuso_t *, bool ok, shuso_hostinfo_t *, int *sockets, int socket_count, void *pd);
+typedef void (shuso_ipc_open_sockets_fn)(shuso_t *, shuso_status_t status, shuso_hostinfo_t *, int *sockets, int socket_count, void *pd);
 
 bool shuso_ipc_command_open_listener_sockets(shuso_t *, shuso_hostinfo_t *, int count, shuso_sockopts_t *, shuso_ipc_open_sockets_fn *callback, void *pd);
 

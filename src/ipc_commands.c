@@ -161,7 +161,7 @@ bool shuso_ipc_command_open_listener_sockets(shuso_t *ctx, shuso_hostinfo_t *hos
         goto fail;
       }
     }
-    callback(ctx, true, hostinfo, opened, count, pd);
+    callback(ctx, SHUSO_OK, hostinfo, opened, count, pd);
     free(opened);
     return true;
   }
@@ -177,7 +177,7 @@ fail:
     shuso_set_error(ctx, err);
     shuso_log(ctx, "ERROR: %s", err);
   }
-  callback(false, ctx, hostinfo, NULL, 0, pd);
+  callback(ctx, SHUSO_FAIL, hostinfo, NULL, 0, pd);
   if(opened) {
     for(int j=0; j<count; j++) {
       if (opened[i]!=-1) {
@@ -194,7 +194,7 @@ typedef struct {
   char                *path;
   shuso_ipc_open_sockets_fn *callback;
   void                *pd;
-  bool                 ok;
+  shuso_status_t       status;
   char                 err[512];
   shuso_sockopts_t     sockopts;
   unsigned             socket_count;
@@ -273,21 +273,20 @@ fail:
     printf("ERROR: %s\n", err);
   }
   if(sockreq) free_shared_open_sockets_struct(ctx, sockreq);
-  callback(false, ctx, hostinfo, NULL, 0, pd);
+  callback(ctx, SHUSO_FAIL, hostinfo, NULL, 0, pd);
   return false;
 }
 
-static void open_listener_sockets_handle_callback(shuso_t *ctx, bool ok, shuso_hostinfo_t *hostinfo, int *sockets, int socket_count, void *pd) {
+static void open_listener_sockets_handle_callback(shuso_t *ctx, shuso_status_t status, shuso_hostinfo_t *hostinfo, int *sockets, int socket_count, void *pd) {
   shuso_log(ctx, "open_listener_sockets_handle_callback");
   ipc_open_sockets_t *sockreq = pd;
-  sockreq->ok = ok;
+  sockreq->status = status;
   shuso_ipc_send(ctx, &ctx->common->process.manager, SHUTTLESOCK_IPC_CMD_OPEN_LISTENER_SOCKETS_RESPONSE, sockreq);
-  if(ok) {
-    sockreq->ok = false;
+  if(status == SHUSO_OK) {
+    sockreq->status = SHUSO_OK;
     for(int i=0; i<socket_count; i++) {
       shuso_log(ctx, "shuso_ipc_send_fd #%d socket %d", i, sockets[i]);
-      ok = shuso_ipc_send_fd(ctx, &ctx->common->process.manager, sockets[i], (uintptr_t)sockreq, (void *)(intptr_t)i);
-      if(!ok) {
+      if(!shuso_ipc_send_fd(ctx, &ctx->common->process.manager, sockets[i], (uintptr_t)sockreq, (void *)(intptr_t)i)) {
         //TODO: send ABORT to socket receiver
         shuso_log(ctx, "shuso_ipc_send_fd #%d socket %d FAILED: %d %s", i, sockets[i], errno, strerror(errno));
       }
@@ -329,7 +328,7 @@ static void listener_socket_receiver(shuso_t *ctx, bool ok, uintptr_t ref, int f
 
 static void open_listener_sockets_response_handle(shuso_t *ctx, const uint8_t code, void *ptr) {
   shuso_log(ctx, "open_listener_sockets_response_handle");
-  shuso_ipc_receive_fd_start(ctx, "open listener sockets response", 1000, listener_socket_receiver, (uintptr_t) ptr, ptr);
+  shuso_ipc_receive_fd_start(ctx, "open listener sockets response", 1.0, listener_socket_receiver, (uintptr_t) ptr, ptr);
 }
 
 
