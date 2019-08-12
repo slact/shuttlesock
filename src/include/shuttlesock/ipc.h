@@ -1,6 +1,7 @@
 #ifndef SHUTTLESOCK_IPC_H
 #define SHUTTLESOCK_IPC_H
 #include <stdatomic.h>
+#include <shuttlesock/common.h>
 
 #define SHUTTLESOCK_IPC_CMD_NIL                   0
 #define SHUTTLESOCK_IPC_CMD_SIGNAL                1
@@ -12,10 +13,6 @@
 #define SHUTTLESOCK_IPC_CMD_OPEN_LISTENER_SOCKETS 7
 #define SHUTTLESOCK_IPC_CMD_OPEN_LISTENER_SOCKETS_RESPONSE 8
 
-struct shuso_s;
-struct shuso_process_s;
-struct shuso_hostinfo_s;
-struct shuso_sockopts_s;
 
 typedef struct {
   _Atomic uint8_t    next_read;
@@ -25,7 +22,7 @@ typedef struct {
   _Atomic(void *)    ptr[256];
 } shuso_ipc_ringbuf_t;
 
-typedef void shuso_ipc_fn(struct shuso_s *, const uint8_t code, void *ptr);
+typedef void shuso_ipc_fn(shuso_t *, const uint8_t code, void *ptr);
 
 typedef struct {
   uint8_t                code;
@@ -39,11 +36,11 @@ typedef struct shuso_ipc_outbuf_s {
   //it may matter when the IPC is backed up and buffering like crazy
   uint8_t              code;
   void                *ptr;
-  struct shuso_process_s *dst;
+  shuso_process_t     *dst;
   struct shuso_ipc_outbuf_s *next;
 } shuso_ipc_outbuf_t;
 
-typedef void shuso_ipc_receive_fd_fn(struct shuso_s *ctx, bool ok, uintptr_t ref, int fd, void *received_pd, void *pd);
+typedef void shuso_ipc_receive_fd_fn(shuso_t *ctx, bool ok, uintptr_t ref, int fd, void *received_pd, void *pd);
 typedef struct {
   int      fd;
   void    *pd;
@@ -81,31 +78,31 @@ typedef struct {
 } shuso_ipc_channel_shared_t;
 
 
-bool shuso_ipc_commands_init(struct shuso_s *);
-bool shuso_ipc_channel_local_init(struct shuso_s *);
-bool shuso_ipc_channel_local_start(struct shuso_s *);
-bool shuso_ipc_channel_local_stop(struct shuso_s *);
-bool shuso_ipc_channel_shared_create(struct shuso_s *, struct shuso_process_s *);
-bool shuso_ipc_channel_shared_destroy(struct shuso_s *, struct shuso_process_s *);
-bool shuso_ipc_channel_shared_start(struct shuso_s *, struct shuso_process_s *);
-bool shuso_ipc_channel_shared_stop(struct shuso_s *, struct shuso_process_s *);
+bool shuso_ipc_commands_init(shuso_t *);
+bool shuso_ipc_channel_local_init(shuso_t *);
+bool shuso_ipc_channel_local_start(shuso_t *);
+bool shuso_ipc_channel_local_stop(shuso_t *);
+bool shuso_ipc_channel_shared_create(shuso_t *, shuso_process_t *);
+bool shuso_ipc_channel_shared_destroy(shuso_t *, shuso_process_t *);
+bool shuso_ipc_channel_shared_start(shuso_t *, shuso_process_t *);
+bool shuso_ipc_channel_shared_stop(shuso_t *, shuso_process_t *);
 
 
-bool shuso_ipc_send(struct shuso_s *, struct shuso_process_s *, const uint8_t code, void *ptr);
-bool shuso_ipc_send_workers(struct shuso_s *, const uint8_t code, void *ptr);
-bool shuso_ipc_add_handler(struct shuso_s *,  const char *name, const uint8_t code, shuso_ipc_fn *, shuso_ipc_fn *);
+bool shuso_ipc_send(shuso_t *, shuso_process_t *, const uint8_t code, void *ptr);
+bool shuso_ipc_send_workers(shuso_t *, const uint8_t code, void *ptr);
+bool shuso_ipc_add_handler(shuso_t *,  const char *name, const uint8_t code, shuso_ipc_fn *, shuso_ipc_fn *);
 
 
-bool shuso_ipc_send_fd(struct shuso_s *, struct shuso_process_s *, int fd, uintptr_t ref, void *pd);
+bool shuso_ipc_send_fd(shuso_t *, shuso_process_t *, int fd, uintptr_t ref, void *pd);
 
-bool shuso_ipc_receive_fd_start(struct shuso_s *ctx, const char *description, shuso_ipc_receive_fd_fn *callback, uintptr_t ref, void *pd);
-bool shuso_ipc_receive_fd_finish(struct shuso_s *ctx, uintptr_t ref);
+bool shuso_ipc_receive_fd_start(shuso_t *ctx, const char *description,  float timeout_msec, shuso_ipc_receive_fd_fn *callback, uintptr_t ref, void *pd);
+bool shuso_ipc_receive_fd_finish(shuso_t *ctx, uintptr_t ref);
 
 //some built-in IPC commands
 
-typedef void (shuso_ipc_open_sockets_fn)(struct shuso_s *, bool ok, struct shuso_hostinfo_s *, int *sockets, int socket_count, void *pd);
+typedef void (shuso_ipc_open_sockets_fn)(shuso_t *, bool ok, shuso_hostinfo_t *, int *sockets, int socket_count, void *pd);
 
-bool shuso_ipc_command_open_listener_sockets(struct shuso_s *, struct shuso_hostinfo_s *, int count, struct shuso_sockopts_s *, shuso_ipc_open_sockets_fn *callback, void *pd);
+bool shuso_ipc_command_open_listener_sockets(shuso_t *, shuso_hostinfo_t *, int count, shuso_sockopts_t *, shuso_ipc_open_sockets_fn *callback, void *pd);
 
 
 #endif //SHUTTLESOCK_IPC_H

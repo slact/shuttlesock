@@ -2,8 +2,7 @@
 #define SHUTTLESOCK_RESOLVER_H
 
 #include <ares.h>
-struct shuso_s;
-struct shuso_config_s;
+#include <shuttlesock/common.h>
 
 typedef struct shuso_resolver_s shuso_resolver_t;
 typedef struct shuso_resolver_socket_s shuso_resolver_socket_t;
@@ -15,16 +14,16 @@ struct shuso_resolver_socket_s {
     ev_io                          io;
     //ev_timer                       timer;
   }                              ev;
-  struct shuso_resolver_s       *resolver;
+  shuso_resolver_t              *resolver;
 };
 
 struct shuso_resolver_s {
   int                    options_mask;
   struct ares_options    options;
   ares_channel           channel;
-  struct shuso_s        *ctx;
-  struct shuso_config_s *cf;
-  struct shuso_resolver_socket_s *socket_head;
+  shuso_t               *ctx;
+  shuso_config_t        *cf;
+  shuso_resolver_socket_t *socket_head;
 };
 
 typedef enum {
@@ -44,7 +43,7 @@ typedef void shuso_resolver_fn(shuso_resolver_result_t result, struct hostent *h
 bool shuso_resolver_global_init(const char **err);
 bool shuso_resolver_global_cleanup(void);
 
-bool shuso_resolver_init(struct shuso_s *ctx, struct shuso_config_s *cf, shuso_resolver_t *resolver);
+bool shuso_resolver_init(shuso_t *ctx, shuso_config_t *cf, shuso_resolver_t *resolver);
 bool shuso_resolver_cleanup(shuso_resolver_t *resolver);
 
 bool shuso_resolve_hostname(shuso_resolver_t *resolver, const char *name, int addr_family, shuso_resolver_fn callback, void *pd);

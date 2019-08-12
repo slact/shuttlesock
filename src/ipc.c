@@ -313,7 +313,7 @@ bool shuso_ipc_send_fd(shuso_t *ctx, shuso_process_t *dst_proc, int fd, uintptr_
   return ancil_send_fd(dst_proc->ipc.socket_transfer_fd[1], fd, (const char *)buf, sizeof(buf)) == 0;
 }
 
-bool shuso_ipc_receive_fd_start(shuso_t *ctx, const char *description, shuso_ipc_receive_fd_fn *callback, uintptr_t ref, void *pd) {
+bool shuso_ipc_receive_fd_start(shuso_t *ctx, const char *description, float timeout_msec, shuso_ipc_receive_fd_fn *callback, uintptr_t ref, void *pd) {
   for(unsigned i = 0; i<ctx->ipc.fd_receiver.count; i++) {
     shuso_ipc_fd_receiver_t *cur = &ctx->ipc.fd_receiver.array[i];
     if(cur->ref == ref) {

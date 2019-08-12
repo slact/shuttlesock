@@ -12,10 +12,10 @@
 #define SHUTTLESOCK_SHARED_SLAB_DEFAULT_SIZE 16777216 //16M
 
 #include <shuttlesock/configure.h>
+#include <shuttlesock/common.h>
 #include <stdint.h>
 #include <pthread.h>
 #include <stdbool.h>
-struct shuso_s;
 
 typedef struct shuso_slab_page_s  shuso_slab_page_t;
 
@@ -71,8 +71,8 @@ typedef struct {
 
 void shuso_shared_slab_sizes_init(void);
 
-bool shuso_shared_slab_create(struct shuso_s *ctx, shuso_shared_slab_t *shm, size_t sz, const char *name);
-bool shuso_shared_slab_destroy(struct shuso_s *ctx, shuso_shared_slab_t *shm);
+bool shuso_shared_slab_create(shuso_t *ctx, shuso_shared_slab_t *shm, size_t sz, const char *name);
+bool shuso_shared_slab_destroy(shuso_t *ctx, shuso_shared_slab_t *shm);
 
 void *shuso_shared_slab_alloc(shuso_shared_slab_t *shm, size_t size);
 void *shuso_shared_slab_alloc_locked(shuso_shared_slab_t *shm, size_t size);

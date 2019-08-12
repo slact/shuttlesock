@@ -329,7 +329,7 @@ static void listener_socket_receiver(shuso_t *ctx, bool ok, uintptr_t ref, int f
 
 static void open_listener_sockets_response_handle(shuso_t *ctx, const uint8_t code, void *ptr) {
   shuso_log(ctx, "open_listener_sockets_response_handle");
-  shuso_ipc_receive_fd_start(ctx, "open listener sockets response", listener_socket_receiver, (uintptr_t) ptr, ptr);
+  shuso_ipc_receive_fd_start(ctx, "open listener sockets response", 1000, listener_socket_receiver, (uintptr_t) ptr, ptr);
 }
 
 

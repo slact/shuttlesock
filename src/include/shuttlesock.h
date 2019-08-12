@@ -9,6 +9,7 @@
 #include <stdatomic.h>
 #include <netinet/in.h>
 #include <shuttlesock/configure.h>
+#include <shuttlesock/common.h>
 #include <shuttlesock/sbuf.h>
 #include <shuttlesock/llist.h>
 #include <shuttlesock/ipc.h>
@@ -16,52 +17,27 @@
 #include <shuttlesock/resolver.h>
 #include <shuttlesock/shared_slab.h>
 
-
-#define SHUTTLESOCK_MAX_WORKERS 1024
-
-typedef enum {
-  SHUSO_ABORT     = 0,
-  SHUSO_FINISH    = 1,
-  SHUSO_CONTINUE  = 2,
-  SHUSO_DEFER     = 3,
-} shuso_nextaction_t;
-
-typedef enum {
-  //non-positive states MUST be kinds of non-running states
-  SHUSO_PROCESS_STATE_DEAD = -1,
-  SHUSO_PROCESS_STATE_NIL = 0,
-  //positive states MUST be kinds of running states
-  SHUSO_PROCESS_STATE_STARTING = 1,
-  SHUSO_PROCESS_STATE_RUNNING  = 2,
-  SHUSO_PROCESS_STATE_STOPPING = 3
-} shuso_process_state_t;
-
-
-
-typedef struct shuso_process_s {
+struct shuso_process_s {
   pid_t                             pid;
   pthread_t                         tid;
   _Atomic(shuso_process_state_t)   *state;
   uint16_t                          generation;
   shuso_ipc_channel_shared_t        ipc;
-} shuso_process_t;
-
-typedef struct shuso_s shuso_t;
-typedef struct shuso_config_s shuso_config_t;
+};
 
 //params for setsockopt()
-typedef struct {
+struct shuso_sockopt_s {
   int           level;
   int           name;
   int           intvalue;
-} shuso_sockopt_t;
+}; //shuso_sockopt_t
 
-typedef struct shuso_sockopts_s {
+struct shuso_sockopts_s {
   size_t           count;
   shuso_sockopt_t *array;
-} shuso_sockopts_t;
+}; //shuso_sockopts_t
 
-typedef struct shuso_hostinfo_s {
+struct shuso_hostinfo_s {
   const char        *name;
   union {
     struct in6_addr addr6;
@@ -71,11 +47,8 @@ typedef struct shuso_hostinfo_s {
   uint16_t          addr_family; //address family: AF_INET/AF_INET6/AF_UNIX
   uint16_t          port; //CPU-native port
   unsigned          udp:1; //TCP or UDP?
-} shuso_hostinfo_t;
+}; //shuso_hostinfo_t
 
-
-typedef struct shuso_socket_s shuso_socket_t;
-typedef void shuso_socket_fn(shuso_t *ctx, shuso_socket_t *socket);
 struct shuso_socket_s {
   shuso_hostinfo_t  host;
   int               fd;
@@ -84,8 +57,7 @@ struct shuso_socket_s {
   void              *data;
 }; //shuso_socket_t;
 
-typedef void shuso_handler_fn(shuso_t *ctx, void *pd);
-typedef struct {
+struct shuso_handlers_s {
   shuso_handler_fn *start_master;
   shuso_handler_fn *stop_master;
   shuso_handler_fn *start_manager;
@@ -93,12 +65,9 @@ typedef struct {
   shuso_handler_fn *start_worker;
   shuso_handler_fn *stop_worker;
   void   *privdata;
-} shuso_handlers_t;
+}; //shuso_handlers_t
 
 //the shuso_config struct is designed to be zeroed on initialization
-#define SHUTTLESOCK_CONFIG_DEFAULT_IPC_SEND_RETRY_DELAY  0.050
-#define SHUTTLESOCK_CONFIG_DEFAULT_IPC_SEND_TIMEOUT 0.500
-
 struct shuso_config_s {
   struct {          //ipc
     float               send_retry_delay;
@@ -123,7 +92,7 @@ struct shuso_config_s {
   int                 workers;
 }; // shuso_config_t
 
-typedef struct {
+struct shuso_common_s {
   shuso_handlers_t    phase_handlers;
   shuso_ipc_handler_t ipc_handlers[256];
   shuso_config_t      config;
@@ -141,13 +110,7 @@ typedef struct {
     bool                io_uring;
   }                   features;
   shuso_shared_slab_t shm;
-} shuso_common_t;
-
-#define SHUTTLESOCK_UNKNOWN_PROCESS  -404
-#define SHUTTLESOCK_NOPROCESS  -3
-#define SHUTTLESOCK_MASTER     -2
-#define SHUTTLESOCK_MANAGER    -1
-#define SHUTTLESOCK_WORKER      0
+}; //shuso_common_t
 
 LLIST_TYPEDEF_LINK_STRUCT(ev_signal);
 LLIST_TYPEDEF_LINK_STRUCT(ev_child);
@@ -178,14 +141,6 @@ struct shuso_s {
   void                       *data;  //custom data attached to this shuttlesock context
   const char                 *errmsg;
 }; //shuso_t;
-
-typedef enum {
-  SHUSO_STOP_ASK =      1,
-  SHUSO_STOP_INSIST =   2,
-  SHUSO_STOP_DEMAND =   3,
-  SHUSO_STOP_COMMAND =  4,
-  SHUSO_STOP_FORCE =    5
-} shuso_stop_t;
 
 shuso_t *shuso_create(unsigned int ev_loop_flags, shuso_handlers_t *handlers, shuso_config_t *config, const char **err);
 bool shuso_destroy(shuso_t *ctx);
