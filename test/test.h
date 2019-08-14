@@ -142,7 +142,7 @@ shuso_t *___runcheck_shuso_create(unsigned int ev_loop_flags, shuso_config_t *co
 #define runcheck_shuso_create(...) \
   ((_snow.filename = __FILE__, _snow.linenum = __LINE__,  ___runcheck_shuso_create(__VA_ARGS__)))
   
-void stop_timer(EV_P_ ev_timer *, int);
+void stop_timer(EV_P_ shuso_ev_timer *, int);
 
 #define skip(...) while(0)
 

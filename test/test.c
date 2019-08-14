@@ -34,14 +34,14 @@ describe(shuttlesock_init_and_shutdown) {
   }
   test("run loop") {
     ss = runcheck_shuso_create(EVFLAG_AUTO, NULL);
-    shuso_add_timer_watcher(ss, stop_timer, (void *)(intptr_t)SHUTTLESOCK_MASTER, 0.5, 0.0);
+    shuso_add_timer_watcher(ss, 0.5, 0.0, stop_timer, (void *)(intptr_t)SHUTTLESOCK_MASTER);
     shuso_run(ss);
     assert_shuso(ss);
   }
   
   test("stop from manager") {
     ss = runcheck_shuso_create(EVFLAG_AUTO, NULL);
-    shuso_add_timer_watcher(ss, stop_timer, (void *)(intptr_t)SHUTTLESOCK_MANAGER, 0.5, 0.0);
+    shuso_add_timer_watcher(ss, 0.5, 0.0, stop_timer, (void *)(intptr_t)SHUTTLESOCK_MANAGER);
     shuso_run(ss);
     assert_shuso(ss);
   }
@@ -174,7 +174,7 @@ void ipc_echo_receive(shuso_t *ctx, const uint8_t code, void *ptr) {
   ipc_echo_send(ctx);
 }
 
-static void ipc_load_test(EV_P_ ev_timer *w, int rev) {
+static void ipc_load_test(EV_P_ shuso_ev_timer *w, int rev) {
   shuso_t *ctx = ev_userdata(EV_A);
   ipc_check_t   *chk = ctx->data;
   ipc_check_oneway_t *self = NULL, *dst = NULL;
@@ -234,7 +234,7 @@ describe(ipc) {
       ipc_check->ping.barrage = 1;
       ipc_check->pong.barrage = 1;
 
-      shuso_add_timer_watcher(ss, ipc_load_test, NULL, 0.1, 0.0);
+      shuso_add_timer_watcher(ss, 0.1, 0.0, ipc_load_test, NULL);
       shuso_ipc_add_handler(ss, "echo", IPC_ECHO, ipc_echo_receive, ipc_echo_cancel);
       shuso_run(ss);
       assert_shuso(ss);
@@ -247,7 +247,7 @@ describe(ipc) {
       ipc_check->ping.barrage = 250;
       ipc_check->pong.barrage = 1;
 
-      shuso_add_timer_watcher(ss, ipc_load_test, NULL, 0.1, 0.0);
+      shuso_add_timer_watcher(ss, 0.1, 0.0, ipc_load_test, NULL);
       shuso_ipc_add_handler(ss, "echo", IPC_ECHO, ipc_echo_receive, ipc_echo_cancel);
       shuso_run(ss);
       assert_shuso(ss);
@@ -261,7 +261,7 @@ describe(ipc) {
       ipc_check->pong.barrage = 1;
       ipc_check->ping.init_sleep_flag = 1;
 
-      shuso_add_timer_watcher(ss, ipc_load_test, NULL, 0.1, 0.0);
+      shuso_add_timer_watcher(ss, 0.1, 0.0, ipc_load_test, NULL);
       shuso_ipc_add_handler(ss, "echo", IPC_ECHO, ipc_echo_receive, ipc_echo_cancel);
       shuso_run(ss);
       assert_shuso(ss);
@@ -399,7 +399,7 @@ void resolve_check_ok(shuso_resolver_result_t result, struct hostent *hostent, v
   shuso_stop(ctx, SHUSO_STOP_INSIST);
 }
 
-void resolve_check_start(EV_P_ ev_timer *w, int revent) {
+void resolve_check_start(EV_P_ shuso_ev_timer *w, int revent) {
   shuso_t *ctx = ev_userdata(EV_A);
   shuso_resolve_hostname(&ctx->resolver, "google.com", AF_INET, resolve_check_ok, ctx);
 }
@@ -418,7 +418,7 @@ describe(resolver) {
   test("resolve using system") {
     ss = runcheck_shuso_create(EVFLAG_AUTO, NULL);
     
-    shuso_add_timer_watcher(ss, resolve_check_start, 0, 0.01, 0.0);
+    shuso_add_timer_watcher(ss, 0.01, 0.0, resolve_check_start, 0);
     
     shuso_run(ss);
     assert_shuso(ss);
@@ -478,6 +478,72 @@ describe(shared_memory_allocator) {
       
       free(allocd);
     }
+  }
+}
+
+typedef struct {
+  const char      *err;
+  bool             ok[1026];
+  uint16_t         port;
+  uint16_t         num_ports;
+} listener_port_test_t;
+
+void listener_port_test_runner_callback(shuso_t *ctx, shuso_status_t status, shuso_hostinfo_t *hostinfo, int *sockets, int socket_count, void *pd) {
+  shuso_log(ctx, "FIN!");
+  
+}
+
+void listener_port_test_runner(EV_P_ shuso_ev_timer *w, int revent) {
+  shuso_t *ctx = ev_userdata(EV_A);
+  listener_port_test_t *pt = w->ev.data;
+  if(ctx->procnum != SHUTTLESOCK_MANAGER) {
+    printf("YEAH bye\n");
+    return;
+  }
+  printf("YEAH HELLO\n");
+  shuso_hostinfo_t host = {
+    .name="test",
+    .addr_family=AF_INET,
+    .port = pt->port,
+    .udp = 0
+  };
+  
+  shuso_sockopt_t sopt[10] = {
+    { 
+      .level = SOL_SOCKET,
+      .name = SO_REUSEPORT,
+      .intvalue = 1
+    }
+  };
+  shuso_sockopts_t opts = {
+    .count = 1,
+    .array = sopt
+  };
+  bool rc = shuso_ipc_command_open_listener_sockets(ctx, &host, 5, &opts, listener_port_test_runner_callback, pt);
+  assert(rc);
+}
+
+describe(listener_sockets) {
+    static shuso_t *ss = NULL;
+    static listener_port_test_t *pt = NULL;
+  before_each() {
+    shuso_system_initialize();
+    ss = runcheck_shuso_create(EVFLAG_AUTO, NULL);
+    pt = shmalloc(pt);
+    pt->err = NULL;
+    for(int i=0; i<1026; i++) {
+      pt->ok[i]=false;
+    }
+  }
+  after_each() {
+    shuso_destroy(ss);
+    shmfree(pt);
+    ss = NULL;
+  }
+  skip("listen on port 34241") {
+    pt->port = 34241;
+    shuso_add_timer_watcher(ss,  0.1, 0.0, listener_port_test_runner, pt);
+    shuso_run(ss);
   }
 }
 
