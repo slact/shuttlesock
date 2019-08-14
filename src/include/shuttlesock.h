@@ -9,6 +9,7 @@
 #include <stdatomic.h>
 #include <netinet/in.h>
 #include <shuttlesock/configure.h>
+#include <shuttlesock/watchers.h>
 #include <shuttlesock/common.h>
 #include <shuttlesock/sbuf.h>
 #include <shuttlesock/llist.h>
@@ -16,6 +17,7 @@
 #include <shuttlesock/stalloc.h>
 #include <shuttlesock/resolver.h>
 #include <shuttlesock/shared_slab.h>
+
 
 struct shuso_process_s {
   pid_t                             pid;
@@ -112,28 +114,22 @@ struct shuso_common_s {
   shuso_shared_slab_t shm;
 }; //shuso_common_t
 
-LLIST_TYPEDEF_LINK_STRUCT(ev_signal);
-LLIST_TYPEDEF_LINK_STRUCT(ev_child);
-LLIST_TYPEDEF_LINK_STRUCT(ev_io);
-LLIST_TYPEDEF_LINK_STRUCT(ev_timer);
-LLIST_TYPEDEF_LINK_STRUCT(ev_periodic);
+LLIST_TYPEDEF_LINK_STRUCT(shuso_ev_timer);
 
 struct shuso_s {
   int                         procnum;
   shuso_process_t            *process;
   shuso_ipc_channel_local_t   ipc;
   struct {                  //ev
-    struct ev_loop             *loop;
+    shuso_loop                 *loop;
     unsigned int                flags;
   }                           ev;
   
   shuso_common_t             *common;
   struct {                  //base_watchers
-    LLIST_STRUCT(ev_signal)     signal;
-    LLIST_STRUCT(ev_child)      child;
-    LLIST_STRUCT(ev_io)         io;
-    LLIST_STRUCT(ev_timer)      timer;
-    LLIST_STRUCT(ev_periodic)   periodic;
+    shuso_ev_signal              signal[8];
+    shuso_ev_child               child;
+    LLIST_STRUCT(shuso_ev_timer) timer;
   }                           base_watchers;
   shuso_stalloc_t             stalloc;
   shuso_shared_slab_t         shm;
@@ -166,17 +162,7 @@ int shuso_process_to_procnum(shuso_t *ctx, shuso_process_t *proc);
 #define SHUSO_EACH_WORKER(ctx, cur) \
   for(shuso_process_t *cur = &ctx->common->process.worker[ctx->common->process.workers_start], *___worker_end = &ctx->common->process.worker[ctx->common->process.workers_end]; cur < ___worker_end; cur++)
 #define shuso_set_nonblocking(fd) fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_NONBLOCK)
-ev_signal   *shuso_add_signal_watcher(shuso_t *ctx, void (*cb)(EV_P_ ev_signal *, int), void *pd, int signum);
-ev_child    *shuso_add_child_watcher(shuso_t *ctx, void (*cb)(EV_P_ ev_child *, int), void *pd, pid_t pid, int trace);
-ev_io       *shuso_add_io_watcher(shuso_t *ctx, void (*cb)(EV_P_ ev_io *, int), void *pd, int fd, int events);
-ev_timer    *shuso_add_timer_watcher(shuso_t *ctx, void (*cb)(EV_P_ ev_timer *, int), void *pd, ev_tstamp after, ev_tstamp repeat);
-ev_periodic *shuso_add_periodic_watcher(shuso_t *ctx, void (*cb)(EV_P_ ev_periodic *, int), void *pd, ev_tstamp offset, ev_tstamp interval, ev_tstamp (*reschedule_cb)(ev_periodic *, ev_tstamp));
 
-void shuso_remove_signal_watcher(shuso_t *ctx, ev_signal *w);
-void shuso_remove_child_watcher(shuso_t *ctx, ev_child *w);
-void shuso_remove_io_watcher(shuso_t *ctx, ev_io *w);
-void shuso_remove_timer_watcher(shuso_t *ctx, ev_timer *w);
-void shuso_remove_periodic_watcher(shuso_t *ctx, ev_periodic *w);
 
 void shuso_listen(shuso_t *ctx, shuso_hostinfo_t *bind, shuso_handler_fn handler, shuso_handler_fn cleanup, void *pd);
   

@@ -12,9 +12,9 @@
 #include <sys/eventfd.h>
 #endif
 
-static void ipc_send_retry_cb(EV_P_ ev_timer *w, int revents);
-static void ipc_receive_cb(EV_P_ ev_io *w, int revents);
-static void ipc_socket_transfer_receive_cb(EV_P_ ev_io *w, int revents);
+static void ipc_send_retry_cb(shuso_loop *loop, shuso_ev_timer *w, int revents);
+static void ipc_receive_cb(shuso_loop *loop, shuso_ev_io *w, int revents);
+static void ipc_socket_transfer_receive_cb(shuso_loop *loop, shuso_ev_io *w, int revents);
 
 bool shuso_ipc_channel_shared_create(shuso_t *ctx, shuso_process_t *proc) {
   int               procnum = shuso_process_to_procnum(ctx, proc);
@@ -54,7 +54,7 @@ bool shuso_ipc_channel_shared_create(shuso_t *ctx, shuso_process_t *proc) {
   }
   fcntl(proc->ipc.socket_transfer_fd[0], F_SETFL, O_NONBLOCK);
   fcntl(proc->ipc.socket_transfer_fd[1], F_SETFL, O_NONBLOCK);
-  shuso_log(ctx, "created socket_transfer_fd %p %d<=>%d", (void *)&proc->ipc.socket_transfer_fd, proc->ipc.socket_transfer_fd[0], proc->ipc.socket_transfer_fd[1]);
+  //shuso_log(ctx, "created socket_transfer_fd %p %d<=>%d", (void *)&proc->ipc.socket_transfer_fd, proc->ipc.socket_transfer_fd[0], proc->ipc.socket_transfer_fd[1]);
   return true;
 }
 
@@ -90,32 +90,29 @@ bool shuso_ipc_channel_shared_destroy(shuso_t *ctx, shuso_process_t *proc) {
 
 bool shuso_ipc_channel_local_init(shuso_t *ctx) {
   shuso_process_t  *proc = ctx->process;
-  ev_timer_init(&ctx->ipc.send_retry, ipc_send_retry_cb, 0.0, ctx->common->config.ipc.send_retry_delay);
-  ctx->ipc.send_retry.data = ctx->process;
-  ctx->ipc.receive.data = ctx->process;
-  ctx->ipc.socket_transfer_receive.data = ctx->process;
+  shuso_ev_timer_init(ctx, &ctx->ipc.send_retry, 0.0, ctx->common->config.ipc.send_retry_delay, ipc_send_retry_cb, ctx->process);
+  
   ctx->ipc.fd_receiver.count = 0;
   ctx->ipc.fd_receiver.array = NULL;
   
 #ifdef SHUTTLESOCK_USE_EVENTFD
-  ev_io_init(&ctx->ipc.receive, ipc_receive_cb, proc->ipc.fd[1], EV_READ);
+  shuso_ev_io_init(ctx, &ctx->ipc.receive, proc->ipc.fd[1], EV_READ, ipc_receive_cb, ctx->process);
 #else
-  ev_io_init(&ctx->ipc.receive, ipc_receive_cb, proc->ipc.fd[0], EV_READ);
+  shuso_ev_io_init(ctx, &ctx->ipc.receive, proc->ipc.fd[0], EV_READ, ipc_receive_cb, ctx->process);
 #endif
   
-  ev_io_init(&ctx->ipc.socket_transfer_receive, ipc_socket_transfer_receive_cb, proc->ipc.socket_transfer_fd[0], EV_READ);
+  shuso_ev_io_init(ctx, &ctx->ipc.socket_transfer_receive, proc->ipc.socket_transfer_fd[0], EV_READ, ipc_socket_transfer_receive_cb, ctx->process);
   return true;
 }
 
 bool shuso_ipc_channel_local_start(shuso_t *ctx) {
-  //nothing to do
-  ev_io_start(ctx->ev.loop, &ctx->ipc.receive);
-  ev_io_start(ctx->ev.loop, &ctx->ipc.socket_transfer_receive);
+  shuso_ev_io_start(ctx, &ctx->ipc.receive);
+  shuso_ev_io_start(ctx, &ctx->ipc.socket_transfer_receive);
   return true;
 }
 bool shuso_ipc_channel_local_stop(shuso_t *ctx) {
-  ev_io_stop(ctx->ev.loop, &ctx->ipc.receive);
-  ev_io_stop(ctx->ev.loop, &ctx->ipc.socket_transfer_receive);
+  shuso_ev_io_stop(ctx, &ctx->ipc.receive);
+  shuso_ev_io_stop(ctx, &ctx->ipc.socket_transfer_receive);
   
   shuso_ipc_handler_t *handler = ctx->common->ipc_handlers;
   for(shuso_ipc_outbuf_t *cur = ctx->ipc.buf.first, *next; cur != NULL; cur = next) {
@@ -125,8 +122,8 @@ bool shuso_ipc_channel_local_stop(shuso_t *ctx) {
   }
   ctx->ipc.buf.first = NULL;
   ctx->ipc.buf.last = NULL;
-  if(ev_is_active(&ctx->ipc.send_retry) || ev_is_pending(&ctx->ipc.send_retry)) {
-    ev_timer_stop(ctx->ev.loop, &ctx->ipc.send_retry);
+  if(shuso_ev_active(&ctx->ipc.send_retry)) {
+    shuso_ev_timer_stop(ctx, &ctx->ipc.send_retry);
   }
   
   
@@ -215,8 +212,8 @@ static bool ipc_send_outbuf_append(shuso_t *ctx, shuso_process_t *src, shuso_pro
     ch->buf.last->next = buffered;
   }
   ch->buf.last = buffered;
-  if(!ev_is_active(&ch->send_retry) && !ev_is_pending(&ch->send_retry)) {
-    ev_timer_again(ctx->ev.loop, &ch->send_retry);
+  if(!shuso_ev_active(&ch->send_retry)) {
+    shuso_ev_timer_again(ctx, &ch->send_retry);
   }
   return true;
 }
@@ -265,16 +262,16 @@ bool shuso_ipc_add_handler(shuso_t * ctx,  const char *name, const uint8_t code,
   return true;
 }
 
-static void ipc_send_retry_cb(EV_P_ ev_timer *w, int revents) {
-  shuso_t            *ctx = ev_userdata(EV_A);
-  shuso_process_t    *proc = w->data;
+static void ipc_send_retry_cb(shuso_loop *loop, shuso_ev_timer *w, int revents) {
+  shuso_t            *ctx = shuso_ev_ctx(loop, w);
+  shuso_process_t    *proc = shuso_ev_data(w);
   shuso_ipc_outbuf_t *cur;
   while((cur = ctx->ipc.buf.first) != NULL) {
     //shuso_log(ctx, "retry send");
     if(!ipc_send_direct(ctx, proc, cur->dst, cur->code, cur->ptr)) {
       //shuso_log(ctx, "retry send still fails");
       //send still fails. retry again later
-      ev_timer_again(ctx->ev.loop, w);
+      shuso_ev_timer_again(ctx, w);
       return;
     }
     ctx->ipc.buf.first = cur->next;
@@ -308,9 +305,9 @@ static void ipc_receive(shuso_t *ctx, shuso_process_t *proc) {
 }
 
 
-static void ipc_receive_timeout_cb(EV_P_ ev_timer *w, int revents) {
-  shuso_t                   *ctx = ev_userdata(EV_A);
-  shuso_ipc_fd_receiver_t   *cur = w->data;
+static void ipc_receive_timeout_cb(shuso_loop *loop, shuso_ev_timer *w, int revents) {
+  shuso_t                   *ctx = shuso_ev_ctx(loop, w);
+  shuso_ipc_fd_receiver_t   *cur = shuso_ev_data(w);
   
   if(cur->callback) {
     cur->callback(ctx, SHUSO_TIMEOUT, cur->ref, -1, NULL, cur->pd);
@@ -340,13 +337,12 @@ bool shuso_ipc_receive_fd_start(shuso_t *ctx, const char *description, float tim
     found->callback = callback;
     found->pd = pd;
     found->description = description;
-    if(ev_is_active(&found->timeout) || ev_is_pending(&found->timeout)) {
-      ev_timer_stop(ctx->ev.loop, &found->timeout);
+    if(shuso_ev_active(&found->timeout)) {
+      shuso_ev_timer_stop(ctx, &found->timeout);
     }
     if(timeout_sec > 0) {
-      found->timeout.data = found;
-      ev_timer_init(&found->timeout, ipc_receive_timeout_cb, timeout_sec, 0);
-      ev_timer_start(ctx->ev.loop, &found->timeout);
+      shuso_ev_timer_init(ctx, &found->timeout, timeout_sec, 0, ipc_receive_timeout_cb, found);
+      shuso_ev_timer_start(ctx, &found->timeout);
     }
     
     for(unsigned j=0; j < found->buffered_fds.count; j++) {
@@ -393,8 +389,8 @@ bool shuso_ipc_receive_fd_finish(shuso_t *ctx, uintptr_t ref) {
   if(!found) {
     return false;
   }
-  if(ev_is_active(&found->timeout) || ev_is_pending(&found->timeout)) {
-    ev_timer_stop(ctx->ev.loop, &found->timeout);
+  if(shuso_ev_active(&found->timeout)) {
+    shuso_ev_timer_stop(ctx, &found->timeout);
   }
   if(ctx->ipc.fd_receiver.count == 1) {
     free(ctx->ipc.fd_receiver.array);
@@ -414,9 +410,9 @@ bool shuso_ipc_receive_fd_finish(shuso_t *ctx, uintptr_t ref) {
   return true;
 }
 
-static void ipc_receive_cb(EV_P_ ev_io *w, int revents) {
-  shuso_t            *ctx = ev_userdata(EV_A);
-  shuso_process_t    *proc = w->data;
+static void ipc_receive_cb(shuso_loop *loop, shuso_ev_io *w, int revents) {
+  shuso_t            *ctx = shuso_ev_ctx(loop, w);
+  shuso_process_t    *proc = shuso_ev_data(w);
   
 #ifdef SHUTTLESOCK_USE_EVENTFD
   uint64_t buf;
@@ -435,9 +431,9 @@ static void ipc_receive_cb(EV_P_ ev_io *w, int revents) {
   ipc_receive(ctx, proc);
 }
 
-static void ipc_socket_transfer_receive_cb(EV_P_ ev_io *w, int revents) {
-  shuso_t            *ctx = ev_userdata(EV_A);
-  shuso_process_t    *proc = w->data;
+static void ipc_socket_transfer_receive_cb(shuso_loop *loop, shuso_ev_io *w, int revents) {
+  shuso_t            *ctx = shuso_ev_ctx(loop, w);
+  shuso_process_t    *proc = shuso_ev_data(w);
   uintptr_t databuf[2];
   uintptr_t ref;
   void     *pd;

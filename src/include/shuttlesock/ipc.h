@@ -54,11 +54,11 @@ typedef struct {
     size_t                    count;
   }                         buffered_fds;
   const char               *description;
-  ev_timer                  timeout;
+  shuso_ev_timer            timeout;
 } shuso_ipc_fd_receiver_t;
 
 typedef struct {
-  ev_timer              send_retry;
+  shuso_ev_timer        send_retry;
   struct {
     shuso_ipc_outbuf_t   *first;
     shuso_ipc_outbuf_t   *last;
@@ -67,8 +67,8 @@ typedef struct {
     shuso_ipc_fd_receiver_t *array;
     size_t                count;
   }                     fd_receiver;
-  ev_io                 receive;
-  ev_io                 socket_transfer_receive;
+  shuso_ev_io           receive;
+  shuso_ev_io           socket_transfer_receive;
 } shuso_ipc_channel_local_t;
 
 

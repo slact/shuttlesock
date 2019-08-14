@@ -11,8 +11,8 @@
 #include <stdio.h>
 
 static void shuso_cleanup_loop(shuso_t *ctx);
-static void signal_watcher_cb(EV_P_ ev_signal *w, int revents);
-static void child_watcher_cb(EV_P_ ev_child *w, int revents);
+static void signal_watcher_cb(shuso_loop *, shuso_ev_signal *w, int revents);
+static void child_watcher_cb(shuso_loop *, shuso_ev_child *w, int revents);
 static bool test_features(shuso_t *ctx, const char **errmsg);
 
 
@@ -36,7 +36,7 @@ shuso_t *shuso_create(unsigned int ev_loop_flags, shuso_handlers_t *handlers, sh
   bool                stalloc_initialized = false;
   bool                shm_slab_created = false;
   const char         *errmsg = NULL;
-  struct ev_loop     *loop;
+  shuso_loop         *loop;
   
   shuso_system_initialize();
   
@@ -160,15 +160,16 @@ bool shuso_destroy(shuso_t *ctx) {
 
 static bool shuso_init_signal_watchers(shuso_t *ctx) {
   //attach master signal handlers
-  shuso_add_signal_watcher(ctx, signal_watcher_cb, NULL, SIGTERM);
-  shuso_add_signal_watcher(ctx, signal_watcher_cb, NULL, SIGINT);
-  shuso_add_signal_watcher(ctx, signal_watcher_cb, NULL, SIGQUIT);
-  shuso_add_signal_watcher(ctx, signal_watcher_cb, NULL, SIGHUP);
-  shuso_add_signal_watcher(ctx, signal_watcher_cb, NULL, SIGCONT);
-  shuso_add_signal_watcher(ctx, signal_watcher_cb, NULL, SIGUSR1);
-  shuso_add_signal_watcher(ctx, signal_watcher_cb, NULL, SIGUSR2);
-  shuso_add_signal_watcher(ctx, signal_watcher_cb, NULL, SIGWINCH);
 
+  int sigs[] = SHUTTLESOCK_WATCHED_SIGNALS;
+  assert(sizeof(ctx->base_watchers.signal)/sizeof(shuso_ev_signal) >= sizeof(sigs)/sizeof(int));
+  
+  for(unsigned i=0; i<sizeof(sigs)/sizeof(int); i++) {
+    shuso_ev_signal         *w = &ctx->base_watchers.signal[i];
+    shuso_ev_signal_init(ctx, w, sigs[i], signal_watcher_cb, NULL);
+    shuso_ev_signal_start(ctx, w);
+  }
+  
   //TODO: what else?
   return true;
 }
@@ -195,7 +196,9 @@ bool shuso_spawn_manager(shuso_t *ctx) {
   *ctx->process->state = SHUSO_PROCESS_STATE_RUNNING;
   ctx->common->process.workers_start = 0;
   ctx->common->process.workers_end = ctx->common->process.workers_start;
-  
+#ifdef SHUTTLESOCK_DEBUG_NO_WORKER_THREADS
+  shuso_log(ctx, "SHUTTLESOCK_DEBUG_NO_WORKER_THREADS is enabled, workers will be started inside the manager without their own separate threads");
+#endif
   for(int i=0; i<ctx->common->config.workers; i++) {
     if(shuso_spawn_worker(ctx, &ctx->common->process.worker[i])) {
       ctx->common->process.workers_end++;
@@ -215,12 +218,12 @@ bool shuso_is_master(shuso_t *ctx) {
   return ctx->procnum == SHUTTLESOCK_MASTER;
 }
 
-static void stop_manager_timer_cb(EV_P_ ev_timer *w, int revents) {
-  shuso_t           *ctx = ev_userdata(EV_A);
+static void stop_manager_timer_cb(shuso_loop *loop, shuso_ev_timer *w, int revents) {
+  shuso_t           *ctx = shuso_ev_ctx(loop, w);
   shuso_stop_manager(ctx, SHUSO_STOP_ASK);
 }
-static void stop_master_timer_cb(EV_P_ ev_timer *w, int revents) {
-  shuso_t           *ctx = ev_userdata(EV_A);
+static void stop_master_timer_cb(shuso_loop *loop, shuso_ev_timer *w, int revents) {
+  shuso_t           *ctx = shuso_ev_ctx(loop, w);
   shuso_stop(ctx, SHUSO_STOP_ASK);
 }
 
@@ -238,7 +241,7 @@ bool shuso_stop_manager(shuso_t *ctx, shuso_stop_t forcefulness) {
   if(*ctx->process->state == SHUSO_PROCESS_STATE_RUNNING) {
     *ctx->process->state = SHUSO_PROCESS_STATE_STOPPING;
     shuso_ipc_send_workers(ctx, SHUTTLESOCK_IPC_CMD_SHUTDOWN, (void *)(intptr_t )forcefulness);
-    shuso_add_timer_watcher(ctx, stop_manager_timer_cb, ctx, 0.1, 0.5);
+    shuso_add_timer_watcher(ctx, 0.1, 0.5, stop_manager_timer_cb, ctx);
   }
   if(*ctx->process->state == SHUSO_PROCESS_STATE_STOPPING) {
     bool all_stopped = true;
@@ -272,7 +275,8 @@ bool shuso_run(shuso_t *ctx) {
     return shuso_set_error(ctx, "failed to spawn manager process");
   }
   
-  shuso_add_child_watcher(ctx, child_watcher_cb, NULL, 0, 0);
+  shuso_ev_child_init(ctx, &ctx->base_watchers.child, 0, 0, child_watcher_cb, NULL);
+  shuso_ev_child_start(ctx, &ctx->base_watchers.child);
   
   *ctx->process->state = SHUSO_PROCESS_STATE_STARTING;
   ctx->common->phase_handlers.start_master(ctx, ctx->common->phase_handlers.privdata);
@@ -311,7 +315,7 @@ bool shuso_stop(shuso_t *ctx, shuso_stop_t forcefulness) {
     if(!shuso_stop_manager(ctx, forcefulness)) {
       return false;
     }
-    shuso_add_timer_watcher(ctx, stop_master_timer_cb, ctx, 0.1, 0.5);
+    shuso_add_timer_watcher(ctx, 0.1, 0.5, stop_master_timer_cb, ctx);
   }
   
   if(*ctx->process->state == SHUSO_PROCESS_STATE_RUNNING) {
@@ -325,6 +329,33 @@ bool shuso_stop(shuso_t *ctx, shuso_stop_t forcefulness) {
   }
   return true;
 }
+
+static void shuso_worker_initialize(shuso_t *ctx) {
+  assert(ctx->process);
+  *ctx->process->state = SHUSO_PROCESS_STATE_STARTING;
+  
+  shuso_ipc_channel_shared_start(ctx, ctx->process);
+  shuso_ipc_channel_local_init(ctx);
+  shuso_ipc_channel_local_start(ctx);
+  
+  ctx->common->phase_handlers.start_worker(ctx, ctx->common->phase_handlers.privdata);
+  *ctx->process->state = SHUSO_PROCESS_STATE_RUNNING;
+}
+static void shuso_worker_shutdown(shuso_t *ctx) {
+  shuso_log(ctx, "stopping...");
+  shuso_cleanup_loop(ctx);
+  *ctx->process->state = SHUSO_PROCESS_STATE_DEAD;
+#ifndef SHUTTLESOCK_DEBUG_NO_WORKER_THREADS
+  ev_loop_destroy(ctx->ev.loop);
+#endif
+  ctx->ev.loop = NULL;
+  shuso_log(ctx, "stopped");
+  shuso_resolver_cleanup(&ctx->resolver);
+  shuso_stalloc_empty(&ctx->stalloc);
+  free(ctx);
+}
+
+#ifndef SHUTTLESOCK_DEBUG_NO_WORKER_THREADS
  static void *shuso_run_worker(void *arg) {
   shuso_t   *ctx = arg;
   assert(ctx);
@@ -335,37 +366,22 @@ bool shuso_stop(shuso_t *ctx, shuso_stop_t forcefulness) {
   
   ctx->ev.loop = ev_loop_new(ctx->ev.flags);
   ev_set_userdata(ctx->ev.loop, ctx);
-  assert(ctx->process);
-  *ctx->process->state = SHUSO_PROCESS_STATE_STARTING;
-  
-  shuso_ipc_channel_shared_start(ctx, ctx->process);
-  shuso_ipc_channel_local_init(ctx);
-  shuso_ipc_channel_local_start(ctx);
-  
-  ctx->common->phase_handlers.start_worker(ctx, ctx->common->phase_handlers.privdata);
-  *ctx->process->state = SHUSO_PROCESS_STATE_RUNNING;
+  shuso_worker_initialize(ctx);
   
   ev_run(ctx->ev.loop, 0);
-  shuso_log(ctx, "stopping...");
-  shuso_cleanup_loop(ctx);
-  *ctx->process->state = SHUSO_PROCESS_STATE_DEAD;
-  ev_loop_destroy(ctx->ev.loop);
-  ctx->ev.loop = NULL;
-  shuso_log(ctx, "stopped");
-  shuso_resolver_cleanup(&ctx->resolver);
-  shuso_stalloc_empty(&ctx->stalloc);
-  free(ctx);
+  
+  shuso_worker_shutdown(ctx);
   return NULL;
 }
+#endif
 
 bool shuso_spawn_worker(shuso_t *ctx, shuso_process_t *proc) {
   int               procnum = shuso_process_to_procnum(ctx, proc);
   const char       *err = NULL;
-  bool              pthreadattr_initialized = false;
   bool              stalloc_initialized = false;
   bool              resolver_initialized = false;
   bool              shared_ipc_created = false;
-  shuso_t          *threadctx = NULL;
+  shuso_t          *workerctx = NULL;
   assert(proc);
   assert(procnum >= SHUTTLESOCK_WORKER);
   
@@ -374,23 +390,14 @@ bool shuso_spawn_worker(shuso_t *ctx, shuso_process_t *proc) {
     goto fail;
   }
   
-  int               prev_proc_state = *proc->state;
-  *proc->state = SHUSO_PROCESS_STATE_STARTING;
-  pthread_attr_t    pthread_attr;
-  if(!(pthreadattr_initialized = (pthread_attr_init(&pthread_attr) == 0))) {
-    err = "can't spawn worker: pthread_attr_init() failed";
-    goto fail;
-  }
-  pthread_attr_setdetachstate(&pthread_attr, PTHREAD_CREATE_DETACHED);
-  
-  threadctx = calloc(1, sizeof(*ctx));
-  if(!threadctx) {
+  workerctx = calloc(1, sizeof(*ctx));
+  if(!workerctx) {
     err = "can't spawn worker: failed to malloc() shuttlesock context";
     goto fail;
   }
-  threadctx->common = ctx->common;
-  threadctx->ev.flags = ctx->ev.flags;
-  threadctx->data = ctx->data;
+  
+  int               prev_proc_state = *proc->state;
+  *proc->state = SHUSO_PROCESS_STATE_STARTING;
   
   if(prev_proc_state == SHUSO_PROCESS_STATE_NIL) {
     assert(proc->ipc.buf == NULL);
@@ -404,32 +411,53 @@ bool shuso_spawn_worker(shuso_t *ctx, shuso_process_t *proc) {
     //TODO: ensure buf is empty
   }
   
-  threadctx->process = proc;
-  *threadctx->process->state = SHUSO_PROCESS_STATE_NIL;
-  threadctx->procnum = procnum;
-  if(!(stalloc_initialized = shuso_stalloc_init(&threadctx->stalloc, 0))) {
+  workerctx->common = ctx->common;
+  workerctx->ev.flags = ctx->ev.flags;
+  workerctx->data = ctx->data;
+  
+  workerctx->process = proc;
+  *workerctx->process->state = SHUSO_PROCESS_STATE_NIL;
+  workerctx->procnum = procnum;
+  if(!(stalloc_initialized = shuso_stalloc_init(&workerctx->stalloc, 0))) {
     err = "can't spawn worker: failed to create context stalloc";
     goto fail;
   }
   
-  if(!(resolver_initialized = shuso_resolver_init(threadctx, &threadctx->common->config, &threadctx->resolver))) {
+  if(!(resolver_initialized = shuso_resolver_init(workerctx, &workerctx->common->config, &workerctx->resolver))) {
     err = "can't spawn worker: unable to initialize resolver";
     goto fail;
   }
   
-  if(pthread_create(&proc->tid, &pthread_attr, shuso_run_worker, threadctx) != 0) {
+
+#ifndef SHUTTLESOCK_DEBUG_NO_WORKER_THREADS
+  pthread_attr_t    pthread_attr;
+  bool              pthreadattr_initialized = false;
+  
+  if(!(pthreadattr_initialized = (pthread_attr_init(&pthread_attr) == 0))) {
+    err = "can't spawn worker: pthread_attr_init() failed";
+    goto fail;
+  }
+  pthread_attr_setdetachstate(&pthread_attr, PTHREAD_CREATE_DETACHED);
+  
+  if(pthread_create(&proc->tid, &pthread_attr, shuso_run_worker, workerctx) != 0) {
     err = "can't spawn worker: failed to create thread";
     goto fail;
   }
+#else
+  workerctx->ev.loop = ctx->ev.loop;
+  shuso_worker_initialize(workerctx);
+#endif
   
   return true;
   
 fail:
   if(shared_ipc_created) shuso_ipc_channel_shared_destroy(ctx, proc);
+#ifndef SHUTTLESOCK_DEBUG_NO_WORKER_THREADS
   if(pthreadattr_initialized) pthread_attr_destroy(&pthread_attr);
+#endif
   if(resolver_initialized) shuso_resolver_cleanup(&ctx->resolver);
   if(stalloc_initialized) shuso_stalloc_empty(&ctx->stalloc);
-  if(threadctx) free(threadctx);
+  if(workerctx) free(workerctx);
   return shuso_set_error(ctx, err);
 }
 
@@ -441,7 +469,12 @@ bool shuso_stop_worker(shuso_t *ctx, shuso_process_t *proc, shuso_stop_t forcefu
         //TODO: defer worker stop maybe?
         shuso_log(ctx, "stopping...");
         ctx->common->phase_handlers.stop_worker(ctx, ctx->common->phase_handlers.privdata);
+#ifndef SHUTTLESOCK_DEBUG_NO_WORKER_THREADS
         ev_break(ctx->ev.loop, EVBREAK_ALL);
+#else
+        shuso_worker_shutdown(ctx);
+#endif
+        
       }
       else {
         shuso_log(ctx, "already shutting down");
@@ -486,9 +519,9 @@ int shuso_process_to_procnum(shuso_t *ctx, shuso_process_t *proc) {
 }
 
 #define DELETE_BASE_WATCHERS(ctx, watcher_type) \
-  for(ev_##watcher_type##_link_t *cur = (ctx)->base_watchers.watcher_type.head, *next = NULL; cur != NULL; cur = next) { \
+  for(shuso_ev_##watcher_type##_link_t *cur = (ctx)->base_watchers.watcher_type.head, *next = NULL; cur != NULL; cur = next) { \
     next = cur->next; \
-    ev_##watcher_type##_stop((ctx)->ev.loop, &cur->data); \
+    shuso_ev_##watcher_type##_stop(ctx, &cur->data); \
     free(cur); \
   } \
   llist_init(ctx->base_watchers.watcher_type)
@@ -497,11 +530,12 @@ static void shuso_cleanup_loop(shuso_t *ctx) {
   shuso_ipc_channel_shared_stop(ctx, ctx->process);
   
   if(ctx->procnum < SHUTTLESOCK_WORKER) {
-    DELETE_BASE_WATCHERS(ctx, signal);
-    DELETE_BASE_WATCHERS(ctx, child);
-    DELETE_BASE_WATCHERS(ctx, io);
+    int sigs[] = SHUTTLESOCK_WATCHED_SIGNALS;
+    for(unsigned i=0; i<sizeof(sigs)/sizeof(int); i++) {
+      shuso_ev_signal_stop(ctx, &ctx->base_watchers.signal[i]);
+    }
+    shuso_ev_child_stop(ctx, &ctx->base_watchers.child);
     DELETE_BASE_WATCHERS(ctx, timer);
-    DELETE_BASE_WATCHERS(ctx, periodic);
     shuso_ipc_channel_shared_destroy(ctx, &ctx->common->process.master);
     shuso_ipc_channel_shared_destroy(ctx, &ctx->common->process.manager);
   }
@@ -513,38 +547,39 @@ static void shuso_cleanup_loop(shuso_t *ctx) {
 }
 #undef DELETE_BASE_WATCHERS
 
-static void signal_watcher_cb(EV_P_ ev_signal *w, int revents) {
-  shuso_t *ctx = ev_userdata(EV_A);
-  shuso_log(ctx, "got signal: %d", w->signum);
+static void signal_watcher_cb(shuso_loop *loop, shuso_ev_signal *w, int revents) {
+  shuso_t *ctx = shuso_ev_ctx(loop, w);
+  int      signum = w->ev.signum;
+  shuso_log(ctx, "got signal: %d", signum);
   if(ctx->procnum != SHUTTLESOCK_MASTER) {
     shuso_log(ctx, "forward signal to master via IPC");
-    shuso_ipc_send(ctx, &ctx->common->process.master, SHUTTLESOCK_IPC_CMD_SIGNAL, (void *)(intptr_t )w->signum);
+    shuso_ipc_send(ctx, &ctx->common->process.master, SHUTTLESOCK_IPC_CMD_SIGNAL, (void *)(intptr_t )signum);
   }
   else {
     //TODO: do the actual shutdown, ya know?
-    switch(w->signum) {
+    switch(signum) {
       case SIGINT:
       case SIGTERM:
         shuso_stop(ctx, SHUSO_STOP_ASK);
         break;
       default:
-        shuso_log(ctx, "ignore signal %d", w->signum);
+        shuso_log(ctx, "ignore signal %d", signum);
     }
   }
 }
 
-static void child_watcher_cb(EV_P_ ev_child *w, int revents) {
-  shuso_t *ctx = ev_userdata(EV_A);
+static void child_watcher_cb(shuso_loop *loop, shuso_ev_child *w, int revents) {
+  shuso_t *ctx = shuso_ev_ctx(loop, w);
   if(ctx->procnum == SHUTTLESOCK_MASTER) {
     if(*ctx->common->process.manager.state == SHUSO_PROCESS_STATE_STOPPING) {
-      assert(w->rpid == ctx->common->process.manager.pid);
+      assert(w->ev.rpid == ctx->common->process.manager.pid);
       *ctx->common->process.manager.state = SHUSO_PROCESS_STATE_DEAD;
     }
     else {
       //TODO: was that the manager that just died? if so, restart it.
     }
   }
-  shuso_log(ctx, "child watcher: child pid %d rstatus %x", w->rpid, w->rstatus);
+  shuso_log(ctx, "child watcher: child pid %d rstatus %x", w->ev.rpid, w->ev.rstatus);
 }
 
 bool shuso_set_log_fd(shuso_t *ctx, int fd) {

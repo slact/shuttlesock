@@ -11,8 +11,8 @@ struct shuso_resolver_socket_s {
   shuso_resolver_socket_t       *next;
   int                            fd;
   struct {
-    ev_io                          io;
-    //ev_timer                       timer;
+    shuso_ev_io                    io;
+    //shuso_ev_timer               timer;
   }                              ev;
   shuso_resolver_t              *resolver;
 };

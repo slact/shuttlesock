@@ -31,6 +31,13 @@ typedef enum {
 #define SHUTTLESOCK_MANAGER    -1
 #define SHUTTLESOCK_WORKER      0
 
+typedef struct shuso_ev_io_s shuso_ev_io;
+typedef struct shuso_ev_timer_s shuso_ev_timer;
+typedef struct shuso_ev_child_s shuso_ev_child;
+typedef struct shuso_ev_signal_s shuso_ev_signal;
+
+
+typedef struct ev_loop shuso_loop; //don't want to write struct ev_loop everywhere or use EV_A and EV_P_ macros, they're ugly.
 typedef struct shuso_s shuso_t;
 typedef struct shuso_common_s shuso_common_t;
 typedef struct shuso_process_s shuso_process_t;

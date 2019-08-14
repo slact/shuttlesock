@@ -19,7 +19,7 @@ bool shuso_resolver_global_cleanup(void) {
 }
 
 static void ares_socket_state_callback(void *data, ares_socket_t socket_fd, int readable, int writable);
-static void ares_ev_io_callback(EV_P_ ev_io *, int);
+static void ares_ev_io_callback(shuso_loop *, shuso_ev_io *, int);
 
 const struct ares_socket_functions ares_sockfuncs;
 
@@ -116,14 +116,14 @@ bool shuso_resolver_cleanup(shuso_resolver_t *resolver) {
   return true;
 }
 
-static void ares_ev_io_callback(EV_P_ ev_io *w, int events) {
-  shuso_resolver_socket_t *rsock = w->data;
+static void ares_ev_io_callback(shuso_loop *loop, shuso_ev_io *w, int events) {
+  shuso_resolver_socket_t *rsock = shuso_ev_data(w);
   ares_socket_t rfd = ARES_SOCKET_BAD, wfd = ARES_SOCKET_BAD;
   if(events & EV_READ) {
-    rfd = w->fd;
+    rfd = w->ev.fd;
   }
   if(events & EV_WRITE) {
-    wfd = w->fd;
+    wfd = w->ev.fd;
   }
   ares_process_fd(rsock->resolver->channel, rfd, wfd);
 }
@@ -163,10 +163,9 @@ static ares_socket_t ares_socket_open(int domain, int type, int protocol, void *
   rsock->fd = fd;
   rsock->resolver = resolver;
   
-  ev_io_init(&rsock->ev.io, ares_ev_io_callback, rsock->fd, EV_READ | EV_WRITE);
-  rsock->ev.io.data = rsock;
+  shuso_ev_io_init(ctx, &rsock->ev.io, rsock->fd, EV_READ | EV_WRITE, ares_ev_io_callback, rsock);
   
-  ev_io_start(ctx->ev.loop, &rsock->ev.io);
+  shuso_ev_io_start(ctx, &rsock->ev.io);
   
   return fd;
   
@@ -189,7 +188,7 @@ static int ares_socket_close(ares_socket_t fd, void *user_data) {
     resolver->socket_head = cur->next;
   }
   
-  ev_io_stop(resolver->ctx->ev.loop, &cur->ev.io);
+  shuso_ev_io_stop(resolver->ctx, &cur->ev.io);
   free(cur);
   
   int rc;

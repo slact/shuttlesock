@@ -99,6 +99,9 @@ for opt in $*; do
     test|runtest)
       run_test=1
       ;;
+    nothread|nothreads|no-threads)
+      debug_no_worker_threads=1
+      ;;
     no-eventfd)
       disable_eventfd=1
       ;;
@@ -156,6 +159,7 @@ if [[ -n $optimize_level ]]; then
   OPTS+=( "-DOPTIMIZE_LEVEL=$optimize_level" )
 fi
 
+OPTS+=( "-DSHUTTLESOCK_DEBUG_NO_WORKER_THREADS=${debug_no_worker_threads}" )
 OPTS+=( "-DSHUTTLESOCK_STALLOC_TRACK_SPACE=${stalloc_track_space}" )
 OPTS+=( "-DSHUTTLESOCK_VALGRIND=${valgrind}" )
 OPTS+=( "-DSHUTTLESOCK_SANITIZE=${sanitize}" )

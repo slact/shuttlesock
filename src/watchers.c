@@ -5,94 +5,101 @@
 #include <shuttlesock/log.h>
 #include "shuttlesock_private.h"
 
-//ugly repetition follows
+//ev_io
 
-ev_signal *shuso_add_signal_watcher(shuso_t *ctx, void (*cb)(EV_P_ ev_signal *, int), void *pd, int signum) {
-  ev_signal_link_t  *wl = malloc(sizeof(*wl));
-  ev_signal         *w;
-  if(wl == NULL) return NULL;
-  w = &wl->data;
-  ev_signal_init(w, cb, signum);
-  w->data = pd;
-  ev_signal_start(ctx->ev.loop, w);
-  llist_append(ctx->base_watchers.signal, wl);
-  return w;
+typedef void (*ev_io_fn)(struct ev_loop *, ev_io *, int);
+
+void shuso_ev_io_init(shuso_t *ctx, shuso_ev_io *w, int fd, int events, void (*cb)(struct ev_loop *, shuso_ev_io *, int), void *pd) {
+#ifdef SHUTTLESOCK_DEBUG_NO_WORKER_THREADS
+  w->ctx = ctx;
+#endif
+  w->ev.data = pd;
+  ev_io_init(&w->ev, (ev_io_fn )cb, fd, events);
 }
-void shuso_remove_signal_watcher(shuso_t *ctx, ev_signal *w) {
-  ev_signal_link_t *wl = llist_link(w, ev_signal);
-  ev_signal_stop(ctx->ev.loop, w);
-  llist_remove(ctx->base_watchers.signal, wl);
-  free(wl);
+void shuso_ev_io_start(shuso_t *ctx, shuso_ev_io *w) {
+  ev_io_start(ctx->ev.loop, &w->ev);
+}
+void shuso_ev_io_stop(shuso_t *ctx, shuso_ev_io *w) {
+  ev_io_stop(ctx->ev.loop, &w->ev);
 }
 
-ev_child *shuso_add_child_watcher(shuso_t *ctx, void (*cb)(EV_P_ ev_child *, int), void *pd, pid_t pid, int trace) {
-  ev_child_link_t  *wl = malloc(sizeof(*wl));
-  ev_child         *w;
-  if(wl == NULL) return NULL;
-  w = &wl->data;
-  ev_child_init(w, cb, pid, trace);
-  w->data = pd;
-  ev_child_start(ctx->ev.loop, w);
-  llist_append(ctx->base_watchers.child, wl);
-  return w;
-}
-void shuso_remove_child_watcher(shuso_t *ctx, ev_child *w) {
-  ev_child_link_t *wl = llist_link(w, ev_child);
-  ev_child_stop(ctx->ev.loop, w);
-  llist_remove(ctx->base_watchers.child, wl);
-  free(wl);
+
+// ev_timer
+
+typedef void (*ev_timer_fn)(struct ev_loop *, ev_timer *, int);
+
+void shuso_ev_timer_init(shuso_t *ctx, shuso_ev_timer *w, ev_tstamp after, ev_tstamp repeat, void (*cb)(struct ev_loop *, shuso_ev_timer *, int), void *pd) {
+#ifdef SHUTTLESOCK_DEBUG_NO_WORKER_THREADS
+  w->ctx = ctx;
+#endif
+  w->ev.data = pd;
+  ev_timer_init(&w->ev, (ev_timer_fn )cb, after, repeat);
 }
 
-ev_io *shuso_add_io_watcher(shuso_t *ctx, void (*cb)(EV_P_ ev_io *, int), void *pd, int fd, int events) {
-  ev_io_link_t  *wl = malloc(sizeof(*wl));
-  ev_io         *w;
-  if(wl == NULL) return NULL;
-  w = &wl->data;
-  ev_io_init(w, cb, fd, events);
-  w->data = pd;
-  ev_io_start(ctx->ev.loop, w);
-  llist_append(ctx->base_watchers.io, wl);
-  return w;
+void shuso_ev_timer_start(shuso_t *ctx, shuso_ev_timer *w) {
+  ev_timer_start(ctx->ev.loop, &w->ev);
 }
-void shuso_remove_io_watcher(shuso_t *ctx, ev_io *w) {
-  ev_io_link_t *wl = llist_link(w, ev_io);
-  ev_io_stop(ctx->ev.loop, w);
-  llist_remove(ctx->base_watchers.io, wl);
-  free(wl);
+void shuso_ev_timer_again(shuso_t *ctx, shuso_ev_timer *w) {
+  ev_timer_again(ctx->ev.loop, &w->ev);
+}
+void shuso_ev_timer_stop(shuso_t *ctx, shuso_ev_timer *w) {
+  ev_timer_stop(ctx->ev.loop, &w->ev);
 }
 
-ev_timer *shuso_add_timer_watcher(shuso_t *ctx, void (*cb)(EV_P_ ev_timer *, int), void *pd, ev_tstamp after, ev_tstamp repeat) {
-  ev_timer_link_t  *wl = malloc(sizeof(*wl));
-  ev_timer         *w;
+
+//ev_child
+
+typedef void (*ev_child_fn)(struct ev_loop *, ev_child *, int);
+
+void shuso_ev_child_init(shuso_t *ctx, shuso_ev_child *w, int pid, int trace, void (*cb)(struct ev_loop *, shuso_ev_child *, int), void *pd) {
+#ifdef SHUTTLESOCK_DEBUG_NO_WORKER_THREADS
+  w->ctx = ctx;
+#endif
+  w->ev.data = pd;
+  ev_child_init(&w->ev, (ev_child_fn )cb, pid, trace);
+}
+
+void shuso_ev_child_start(shuso_t *ctx, shuso_ev_child *w) {
+  ev_child_start(ctx->ev.loop, &w->ev);
+}
+void shuso_ev_child_stop(shuso_t *ctx, shuso_ev_child *w) {
+  ev_child_stop(ctx->ev.loop, &w->ev);
+}
+
+//ev_signal
+
+typedef void (*ev_signal_fn)(struct ev_loop *, ev_signal *, int);
+
+void shuso_ev_signal_init(shuso_t *ctx, shuso_ev_signal *w, int signal, void (*cb)(struct ev_loop *, shuso_ev_signal *, int), void *pd) {
+#ifdef SHUTTLESOCK_DEBUG_NO_WORKER_THREADS
+  w->ctx = ctx;
+#endif
+  w->ev.data = pd;
+  ev_signal_init(&w->ev, (ev_signal_fn )cb, signal);
+}
+
+void shuso_ev_signal_start(shuso_t *ctx, shuso_ev_signal *w) {
+  ev_signal_start(ctx->ev.loop, &w->ev);
+}
+void shuso_ev_signal_stop(shuso_t *ctx, shuso_ev_signal *w) {
+  ev_signal_stop(ctx->ev.loop, &w->ev);
+}
+
+
+
+shuso_ev_timer *shuso_add_timer_watcher(shuso_t *ctx, ev_tstamp after, ev_tstamp repeat, void (*cb)(struct ev_loop *, shuso_ev_timer *, int), void *pd) {
+  shuso_ev_timer_link_t  *wl = malloc(sizeof(*wl));
+  shuso_ev_timer         *w;
   if(wl == NULL) return NULL;
   w = &wl->data;
-  ev_timer_init(w, cb, after, repeat);
-  w->data = pd;
-  ev_timer_start(ctx->ev.loop, w);
+  shuso_ev_timer_init(ctx, w, after, repeat, cb, pd);
+  shuso_ev_timer_start(ctx, w);
   llist_append(ctx->base_watchers.timer, wl);
   return w;
 }
-void shuso_remove_timer_watcher(shuso_t *ctx, ev_timer *w) {
-  ev_timer_link_t *wl = llist_link(w, ev_timer);
-  ev_timer_stop(ctx->ev.loop, w);
+void shuso_remove_timer_watcher(shuso_t *ctx, shuso_ev_timer *w) {
+  shuso_ev_timer_link_t *wl = llist_link(w, shuso_ev_timer);
+  shuso_ev_timer_stop(ctx, w);
   llist_remove(ctx->base_watchers.timer, wl);
-  free(wl);
-}
-
-ev_periodic *shuso_add_periodic_watcher(shuso_t *ctx, void (*cb)(EV_P_ ev_periodic *, int), void *pd, ev_tstamp offset, ev_tstamp interval, ev_tstamp (*reschedule_cb)(ev_periodic *w, ev_tstamp now)) {
-  ev_periodic_link_t  *wl = malloc(sizeof(*wl));
-  ev_periodic         *w;
-  if(wl == NULL) return NULL;
-  w = &wl->data;
-  ev_periodic_init(w, cb, offset, interval, reschedule_cb);
-  w->data = pd;
-  ev_periodic_start(ctx->ev.loop, w);
-  llist_append(ctx->base_watchers.periodic, wl);
-  return w;
-}
-void shuso_remove_periodic_watcher(shuso_t *ctx, ev_periodic *w) {
-  ev_periodic_link_t *wl = llist_link(w, ev_periodic);
-  ev_periodic_stop(ctx->ev.loop, w);
-  llist_remove(ctx->base_watchers.periodic, wl);
   free(wl);
 }

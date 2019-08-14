@@ -20,7 +20,4 @@
   write((ctx)->common->log.fd, ___log, ___cur - ___log); \
 } while(0)
 
-#define shuso_loop_log(loop, ...) \
-  shuso_log(((shuso_t *)ev_userdata(loop)), __VA_ARGS__)
-  
 #endif //SHUTTLESOCK_LOG_H
