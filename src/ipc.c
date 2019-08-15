@@ -353,7 +353,7 @@ bool shuso_ipc_receive_fd_start(shuso_t *ctx, const char *description, float tim
     found->buffered_fds.count = 0;
   }
   else {
-    shuso_ipc_fd_receiver_t *reallocd = realloc(ctx->ipc.fd_receiver.array, sizeof(shuso_ipc_fd_receiver_t) * ctx->ipc.fd_receiver.count + 1);
+    shuso_ipc_fd_receiver_t *reallocd = realloc(ctx->ipc.fd_receiver.array, sizeof(shuso_ipc_fd_receiver_t) * (ctx->ipc.fd_receiver.count + 1));
     if(!reallocd) {
       shuso_log(ctx, "ipc_receive_fd_start ref failed, no memory for realloc()");
       return false;
