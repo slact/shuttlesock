@@ -8,6 +8,7 @@
 #include <sys/un.h>
 #include <netinet/in.h>
 #include <errno.h>
+#include <unistd.h>
 
 static void signal_handle(shuso_t *ctx, const uint8_t code, void *ptr) {
   intptr_t sig = (intptr_t )ptr;
@@ -87,7 +88,7 @@ bool shuso_ipc_command_open_listener_sockets(shuso_t *ctx, shuso_hostinfo_t *hos
   int                   socktype;
   const char           *err = NULL;
   size_t                path_len = 0;
-  struct sockaddr      *sa;
+  struct sockaddr      *sa = NULL;
   struct sockaddr_un    sa_unix;
   struct sockaddr_in    sa_inet;
   struct sockaddr_in6   sa_inet6;
@@ -138,6 +139,7 @@ bool shuso_ipc_command_open_listener_sockets(shuso_t *ctx, shuso_hostinfo_t *hos
         addr_len = sizeof(sa_inet6);
       }
     }
+    assert(sa);
     for(i=0; i < count; i++) {
       shuso_log(ctx, "open socket #%d", i);
       opened[i]=socket(hostinfo->addr_family, socktype, 0);
@@ -218,7 +220,6 @@ static bool free_shared_open_sockets_struct(shuso_t *ctx, ipc_open_sockets_t *so
 
 static bool command_open_listener_sockets_from_manager(shuso_t *ctx, shuso_hostinfo_t *hostinfo, int count, shuso_sockopts_t *sockopts, shuso_ipc_open_sockets_fn callback, void *pd) {
   assert(ctx->procnum == SHUTTLESOCK_MANAGER);
-  printf("command_open_listener_sockets_from_manager\n");
   assert(count > 0);
   const char          *err = NULL;
   ipc_open_sockets_t  *sockreq = shuso_shared_slab_alloc(&ctx->common->shm, sizeof(*sockreq) + sizeof(int)*count);
@@ -270,7 +271,6 @@ static bool command_open_listener_sockets_from_manager(shuso_t *ctx, shuso_hosti
 fail:
   if(err) {
     shuso_set_error(ctx, err);
-    printf("ERROR: %s\n", err);
   }
   if(sockreq) free_shared_open_sockets_struct(ctx, sockreq);
   callback(ctx, SHUSO_FAIL, hostinfo, NULL, 0, pd);
@@ -290,6 +290,8 @@ static void open_listener_sockets_handle_callback(shuso_t *ctx, shuso_status_t s
         //TODO: send ABORT to socket receiver
         shuso_log(ctx, "shuso_ipc_send_fd #%d socket %d FAILED: %d %s", i, sockets[i], errno, strerror(errno));
       }
+      close(sockets[i]);
+      sockets[i] = -1;
     }
   }
   else {

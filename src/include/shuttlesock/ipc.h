@@ -55,6 +55,8 @@ typedef struct {
   }                         buffered_fds;
   const char               *description;
   shuso_ev_timer            timeout;
+  bool                      in_use;
+  bool                      finished;
 } shuso_ipc_fd_receiver_t;
 
 typedef struct {

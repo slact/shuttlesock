@@ -345,12 +345,21 @@ bool shuso_ipc_receive_fd_start(shuso_t *ctx, const char *description, float tim
       shuso_ev_timer_start(ctx, &found->timeout);
     }
     
-    for(unsigned j=0; j < found->buffered_fds.count; j++) {
+    found->in_use = true;
+    for(unsigned j=0; j < found->buffered_fds.count && !found->finished; j++) {
       callback(ctx, SHUSO_OK, ref, found->buffered_fds.array[j].fd, found->buffered_fds.array[j].pd, pd);
     }
-    free(found->buffered_fds.array);
-    found->buffered_fds.array = NULL;
-    found->buffered_fds.count = 0;
+    found->in_use = false;
+    if(!found->finished) {
+      //got through these buffered fds, but the user expects more, so don't destroy the whole thing yet.
+      //just free the buffer
+      free(found->buffered_fds.array);
+      found->buffered_fds.array = NULL;
+      found->buffered_fds.count = 0;
+    }
+    else {
+      shuso_ipc_receive_fd_finish(ctx, found->ref);
+    }
   }
   else {
     shuso_ipc_fd_receiver_t *reallocd = realloc(ctx->ipc.fd_receiver.array, sizeof(shuso_ipc_fd_receiver_t) * (ctx->ipc.fd_receiver.count + 1));
@@ -364,7 +373,9 @@ bool shuso_ipc_receive_fd_start(shuso_t *ctx, const char *description, float tim
       .pd = pd,
       .buffered_fds.array = NULL,
       .buffered_fds.count = 0,
-      .description = description ? description : "?"
+      .description = description ? description : "?",
+      .in_use = false,
+      .finished = false
     };
     ctx->ipc.fd_receiver.array = reallocd;
     ctx->ipc.fd_receiver.count++;
@@ -380,14 +391,24 @@ bool shuso_ipc_receive_fd_finish(shuso_t *ctx, uintptr_t ref) {
     }
     if(ctx->ipc.fd_receiver.array[i].ref == ref) {
       found = &ctx->ipc.fd_receiver.array[i];
-      for(unsigned j = 0; j<found->buffered_fds.count; j++) {
-        close(found->buffered_fds.array[j].fd);
+      if(found->in_use) {
+        //mark it for later deallocation
+        found->finished = true;
+        return true;
       }
-      if(found->buffered_fds.array) free(found->buffered_fds.array);
     }
   }
   if(!found) {
     return false;
+  }
+  
+  for(unsigned j = 0; j<found->buffered_fds.count; j++) {
+    close(found->buffered_fds.array[j].fd);
+  }
+  if(found->buffered_fds.array){
+    free(found->buffered_fds.array);
+    found->buffered_fds.array = NULL;
+    found->buffered_fds.count = 0;
   }
   if(shuso_ev_active(&found->timeout)) {
     shuso_ev_timer_stop(ctx, &found->timeout);

@@ -74,8 +74,8 @@ shuso_t *___runcheck_shuso_create(unsigned int ev_loop_flags, shuso_config_t *co
   return ctx;
 }
 
-void stop_timer(EV_P_ shuso_ev_timer *w, int revent) {
-  shuso_t *ctx = shuso_ev_ctx(EV_A, w);
+void stop_timer(shuso_loop *loop, shuso_ev_timer *w, int revent) {
+  shuso_t *ctx = shuso_ev_ctx(loop, w);
   int desired_procnum = (intptr_t )shuso_ev_data(w);
   if(desired_procnum == SHUTTLESOCK_MASTER && ctx->procnum != SHUTTLESOCK_MASTER) {
     return;

@@ -338,7 +338,7 @@ describe(stack_allocator) {
   }
   
   test("a few pages' worth") {
-    char *chr[500];
+    static char *chr[500];
     size_t sz = st.page.size / 5;
     for(int i=0; i<500; i++) {
       chr[i] = shuso_stalloc(&st, sz);
@@ -483,24 +483,48 @@ describe(shared_memory_allocator) {
 
 typedef struct {
   const char      *err;
-  bool             ok[1026];
   uint16_t         port;
   uint16_t         num_ports;
 } listener_port_test_t;
 
 void listener_port_test_runner_callback(shuso_t *ctx, shuso_status_t status, shuso_hostinfo_t *hostinfo, int *sockets, int socket_count, void *pd) {
-  shuso_log(ctx, "FIN!");
-  
+  listener_port_test_t *t = pd;
+  if(status == SHUSO_OK) {
+    t->err = NULL;
+  }
+  else if(status == SHUSO_FAIL) {
+    t->err = "listener port creation failed";
+  }
+  else if(status == SHUSO_TIMEOUT) {
+    t->err = "listener port creation timed out";
+  }
+  //TODO: actually check the sockets
+  for(int i=0; i< socket_count; i++) {
+    if(sockets[i] == -1) {
+      t->err = "unexpected invalid socket found";
+    }
+    if(close(sockets[i]) == -1) {
+      switch(errno) {
+        case EBADF:
+          t->err = "bad fine decriptor";
+          break;
+        case EIO:
+          t->err = "I/O error cleaning up file descriptor";
+          break;
+      }
+    }
+    sockets[i]=-1;
+  }
+  shuso_log(ctx, "wrapping it up");
+  shuso_stop(ctx, SHUSO_STOP_INSIST);
 }
 
 void listener_port_test_runner(EV_P_ shuso_ev_timer *w, int revent) {
   shuso_t *ctx = ev_userdata(EV_A);
   listener_port_test_t *pt = w->ev.data;
   if(ctx->procnum != SHUTTLESOCK_MANAGER) {
-    printf("YEAH bye\n");
     return;
   }
-  printf("YEAH HELLO\n");
   shuso_hostinfo_t host = {
     .name="test",
     .addr_family=AF_INET,
@@ -531,19 +555,21 @@ describe(listener_sockets) {
     ss = runcheck_shuso_create(EVFLAG_AUTO, NULL);
     pt = shmalloc(pt);
     pt->err = NULL;
-    for(int i=0; i<1026; i++) {
-      pt->ok[i]=false;
-    }
   }
   after_each() {
     shuso_destroy(ss);
     shmfree(pt);
     ss = NULL;
   }
-  skip("listen on port 34241") {
+  test("listen on port 34241") {
     pt->port = 34241;
     shuso_add_timer_watcher(ss,  0.1, 0.0, listener_port_test_runner, pt);
     shuso_run(ss);
+    printf("heyo\n");
+    assert_shuso(ss);
+    if(pt->err != NULL) {
+      snow_fail("%s", pt->err);
+    }
   }
 }
 
@@ -565,6 +591,9 @@ int main(int argc, char **argv) {
   }
   shmfree(child_result);
   close(dev_null);
+  fclose(stdin);
+  fclose(stdout);
+  fclose(stderr); 
   return rc;
 }
 
