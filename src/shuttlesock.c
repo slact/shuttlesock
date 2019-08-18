@@ -382,6 +382,9 @@ bool shuso_spawn_worker(shuso_t *ctx, shuso_process_t *proc) {
   bool              resolver_initialized = false;
   bool              shared_ipc_created = false;
   shuso_t          *workerctx = NULL;
+#ifndef SHUTTLESOCK_DEBUG_NO_WORKER_THREADS
+  bool              pthreadattr_initialized = false;
+#endif
   assert(proc);
   assert(procnum >= SHUTTLESOCK_WORKER);
   
@@ -431,7 +434,6 @@ bool shuso_spawn_worker(shuso_t *ctx, shuso_process_t *proc) {
 
 #ifndef SHUTTLESOCK_DEBUG_NO_WORKER_THREADS
   pthread_attr_t    pthread_attr;
-  bool              pthreadattr_initialized = false;
   
   if(!(pthreadattr_initialized = (pthread_attr_init(&pthread_attr) == 0))) {
     err = "can't spawn worker: pthread_attr_init() failed";
