@@ -136,6 +136,7 @@ struct shuso_s {
   shuso_resolver_t            resolver;
   void                       *data;  //custom data attached to this shuttlesock context
   const char                 *errmsg;
+  char                        logbuf[1024];
 }; //shuso_t;
 
 shuso_t *shuso_create(unsigned int ev_loop_flags, shuso_handlers_t *handlers, shuso_config_t *config, const char **err);

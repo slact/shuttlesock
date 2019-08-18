@@ -15,6 +15,7 @@ include(TargetRequirePackage)
 #set(CMAKE_VERBOSE_MAKEFILE ON)
 set(libsrc 
   src/shuttlesock.c
+  src/log.c
   src/watchers.c
   src/ipc.c
   src/ipc_commands.c
