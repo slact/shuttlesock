@@ -31,8 +31,6 @@ static void do_nothing(void) {}
 shuso_t *shuso_create(unsigned int ev_loop_flags, shuso_handlers_t *handlers, shuso_config_t *config, const char **err) {
   shuso_common_t     *common_ctx = NULL;
   shuso_t            *ctx = NULL;
-  bool                manager_ipc_created = false;
-  bool                master_ipc_created = false;
   bool                stalloc_initialized = false;
   bool                shm_slab_created = false;
   const char         *errmsg = NULL;
@@ -91,14 +89,6 @@ shuso_t *shuso_create(unsigned int ev_loop_flags, shuso_handlers_t *handlers, sh
   
   ev_set_userdata(loop, ctx);
   
-  if(!(master_ipc_created = shuso_ipc_channel_shared_create(ctx, &common_ctx->process.master))) {
-    errmsg = "failed to create shared IPC channel for master";
-    goto fail;
-  }
-  if(!(manager_ipc_created = shuso_ipc_channel_shared_create(ctx, &common_ctx->process.manager))) {
-    errmsg = "failed to create shared IPC channel for manager";
-    goto fail;
-  }
   if(!shuso_ipc_commands_init(ctx)) {
     errmsg = "failed to initialize IPC commands";
     goto fail;
@@ -128,8 +118,6 @@ shuso_t *shuso_create(unsigned int ev_loop_flags, shuso_handlers_t *handlers, sh
   return ctx;
   
 fail:
-  if(master_ipc_created) shuso_ipc_channel_shared_destroy(ctx, &common_ctx->process.master);
-  if(manager_ipc_created) shuso_ipc_channel_shared_destroy(ctx, &common_ctx->process.manager);
   if(stalloc_initialized) shuso_stalloc_empty(&ctx->stalloc);
   if(shm_slab_created) shuso_shared_slab_destroy(ctx, &ctx->common->shm);
   if(ctx) free(ctx);
@@ -271,8 +259,21 @@ bool shuso_run(shuso_t *ctx) {
   ctx->process = &ctx->common->process.master;
   ctx->process->pid = getpid();
   
-  if(!shuso_resolver_init(ctx, &ctx->common->config, &ctx->resolver)) {
-    return shuso_set_error(ctx, "failed to spawn manager process");
+  const char *err = NULL;
+  bool master_ipc_created = false, manager_ipc_created = false, shuso_resolver_initialized = false;
+  
+  if(!(master_ipc_created = shuso_ipc_channel_shared_create(ctx, &ctx->common->process.master))) {
+    err = "failed to create shared IPC channel for master";
+    goto fail;
+  }
+  if(!(manager_ipc_created = shuso_ipc_channel_shared_create(ctx, &ctx->common->process.manager))) {
+    err = "failed to create shared IPC channel for manager";
+    goto fail;
+  }
+  
+  if(!(shuso_resolver_initialized = shuso_resolver_init(ctx, &ctx->common->config, &ctx->resolver))) {
+    err = "failed to spawn manager process";
+    goto fail;
   }
   
   shuso_ev_child_init(ctx, &ctx->base_watchers.child, 0, 0, child_watcher_cb, NULL);
@@ -283,7 +284,8 @@ bool shuso_run(shuso_t *ctx) {
   *ctx->process->state = SHUSO_PROCESS_STATE_RUNNING;
   
   if(!shuso_spawn_manager(ctx)) {
-    return shuso_set_error(ctx, "failed to spawn manager process");
+    err = "failed to spawn manager process";
+    goto fail;
   }
   shuso_init_signal_watchers(ctx);
   shuso_ipc_channel_local_init(ctx);
@@ -297,6 +299,14 @@ bool shuso_run(shuso_t *ctx) {
   shuso_stalloc_empty(&ctx->stalloc);
   shuso_log(ctx, "stopped");
   return true;
+  
+fail:
+  if(master_ipc_created) shuso_ipc_channel_shared_destroy(ctx, &ctx->common->process.master);
+  if(manager_ipc_created) shuso_ipc_channel_shared_destroy(ctx, &ctx->common->process.manager);
+  if(shuso_resolver_initialized) shuso_resolver_cleanup(&ctx->resolver);
+  *ctx->process->state = SHUSO_PROCESS_STATE_DEAD;
+  shuso_set_error(ctx, err);
+  return false;
 }
 
 bool shuso_stop(shuso_t *ctx, shuso_stop_t forcefulness) {
