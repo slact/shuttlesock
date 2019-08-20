@@ -124,6 +124,7 @@ if("${SHUTTLESOCK_USE_IO_URING}" OR NOT DEFINED SHUTTLESOCK_USE_IO_URING)
       target_compile_options(uring PRIVATE -Wno-pointer-arith)
     endif()
     set(SHUTTLESOCK_USE_IO_URING ON CACHE INTERNAL "try to use Linux Kernel's io_uring. If we're not on linux, that's ok, we can still try and fail gracefully.")
+    target_link_libraries(shuttlesock PRIVATE uring)
   endif()
 endif()
 
