@@ -42,6 +42,22 @@ find_package(Threads REQUIRED)
 target_link_libraries(shuttlesock PUBLIC ${CMAKE_THREAD_LIBS_INIT})
 
 target_require_package(shuttlesock PUBLIC ev)
+#set(LIBEV_DIR ${CMAKE_CURRENT_SOURCE_DIR}/lib/libev)
+#include(ExternalProject)
+#ExternalProject_Add(libev_autoconf
+#  SOURCE_DIR ${LIBEV_DIR}
+#  CONFIGURE_COMMAND ${LIBEV_DIR}/configure "--prefix=${LIBEV_DIR}" "--enable-shared=no" "--with-pic=yes"
+#  PREFIX ${LIBEV_DIR}
+#  BUILD_COMMAND make
+#  INSTALL_COMMAND make install
+#  BUILD_IN_SOURCE 1
+#)
+#include_directories(${LIBEV_DIR})
+#add_dependencies(shuttlesock libev_autoconf)
+#add_library(libev STATIC IMPORTED)
+#set_target_properties(libev PROPERTIES IMPORTED_LOCATION ${LIBEV_DIR}/lib/libev.a)
+#target_link_libraries(shuttlesock PRIVATE libev)
+  
 
 
 test_big_endian(SHUTTLESOCK_BIG_ENDIAN)
