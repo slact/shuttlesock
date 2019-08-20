@@ -269,7 +269,7 @@ describe(ipc) {
   }
   
   subdesc(many_to_one) {
-    ipc_one_to_many_check_t *ipc_check = NULL;
+    static ipc_one_to_many_check_t *ipc_check = NULL;
     before_each() {
       ss = NULL;
       ipc_check = shmalloc(ipc_check);

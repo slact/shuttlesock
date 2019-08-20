@@ -2,6 +2,7 @@
 #include <shuttlesock.h>
 #include <unistd.h>
 #include <stdio.h>
+#include <stdarg.h>
 
 void shuso_log(shuso_t *ctx, const char *fmt, ...) {
   char *log = ctx->logbuf;
