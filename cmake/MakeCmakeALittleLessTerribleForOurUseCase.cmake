@@ -40,17 +40,19 @@ if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Debug)
 endif()
 
-if("${CMAKE_C_COMPILER_ID}" STREQUAL "AppleClang")
+#if("${CMAKE_C_COMPILER_ID}" STREQUAL "AppleClang")
   set(link_ubsan "")
   set(leak_sanitizer "")
-else()
-  set(link_ubsan "-lubsan")
-  set(leak_sanitizer "-fsanitize=leak")
-endif()
+#else()
+#  set(link_ubsan "-lubsan")
+#  set(leak_sanitizer "-fsanitize=leak")
+#endif()
+
+set(msan_blacklist ${CMAKE_CURRENT_SOURCE_DIR}/memory-sanitizer-blacklist.txt)
 
 add_build_mode(DebugMSan 
-  "-fsanitize=memory -fsanitize-memory-track-origins=2 -fsanitize=undefined ${leak_sanitizer}"
-  "-fsanitize=memory -fsanitize-memory-track-origins=2 -fsanitize=undefined ${link_ubsan}"
+  "-fsanitize=memory -fsanitize-memory-track-origins=2 ${leak_sanitizer} -fsanitize-blacklist=${msan_blacklist}"
+  "-fsanitize=memory -fsanitize-blacklist=${msan_blacklist} -fsanitize-memory-track-origins=2 ${link_ubsan}"
 )
 add_build_mode(DebugTSan
   "-fsanitize=thread -fsanitize=undefined"
