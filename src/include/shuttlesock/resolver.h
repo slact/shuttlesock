@@ -38,7 +38,7 @@ typedef enum {
   SHUSO_RESOLVER_FAILURE_CONNREFUSED = 8
 } shuso_resolver_result_t;
 
-typedef void shuso_resolver_fn(shuso_resolver_result_t result, struct hostent *hostent, void *pd);
+typedef void shuso_resolver_fn(shuso_t *ctx, shuso_resolver_result_t result, struct hostent *hostent, void *pd);
 
 bool shuso_resolver_global_init(const char **err);
 bool shuso_resolver_global_cleanup(void);

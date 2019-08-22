@@ -386,12 +386,11 @@ describe(stack_allocator) {
   }*/
 }
 
-void resolve_check_ok(shuso_resolver_result_t result, struct hostent *hostent, void *pd) {
+void resolve_check_ok(shuso_t *ctx, shuso_resolver_result_t result, struct hostent *hostent, void *pd) {
   assert(result == SHUSO_RESOLVER_SUCCESS);
   //printf("Found address name %s\n", hostent->h_name);
   char ip[INET6_ADDRSTRLEN];
   int i = 0;
-  shuso_t *ctx = pd;
   for (i = 0; hostent->h_addr_list[i]; ++i) {
     inet_ntop(hostent->h_addrtype, hostent->h_addr_list[i], ip, sizeof(ip));
     //printf("%s\n", ip);
