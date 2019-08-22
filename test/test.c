@@ -400,6 +400,9 @@ void resolve_check_ok(shuso_t *ctx, shuso_resolver_result_t result, struct hoste
 
 void resolve_check_start(EV_P_ shuso_ev_timer *w, int revent) {
   shuso_t *ctx = ev_userdata(EV_A);
+  if(ctx->procnum != SHUTTLESOCK_MANAGER) {
+    return;
+  }
   shuso_resolve_hostname(&ctx->resolver, "google.com", AF_INET, resolve_check_ok, ctx);
 }
 
