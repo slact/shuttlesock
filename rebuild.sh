@@ -38,6 +38,9 @@ for opt in $*; do
     clean)
       clean=1
       ;;
+    c-ares-static)
+      OPTS+=( "-DC_ARES_BUILD_STATIC=1" )
+      ;;
     gcc)
       compiler=gcc;;
     gcc6)
