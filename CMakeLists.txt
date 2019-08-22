@@ -77,6 +77,16 @@ test_pthread_setname("${CMAKE_THREAD_LIBS_INIT}"
   SHUTTLESOCK_PTHREAD_SETNAME_INCLUDE_PTRHEAD_NP
 )
 
+#lua (we want 5.3)
+set(Lua_FIND_VERSION 5.3)
+include(FindLua)
+if(LUA_INCLUDE_DIR)
+  target_include_directories(shuttlesock PUBLIC ${LUA_INCLUDE_DIR})
+  target_link_libraries(shuttlesock PUBLIC ${LUA_LIBRARIES})
+else()
+  message(FATAL_ERROR "Failed to find Lua ${Lua_FIND_VERSION}")
+endif()
+
 #c-ares
 include(TestC-aresVersion)
 #version 1.13.0 is where ares_set_socket_functions got added, which we need

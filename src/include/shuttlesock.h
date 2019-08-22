@@ -1,6 +1,7 @@
 #ifndef SHUTTLESOCK_H
 #define SHUTTLESOCK_H
 
+#include <lua.h>
 #include <ev.h>
 #include <pthread.h>
 #include <stdint.h>
@@ -131,6 +132,7 @@ struct shuso_s {
     shuso_ev_child               child;
     LLIST_STRUCT(shuso_ev_timer) timer;
   }                           base_watchers;
+  lua_State                  *lua;
   shuso_stalloc_t             stalloc;
   shuso_shared_slab_t         shm;
   shuso_resolver_t            resolver;
