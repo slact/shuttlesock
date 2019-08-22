@@ -30,7 +30,7 @@ static void do_nothing(void) {}
 } while(0)
 
 
-shuso_t *shuso_create(unsigned int ev_loop_flags, shuso_handlers_t *handlers, shuso_config_t *config, const char **err) {
+shuso_t *shuso_create(unsigned int ev_loop_flags, shuso_runtime_handlers_t *handlers, shuso_config_t *config, const char **err) {
   shuso_common_t     *common_ctx = NULL;
   shuso_t            *ctx = NULL;
   bool                stalloc_initialized = false;

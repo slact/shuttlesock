@@ -60,7 +60,7 @@ struct shuso_socket_s {
   void              *data;
 }; //shuso_socket_t;
 
-struct shuso_handlers_s {
+struct shuso_runtime_handlers_s {
   shuso_handler_fn *start_master;
   shuso_handler_fn *stop_master;
   shuso_handler_fn *start_manager;
@@ -68,7 +68,21 @@ struct shuso_handlers_s {
   shuso_handler_fn *start_worker;
   shuso_handler_fn *stop_worker;
   void   *privdata;
-}; //shuso_handlers_t
+}; //shuso_runtime_handlers_t
+
+struct shuso_config_handlers_s {
+  shuso_config_init_fn *initialize;
+  shuso_config_set_fn  *set;
+}; //shuso_config_handlers_t
+
+struct shuso_module_s {
+  const char        *name;
+  struct {
+    shuso_runtime_handlers_t  runtime;
+    shuso_config_handlers_t   config;
+  }                  handlers;
+
+};
 
 //the shuso_config struct is designed to be zeroed on initialization
 struct shuso_config_s {
@@ -96,7 +110,7 @@ struct shuso_config_s {
 }; // shuso_config_t
 
 struct shuso_common_s {
-  shuso_handlers_t    phase_handlers;
+  shuso_runtime_handlers_t    phase_handlers;
   shuso_ipc_handler_t ipc_handlers[256];
   shuso_config_t      config;
   struct {          //process
@@ -141,7 +155,7 @@ struct shuso_s {
   char                        logbuf[1024];
 }; //shuso_t;
 
-shuso_t *shuso_create(unsigned int ev_loop_flags, shuso_handlers_t *handlers, shuso_config_t *config, const char **err);
+shuso_t *shuso_create(unsigned int ev_loop_flags, shuso_runtime_handlers_t *handlers, shuso_config_t *config, const char **err);
 bool shuso_destroy(shuso_t *ctx);
 bool shuso_run(shuso_t *);
 bool shuso_stop(shuso_t *ctx, shuso_stop_t forcefulness);

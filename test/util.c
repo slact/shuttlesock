@@ -40,7 +40,7 @@ shuso_t *___runcheck_shuso_create(unsigned int ev_loop_flags, shuso_config_t *co
     snow_fail("failed to mmap test_runcheck");
     return NULL;
   }
-  shuso_handlers_t runcheck_handlers = {
+  shuso_runtime_handlers_t runcheck_handlers = {
     .start_master = start_master,
     .stop_master = stop_master,
     .start_manager = start_manager,
