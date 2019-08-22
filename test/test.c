@@ -590,8 +590,10 @@ int main(int argc, char **argv) {
   }
   shmfree(child_result);
   close(dev_null);
-  fclose(stdin);
-  fclose(stdout);
+  fclose(stdin);
+
+  fclose(stdout);
+
   fclose(stderr); 
   return rc;
 }
