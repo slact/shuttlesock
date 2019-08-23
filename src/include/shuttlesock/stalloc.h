@@ -78,7 +78,7 @@ bool shuso_stalloc_init_clean(shuso_stalloc_t *st, size_t pagesize);
 void *shuso_stalloc(shuso_stalloc_t *, size_t sz);
 void *shuso_stalloc_unaligned(shuso_stalloc_t *, size_t sz);
 int shuso_stalloc_push(shuso_stalloc_t *);
-bool shuso_stalloc_pop_to(shuso_stalloc_t *, int stackpos);
+bool shuso_stalloc_pop_to(shuso_stalloc_t *, unsigned stackpos);
 bool shuso_stalloc_empty(shuso_stalloc_t *);
 
 typedef enum {

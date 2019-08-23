@@ -221,9 +221,9 @@ int shuso_stalloc_push(shuso_stalloc_t *st) {
 // remove all frames >= stackpos from the stack
 // stackpos is NOT the number of frames to pop, but an absolute position for the stack to reach down to.
 // that is why this function is weirdly named 'pop_to' instead of 'pop', which expects a number of frames to pop
-bool shuso_stalloc_pop_to(shuso_stalloc_t *st, int stackpos) {
+bool shuso_stalloc_pop_to(shuso_stalloc_t *st, unsigned stackpos) {
   shuso_stalloc_frame_t *frame;
-  if(stackpos > st->stack.count || stackpos < 0) {
+  if(stackpos > st->stack.count) {
     return false;
   }
   if(stackpos == 0) {
