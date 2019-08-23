@@ -46,7 +46,7 @@ osx_task:
 freebsd_task:
   freebsd_instance:
     image: freebsd-12-0-release-amd64
-  setup_script: pkg install -y gmake cmake ccache libev valgrind zsh lua
+  setup_script: pkg install -y gmake cmake ccache libev valgrind zsh lua53
   test_basic_script:
     - zsh ./rebuild.sh
     - zsh ./test.sh
