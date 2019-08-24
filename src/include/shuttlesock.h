@@ -9,7 +9,7 @@
 #include <stdbool.h>
 #include <stdatomic.h>
 #include <netinet/in.h>
-#include <shuttlesock/configure.h>
+#include <shuttlesock/build_config.h>
 #include <shuttlesock/watchers.h>
 #include <shuttlesock/common.h>
 #include <shuttlesock/sbuf.h>

@@ -11,7 +11,7 @@
 
 #define SHUTTLESOCK_SHARED_SLAB_DEFAULT_SIZE 16777216 //16M
 
-#include <shuttlesock/configure.h>
+#include <shuttlesock/build_config.h>
 #include <shuttlesock/common.h>
 #include <stdint.h>
 #include <pthread.h>

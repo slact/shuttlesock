@@ -1,4 +1,4 @@
-#include <shuttlesock/configure.h>
+#include <shuttlesock/build_config.h>
 #ifdef SHUTTLESOCK_PTHREAD_SETNAME_STYLE_LINUX
 #define _GNU_SOURCE
 #endif

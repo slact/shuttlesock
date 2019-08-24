@@ -145,4 +145,4 @@ add_executable(shuso_test
 target_link_libraries(shuso_test PRIVATE shuttlesock)
 target_include_directories(shuso_test PRIVATE test)
 
-configure_file(src/include/shuttlesock/configure.h.tmpl src/include/shuttlesock/configure.h)
+configure_file(src/include/shuttlesock/build_config.h.tmpl src/include/shuttlesock/build_config.h)
