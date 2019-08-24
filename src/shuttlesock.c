@@ -70,6 +70,12 @@ shuso_t *shuso_create(unsigned int ev_loop_flags, shuso_runtime_handlers_t *hand
     .common  = common_ctx
   };
   
+  if((ctx->lua = luaL_newstate()) == NULL) {
+    errmsg = "failed to create Lua VM";
+    goto fail;
+  }
+  luaL_openlibs(ctx->lua);
+  
   common_ctx->log.fd = fileno(stdout);
   
   if(config) {
@@ -122,13 +128,17 @@ shuso_t *shuso_create(unsigned int ev_loop_flags, shuso_runtime_handlers_t *hand
   if(!stalloc_initialized) {
     goto fail;
   }
-  
+  assert(ctx->lua);
   return ctx;
   
 fail:
   if(resolver_global_initialized) shuso_resolver_global_cleanup();
   if(stalloc_initialized) shuso_stalloc_empty(&ctx->stalloc);
   if(shm_slab_created) shuso_shared_slab_destroy(ctx, &ctx->common->shm);
+  if(ctx->lua) {
+    lua_close(ctx->lua);
+    ctx->lua = NULL;
+  }
   if(ctx) free(ctx);
   if(common_ctx) free(common_ctx);
   if(err) *err = errmsg;
@@ -151,6 +161,8 @@ bool shuso_destroy(shuso_t *ctx) {
   if(ctx->procnum <= SHUTTLESOCK_MANAGER) {
     free(ctx->common);
   }
+  assert(ctx->lua);
+  lua_close(ctx->lua);
   free(ctx);
   shuso_resolver_global_cleanup();
   return true;
@@ -190,6 +202,7 @@ bool shuso_spawn_manager(shuso_t *ctx) {
   shuso_ipc_channel_shared_start(ctx, &ctx->common->process.manager);
   setpgid(0, 0); // so that the shell doesn't send signals to manager and workers
   ev_loop_fork(ctx->ev.loop);
+  
   ctx->common->phase_handlers.start_manager(ctx, ctx->common->phase_handlers.privdata);
   *ctx->process->state = SHUSO_PROCESS_STATE_RUNNING;
   ctx->common->process.workers_start = 0;
@@ -286,12 +299,6 @@ bool shuso_run(shuso_t *ctx) {
     goto fail;
   }
   
-  if((ctx->lua = luaL_newstate()) == NULL) {
-    err = "failed to create Lua VM";
-    goto fail;
-  }
-  luaL_openlibs(ctx->lua);
-  
   shuso_ev_child_init(ctx, &ctx->base_watchers.child, 0, 0, child_watcher_cb, NULL);
   shuso_ev_child_start(ctx, &ctx->base_watchers.child);
   
@@ -313,9 +320,6 @@ bool shuso_run(shuso_t *ctx) {
   shuso_resolver_cleanup(&ctx->resolver);
   *ctx->process->state = SHUSO_PROCESS_STATE_DEAD;
   shuso_stalloc_empty(&ctx->stalloc);
-  assert(ctx->lua);
-  lua_close(ctx->lua);
-  ctx->lua = NULL;
   shuso_log(ctx, "stopped");
   return true;
   
@@ -323,10 +327,6 @@ fail:
   if(master_ipc_created) shuso_ipc_channel_shared_destroy(ctx, &ctx->common->process.master);
   if(manager_ipc_created) shuso_ipc_channel_shared_destroy(ctx, &ctx->common->process.manager);
   if(shuso_resolver_initialized) shuso_resolver_cleanup(&ctx->resolver);
-  if(ctx->lua) {
-    lua_close(ctx->lua);
-    ctx->lua = NULL;
-  }
   *ctx->process->state = SHUSO_PROCESS_STATE_DEAD;
   shuso_set_error(ctx, err);
   return false;
