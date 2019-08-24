@@ -1,5 +1,3 @@
 ignore:
-  - test/snow.h
-  - test/util.c
-  - test/test.c
-  - lib/dns/dns.c
+  - test
+  - lib
