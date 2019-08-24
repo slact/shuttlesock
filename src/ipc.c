@@ -1,3 +1,14 @@
+#ifndef _XPG4_2 /* Solaris needs this for sendmsg/recvmsg apparently? */
+#define _XPG4_2
+#endif
+#if defined(__FreeBSD__)
+#include <sys/param.h> /* FreeBSD needs this for sendmsg/recvmsg apparently? */
+#endif
+
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <sys/uio.h>
+
 #include <shuttlesock.h>
 #include <shuttlesock/ipc.h>
 #include <shuttlesock/log.h>
@@ -6,12 +17,10 @@
 #include <unistd.h>
 #include <assert.h>
 #include <shuttlesock/shared_slab.h>
-#include <ancillary.h>
 #include <errno.h>
 #ifdef SHUTTLESOCK_USE_EVENTFD
 #include <sys/eventfd.h>
 #endif
-
 static void ipc_send_retry_cb(shuso_loop *loop, shuso_ev_timer *w, int revents);
 static void ipc_receive_cb(shuso_loop *loop, shuso_ev_io *w, int revents);
 static void ipc_socket_transfer_receive_cb(shuso_loop *loop, shuso_ev_io *w, int revents);
@@ -319,8 +328,45 @@ static void ipc_receive_timeout_cb(shuso_loop *loop, shuso_ev_timer *w, int reve
 }
 
 bool shuso_ipc_send_fd(shuso_t *ctx, shuso_process_t *dst_proc, int fd, uintptr_t ref, void *pd) {
+  int       n;
+  
   uintptr_t buf[2] = {ref, (uintptr_t )pd};
-  return ancil_send_fd(dst_proc->ipc.socket_transfer_fd[1], fd, (const char *)buf, sizeof(buf)) == 0;
+  
+  struct iovec iov = {
+    .iov_base = buf,
+    .iov_len = sizeof(buf)
+  };
+  
+  union {
+    //Ancillary data buffer, wrapped in a union in order to ensure it is suitably aligned
+    char buf[CMSG_SPACE(sizeof(fd))];
+    struct cmsghdr align;
+  } ancillary_buf;
+  
+  struct msghdr msg = {
+    .msg_name = NULL,
+    .msg_namelen = 0,
+    
+    .msg_iov = &iov,
+    .msg_iovlen = 1,
+    
+    .msg_control = ancillary_buf.buf,
+    .msg_controllen = sizeof(ancillary_buf.buf),
+    
+    .msg_flags = 0
+  };
+  
+  struct cmsghdr *cmsg = CMSG_FIRSTHDR(&msg);
+  cmsg->cmsg_level = SOL_SOCKET;
+  cmsg->cmsg_type = SCM_RIGHTS;
+  cmsg->cmsg_len = CMSG_LEN(sizeof(fd));
+  
+  memcpy(CMSG_DATA(cmsg), &fd, sizeof(fd));
+  
+  do {
+    n = sendmsg(dst_proc->ipc.socket_transfer_fd[1], &msg, 0);
+  } while(n == -1 && errno == EINTR);
+  return n > 0;
 }
 
 bool shuso_ipc_receive_fd_start(shuso_t *ctx, const char *description, float timeout_sec, shuso_ipc_receive_fd_fn *callback, uintptr_t ref, void *pd) {
@@ -455,22 +501,83 @@ static void ipc_receive_cb(shuso_loop *loop, shuso_ev_io *w, int revents) {
   ipc_receive(ctx, proc);
 }
 
+
+static shuso_status_t shuso_recv_fd(shuso_t *ctx, int fd_channel, int *fd, uintptr_t *ref, void **pd) {
+  int       n;
+  uintptr_t buf[2];
+  struct iovec iov = {
+    .iov_base = buf,
+    .iov_len = sizeof(buf)
+  };
+  
+  union {
+    //Ancillary data buffer, wrapped in a union in order to ensure it is suitably aligned
+    char buf[CMSG_SPACE(sizeof(*fd))];
+    struct cmsghdr align;
+  } ancillary_buf;
+  
+  struct msghdr msg = {
+    .msg_name = NULL,
+    .msg_namelen = 0,
+    
+    .msg_iov = &iov,
+    .msg_iovlen = 1,
+    
+    .msg_control = ancillary_buf.buf,
+    .msg_controllen = sizeof(ancillary_buf.buf),
+    
+    .msg_flags = 0
+  };
+  do {
+    n = recvmsg(fd_channel, &msg, 0);
+  } while(n == -1 && errno == EINTR);
+  if(n == 0 || (n == -1 && (errno == EAGAIN || errno == EWOULDBLOCK))) {
+    //nothing to recv
+    return SHUSO_DEFERRED;
+  }
+  else if(n == -1) {
+    shuso_set_error(ctx, "recvmsg failed with code (-1)");
+    return SHUSO_FAIL;
+  }
+  assert(n == sizeof(buf));
+  
+  struct cmsghdr *cmsg = CMSG_FIRSTHDR(&msg);
+  if(cmsg == NULL || cmsg->cmsg_len != CMSG_LEN(sizeof(*fd))) {
+    shuso_set_error(ctx, "bad cmsghdr while receiving fd");
+    return SHUSO_FAIL;
+  }
+  else if(cmsg->cmsg_level != SOL_SOCKET) {
+    shuso_set_error(ctx, "bad cmsg_level while receiving fd");
+    return SHUSO_FAIL;
+  }
+  else if(cmsg->cmsg_type != SCM_RIGHTS) {
+    shuso_set_error(ctx, "bad cmsg_type while receiving fd");
+    return SHUSO_FAIL;
+  }
+  *fd = *((int *)CMSG_DATA(cmsg));
+  *ref = buf[0];
+  *pd = (void *)buf[1];
+  return SHUSO_OK;
+}
+
 static void ipc_socket_transfer_receive_cb(shuso_loop *loop, shuso_ev_io *w, int revents) {
   shuso_t            *ctx = shuso_ev_ctx(loop, w);
   shuso_process_t    *proc = shuso_ev_data(w);
-  uintptr_t databuf[2];
   uintptr_t ref;
   void     *pd;
-  size_t    data_received_sz;
   int       fd = -1;
   int       rc;
-  while((rc = ancil_recv_fd(proc->ipc.socket_transfer_fd[0], &fd, (char *)databuf, sizeof(databuf), &data_received_sz)) != -1) {
-    if(data_received_sz != sizeof(databuf)) {
-      shuso_log(ctx, "failed to receive file descriptor: incorrect data size");
-      continue;
+  while(true) {
+    rc = shuso_recv_fd(ctx, proc->ipc.socket_transfer_fd[0], &fd, &ref, &pd);
+    if(rc == SHUSO_FAIL) {
+      shuso_log(ctx, "failed to receive file descriptor: recvmsg error");
+      //TODO: investigate the errno, decide if we should keep looping
+      //for now, just bail out
+      break;
     }
-    ref = databuf[0];
-    pd = (void *)databuf[1];
+    else if(rc == SHUSO_DEFERRED) {
+      break;
+    }
     
     shuso_ipc_fd_receiver_t *found = NULL;
     for(unsigned i=0; i<ctx->ipc.fd_receiver.count; i++) {
@@ -479,6 +586,7 @@ static void ipc_socket_transfer_receive_cb(shuso_loop *loop, shuso_ev_io *w, int
         break;
       }
     }
+    assert(fd != -1);
     if(!found) {
       shuso_ipc_fd_receiver_t *reallocd = realloc(ctx->ipc.fd_receiver.array, sizeof(shuso_ipc_fd_receiver_t) * (ctx->ipc.fd_receiver.count+1));
       if(!reallocd) {

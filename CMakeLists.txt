@@ -109,14 +109,6 @@ else()
   target_link_libraries(shuttlesock PUBLIC c-ares)
 endif()
 
-#libancillary, for easy sending of sockets over sockets
-target_include_directories(shuttlesock PRIVATE lib/libancillary)
-add_library(ancillary STATIC 
-  lib/libancillary/fd_recv.c
-  lib/libancillary/fd_send.c
-)
-target_link_libraries(shuttlesock PRIVATE ancillary)
-
 #Linux kernel's io_uring
 include(TestIoUringHeaders)
 if("${SHUTTLESOCK_USE_IO_URING}" OR NOT DEFINED SHUTTLESOCK_USE_IO_URING)

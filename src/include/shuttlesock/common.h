@@ -6,6 +6,7 @@ typedef enum {
   SHUSO_OK        =  1,
   SHUSO_FAIL      =  0,
   SHUSO_TIMEOUT   = -1,
+  SHUSO_DEFERRED  = -2, //try again later? kind of like EAGAIN
 } shuso_status_t;
 
 typedef enum {
