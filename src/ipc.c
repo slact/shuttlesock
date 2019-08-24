@@ -341,7 +341,8 @@ bool shuso_ipc_send_fd(shuso_t *ctx, shuso_process_t *dst_proc, int fd, uintptr_
     //Ancillary data buffer, wrapped in a union in order to ensure it is suitably aligned
     char buf[CMSG_SPACE(sizeof(fd))];
     struct cmsghdr align;
-  } ancillary_buf;
+  } ancillary_buf = { 0 };
+  
   
   struct msghdr msg = {
     .msg_name = NULL,
