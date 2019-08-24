@@ -10,6 +10,7 @@
 #include "shuttlesock_private.h"
 #include <shuttlesock/log.h>
 #include <shuttlesock/sysutil.h>
+#include <shuttlesock/resolver.h>
 #include <stdio.h>
 
 static void shuso_cleanup_loop(shuso_t *ctx);
@@ -35,10 +36,15 @@ shuso_t *shuso_create(unsigned int ev_loop_flags, shuso_runtime_handlers_t *hand
   shuso_t            *ctx = NULL;
   bool                stalloc_initialized = false;
   bool                shm_slab_created = false;
+  bool                resolver_global_initialized = false;
   const char         *errmsg = NULL;
   shuso_loop         *loop;
   
   shuso_system_initialize();
+  
+  if(!(resolver_global_initialized = shuso_resolver_global_init(&errmsg))) {
+    goto fail;
+  }
   
   if((common_ctx = calloc(1, sizeof(*common_ctx))) == NULL) {
     errmsg = "not enough memory to allocate common_ctx";
@@ -120,6 +126,7 @@ shuso_t *shuso_create(unsigned int ev_loop_flags, shuso_runtime_handlers_t *hand
   return ctx;
   
 fail:
+  if(resolver_global_initialized) shuso_resolver_global_cleanup();
   if(stalloc_initialized) shuso_stalloc_empty(&ctx->stalloc);
   if(shm_slab_created) shuso_shared_slab_destroy(ctx, &ctx->common->shm);
   if(ctx) free(ctx);
@@ -145,6 +152,7 @@ bool shuso_destroy(shuso_t *ctx) {
     free(ctx->common);
   }
   free(ctx);
+  shuso_resolver_global_cleanup();
   return true;
 }
 
