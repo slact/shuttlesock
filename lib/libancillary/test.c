@@ -1,6 +1,8 @@
 /***************************************************************************
  * libancillary - black magic on Unix domain sockets
  * (C) Nicolas George
+ * 
+ * modified by Leo Ponomarev (slact) in 2018
  * test.c - testing and example program
  ***************************************************************************/
 
@@ -69,7 +71,7 @@ void parent_process(int sock)
 {
   int fds[2] = { 1, 2 };
 
-  if(ancil_send_fd(sock, 1, "beep", sizeof("beep"))) {
+  if(ancil_send_fd(sock, 1, "123456789012345", sizeof("123456789012345"))) {
     perror("ancil_send_fd");
     exit(1);
   } else {
