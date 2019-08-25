@@ -54,6 +54,7 @@ typedef struct shuso_s shuso_t;
 typedef struct shuso_common_s shuso_common_t;
 typedef struct shuso_process_s shuso_process_t;
 typedef struct shuso_config_s shuso_config_t;
+typedef struct shuso_config_file_s shuso_config_file_t;
 typedef struct shuso_config_setting_s shuso_config_setting_t;
 
 typedef struct shuso_hostinfo_s shuso_hostinfo_t;

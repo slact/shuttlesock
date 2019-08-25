@@ -84,11 +84,16 @@ struct shuso_module_s {
     shuso_runtime_handlers_t  runtime;
     shuso_config_handlers_t   config;
   }                  handlers;
-
+  void              *config;
+  //who knows what else
 };
 
 //the shuso_config struct is designed to be zeroed on initialization
 struct shuso_config_s {
+  struct {
+    const char         *string;
+    const char         *filename;
+  }                   config;
   struct {          //ipc
     float               send_retry_delay;
     float               send_timeout;
@@ -111,6 +116,14 @@ struct shuso_config_s {
   gid_t               gid;
   int                 workers;
 }; // shuso_config_t
+
+struct shuso_config_file_s {
+  const char *path;
+  int         fd;
+  size_t      sz;
+  const char *data;
+}; // shuso_config_file_t
+
 
 struct shuso_common_s {
   shuso_runtime_handlers_t    phase_handlers;
