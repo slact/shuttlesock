@@ -23,7 +23,25 @@ static void do_nothing(void) {}
   } \
 } while(0)
 
-
+const char *shuso_process_as_string(shuso_t *ctx) {
+  switch(ctx->procnum) {
+    case SHUTTLESOCK_UNKNOWN_PROCESS:
+      return "unknown";
+    case SHUTTLESOCK_NOPROCESS:
+      return "no_process";
+    case SHUTTLESOCK_MASTER:
+      return "master";
+    case SHUTTLESOCK_MANAGER:
+      return "manager";
+    default:
+      if(ctx->procnum >= SHUTTLESOCK_WORKER) {
+        return "worker";
+      }
+      else {
+        return "???";
+      }
+  }
+}
 shuso_t *shuso_create(unsigned int ev_loop_flags, shuso_runtime_handlers_t *handlers, shuso_config_t *config, const char **err) {
   shuso_common_t     *common_ctx = NULL;
   shuso_t            *ctx = NULL;
@@ -185,6 +203,7 @@ bool shuso_spawn_manager(shuso_t *ctx) {
   }
   if(pid == -1) return false;
   
+  shuso_log_debug(ctx, "starting %s...", shuso_process_as_string(ctx));
   ctx->procnum = SHUTTLESOCK_MANAGER;
   ctx->process = &ctx->common->process.manager;
   ctx->process->pid = getpid();
@@ -198,8 +217,9 @@ bool shuso_spawn_manager(shuso_t *ctx) {
   ctx->common->process.workers_start = 0;
   ctx->common->process.workers_end = ctx->common->process.workers_start;
 #ifdef SHUTTLESOCK_DEBUG_NO_WORKER_THREADS
-  shuso_log(ctx, "SHUTTLESOCK_DEBUG_NO_WORKER_THREADS is enabled, workers will be started inside the manager without their own separate threads");
+  shuso_log_notice(ctx, "SHUTTLESOCK_DEBUG_NO_WORKER_THREADS is enabled, workers will be started inside the manager without their own separate threads");
 #endif
+  shuso_log_notice(ctx, "started %s", shuso_process_as_string(ctx));
   for(int i=0; i<ctx->common->config.workers; i++) {
     if(shuso_spawn_worker(ctx, &ctx->common->process.worker[i])) {
       ctx->common->process.workers_end++;
@@ -230,14 +250,14 @@ static void stop_master_timer_cb(shuso_loop *loop, shuso_ev_timer *w, int revent
 
 bool shuso_stop_manager(shuso_t *ctx, shuso_stop_t forcefulness) {
   if(ctx->procnum == SHUTTLESOCK_MASTER) {
-    //shuso_log(ctx, "shuso_stop_manager from master");
+    //shuso_log_debug(ctx, "shuso_stop_manager from master");
     if(!shuso_ipc_send(ctx, &ctx->common->process.manager, SHUTTLESOCK_IPC_CMD_SHUTDOWN, (void *)(intptr_t )forcefulness)) {
       return false;
     }
     return true;
   }
   
-  //shuso_log(ctx, "shuso_stop_manager from manager");
+  //shuso_log_debug(ctx, "shuso_stop_manager from manager");
   
   if(*ctx->process->state == SHUSO_PROCESS_STATE_RUNNING) {
     *ctx->process->state = SHUSO_PROCESS_STATE_STOPPING;
@@ -275,6 +295,8 @@ bool shuso_run(shuso_t *ctx) {
   const char *err = NULL;
   bool master_ipc_created = false, manager_ipc_created = false, shuso_resolver_initialized = false;
   
+  shuso_log_debug(ctx, "starting %s...", shuso_process_as_string(ctx));
+  
   if(!(master_ipc_created = shuso_ipc_channel_shared_create(ctx, &ctx->common->process.master))) {
     err = "failed to create shared IPC channel for master";
     goto fail;
@@ -295,7 +317,7 @@ bool shuso_run(shuso_t *ctx) {
   *ctx->process->state = SHUSO_PROCESS_STATE_STARTING;
   ctx->common->phase_handlers.start_master(ctx, ctx->common->phase_handlers.privdata);
   *ctx->process->state = SHUSO_PROCESS_STATE_RUNNING;
-  
+  shuso_log_notice(ctx, "started %s", shuso_process_as_string(ctx));
   if(!shuso_spawn_manager(ctx)) {
     err = "failed to spawn manager process";
     goto fail;
@@ -304,13 +326,13 @@ bool shuso_run(shuso_t *ctx) {
   shuso_ipc_channel_local_init(ctx);
   shuso_ipc_channel_local_start(ctx);
   ev_run(ctx->ev.loop, 0);
-  shuso_log(ctx, "stopping...");
+  shuso_log_debug(ctx, "stopping %s...", shuso_process_as_string(ctx));
   
   shuso_cleanup_loop(ctx);
   shuso_resolver_cleanup(&ctx->resolver);
   *ctx->process->state = SHUSO_PROCESS_STATE_DEAD;
   shuso_stalloc_empty(&ctx->stalloc);
-  shuso_log(ctx, "stopped");
+  shuso_log_notice(ctx, "stopped %s", shuso_process_as_string(ctx));
   return true;
   
 fail:
@@ -325,7 +347,7 @@ fail:
 bool shuso_stop(shuso_t *ctx, shuso_stop_t forcefulness) {
   if(*ctx->process->state != SHUSO_PROCESS_STATE_RUNNING && *ctx->process->state != SHUSO_PROCESS_STATE_STOPPING) {
     //no need to stop
-    shuso_log(ctx, "nostop");
+    shuso_log_debug(ctx, "nostop");
     return false;
   }
 
@@ -355,6 +377,7 @@ bool shuso_stop(shuso_t *ctx, shuso_stop_t forcefulness) {
 
 static bool shuso_worker_initialize(shuso_t *ctx) {
   assert(ctx->process);
+  shuso_log_debug(ctx, "starting worker %i...", ctx->procnum);
   *ctx->process->state = SHUSO_PROCESS_STATE_STARTING;
   
   shuso_ipc_channel_shared_start(ctx, ctx->process);
@@ -367,11 +390,11 @@ static bool shuso_worker_initialize(shuso_t *ctx) {
   
   ctx->common->phase_handlers.start_worker(ctx, ctx->common->phase_handlers.privdata);
   *ctx->process->state = SHUSO_PROCESS_STATE_RUNNING;
-  
+  shuso_log_notice(ctx, "started worker %i", ctx->procnum);
   return true;
 }
 static void shuso_worker_shutdown(shuso_t *ctx) {
-  shuso_log(ctx, "stopping...");
+  shuso_log_debug(ctx, "stopping worker %i...", ctx->procnum);
   shuso_cleanup_loop(ctx);
   *ctx->process->state = SHUSO_PROCESS_STATE_DEAD;
 #ifndef SHUTTLESOCK_DEBUG_NO_WORKER_THREADS
@@ -379,7 +402,7 @@ static void shuso_worker_shutdown(shuso_t *ctx) {
 #endif
   ctx->ev.loop = NULL;
   shuso_lua_destroy(ctx);
-  shuso_log(ctx, "stopped");
+  shuso_log_notice(ctx, "stopped worker %i", ctx->procnum);
   shuso_resolver_cleanup(&ctx->resolver);
   shuso_stalloc_empty(&ctx->stalloc);
   free(ctx);
@@ -499,7 +522,7 @@ bool shuso_stop_worker(shuso_t *ctx, shuso_process_t *proc, shuso_stop_t forcefu
       if(*ctx->process->state == SHUSO_PROCESS_STATE_RUNNING) {
         *ctx->process->state = SHUSO_PROCESS_STATE_STOPPING;
         //TODO: defer worker stop maybe?
-        shuso_log(ctx, "stopping...");
+        shuso_log_debug(ctx, "attempting to stop worker %i", ctx->procnum);
         ctx->common->phase_handlers.stop_worker(ctx, ctx->common->phase_handlers.privdata);
 #ifndef SHUTTLESOCK_DEBUG_NO_WORKER_THREADS
         ev_break(ctx->ev.loop, EVBREAK_ALL);
@@ -509,7 +532,7 @@ bool shuso_stop_worker(shuso_t *ctx, shuso_process_t *proc, shuso_stop_t forcefu
         
       }
       else {
-        shuso_log(ctx, "already shutting down");
+        shuso_log_debug(ctx, "already shutting down");
       }
     }
     //TODO: forced self-shutdown
@@ -522,7 +545,7 @@ bool shuso_stop_worker(shuso_t *ctx, shuso_process_t *proc, shuso_stop_t forcefu
 
 bool shuso_set_error(shuso_t *ctx, const char *err) {
   ctx->errmsg = err;
-  shuso_log(ctx, "%s", err);
+  shuso_log_error(ctx, "%s", err);
   return false;
 }
 
@@ -582,9 +605,9 @@ static void shuso_cleanup_loop(shuso_t *ctx) {
 static void signal_watcher_cb(shuso_loop *loop, shuso_ev_signal *w, int revents) {
   shuso_t *ctx = shuso_ev_ctx(loop, w);
   int      signum = w->ev.signum;
-  shuso_log(ctx, "got signal: %d", signum);
+  shuso_log_debug(ctx, "got signal: %d", signum);
   if(ctx->procnum != SHUTTLESOCK_MASTER) {
-    shuso_log(ctx, "forward signal to master via IPC");
+    shuso_log_debug(ctx, "forward signal to master via IPC");
     shuso_ipc_send(ctx, &ctx->common->process.master, SHUTTLESOCK_IPC_CMD_SIGNAL, (void *)(intptr_t )signum);
   }
   else {
@@ -595,7 +618,7 @@ static void signal_watcher_cb(shuso_loop *loop, shuso_ev_signal *w, int revents)
         shuso_stop(ctx, SHUSO_STOP_ASK);
         break;
       default:
-        shuso_log(ctx, "ignore signal %d", signum);
+        shuso_log_debug(ctx, "ignore signal %d", signum);
     }
   }
 }
@@ -611,7 +634,7 @@ static void child_watcher_cb(shuso_loop *loop, shuso_ev_child *w, int revents) {
       //TODO: was that the manager that just died? if so, restart it.
     }
   }
-  shuso_log(ctx, "child watcher: child pid %d rstatus %x", w->ev.rpid, w->ev.rstatus);
+  shuso_log_debug(ctx, "child watcher: child pid %d rstatus %x", w->ev.rpid, w->ev.rstatus);
 }
 
 bool shuso_set_log_fd(shuso_t *ctx, int fd) {

@@ -146,4 +146,11 @@ add_executable(shuso_test
 target_link_libraries(shuso_test PRIVATE shuttlesock)
 target_include_directories(shuso_test PRIVATE test)
 
+#set default log level
+set(SHUTTLESOCK_LOG_LEVELS "DEBUG" "INFO" "NOTICE" "WARNING" "ERROR" "CRITICAL" "FATAL")
+set(SHUTTLESOCK_DEFAULT_LOGLEVEL "INFO" CACHE STRING "Default log level")
+if(NOT (SHUTTLESOCK_DEFAULT_LOGLEVEL IN_LIST SHUTTLESOCK_LOG_LEVELS))
+  message(FATAL_ERROR "SHUTTLESOCK_DEFAULT_LOGLEVEL invalid value ${SHUTTLESOCK_DEFAULT_LOGLEVEL}, must be one of: ${SHUTTLESOCK_LOG_LEVELS}")
+endif()
+
 configure_file(src/include/shuttlesock/build_config.h.tmpl src/include/shuttlesock/build_config.h)

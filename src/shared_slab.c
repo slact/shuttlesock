@@ -849,7 +849,7 @@ static void
 ngx_slab_error(shuso_slab_pool_t *pool, ngx_uint_t level, char *text)
 {
     shuso_t *ctx = NULL;
-    shuso_log(ctx, "%s", text);
+    shuso_log_error(ctx, "%s", text);
 }
 
 

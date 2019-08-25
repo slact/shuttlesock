@@ -190,7 +190,7 @@ static void ipc_load_test(EV_P_ shuso_ev_timer *w, int rev) {
     self->slept -= sleeptime;
   }
   if(sleeptime > 0) {
-    shuso_log(ctx, "sleep %f", sleeptime);
+    shuso_log_notice(ctx, "sleep %f", sleeptime);
     ev_sleep(sleeptime);
   }
   
@@ -517,7 +517,7 @@ void listener_port_test_runner_callback(shuso_t *ctx, shuso_status_t status, shu
     }
     sockets[i]=-1;
   }
-  shuso_log(ctx, "wrapping it up");
+  //shuso_log_notice(ctx, "wrapping it up");
   shuso_stop(ctx, SHUSO_STOP_INSIST);
 }
 

@@ -79,6 +79,7 @@ void shuso_ev_signal_init(shuso_t *ctx, shuso_ev_signal *w, int signal, void (*c
 }
 
 void shuso_ev_signal_start(shuso_t *ctx, shuso_ev_signal *w) {
+  //shuso_log_debug(ctx, "%d", w->ev.signum);
   ev_signal_start(ctx->ev.loop, &w->ev);
 }
 void shuso_ev_signal_stop(shuso_t *ctx, shuso_ev_signal *w) {

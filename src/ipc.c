@@ -55,7 +55,7 @@ bool shuso_ipc_channel_shared_create(shuso_t *ctx, shuso_process_t *proc) {
 #endif
   proc->ipc.fd[0] = fds[0];
   proc->ipc.fd[1] = fds[1];
-  //shuso_log(ctx, "created shared IPC channel fds: %d %d", fds[0], fds[1]);
+  //shuso_log_debug(ctx, "created shared IPC channel fds: %d %d", fds[0], fds[1]);
   
   //open socket-transfer sockets
   if((socketpair(PF_LOCAL, SOCK_STREAM, 0, proc->ipc.socket_transfer_fd)) == -1) {
@@ -63,18 +63,18 @@ bool shuso_ipc_channel_shared_create(shuso_t *ctx, shuso_process_t *proc) {
   }
   fcntl(proc->ipc.socket_transfer_fd[0], F_SETFL, O_NONBLOCK);
   fcntl(proc->ipc.socket_transfer_fd[1], F_SETFL, O_NONBLOCK);
-  //shuso_log(ctx, "created socket_transfer_fd %p %d<=>%d", (void *)&proc->ipc.socket_transfer_fd, proc->ipc.socket_transfer_fd[0], proc->ipc.socket_transfer_fd[1]);
+  //shuso_log_debug(ctx, "created socket_transfer_fd %p %d<=>%d", (void *)&proc->ipc.socket_transfer_fd, proc->ipc.socket_transfer_fd[0], proc->ipc.socket_transfer_fd[1]);
   return true;
 }
 
 bool shuso_ipc_channel_shared_destroy(shuso_t *ctx, shuso_process_t *proc) {
   int               procnum = shuso_process_to_procnum(ctx, proc);
   if(procnum == SHUTTLESOCK_MASTER || procnum == SHUTTLESOCK_MANAGER) {
-    //shuso_log(ctx, "destroy shared IPC for %s", procnum == SHUTTLESOCK_MASTER ? "master" : "manager");
+    //shuso_log_debug(ctx, "destroy shared IPC for %s", procnum == SHUTTLESOCK_MASTER ? "master" : "manager");
     munmap(proc->ipc.buf, sizeof(shuso_ipc_ringbuf_t));
   }
   else {
-    //shuso_log(ctx, "destroy shared IPC for worker %i", procnum);
+    //shuso_log_debug(ctx, "destroy shared IPC for worker %i", procnum);
     free(proc->ipc.buf);
   }
   proc->ipc.buf = NULL;
@@ -159,7 +159,7 @@ bool shuso_ipc_channel_local_stop(shuso_t *ctx) {
 }
 
 bool shuso_ipc_channel_shared_start(shuso_t *ctx, shuso_process_t *proc) {
-  //shuso_log(ctx, "started shared channel, fds %d %d", proc->ipc.fd[0], proc->ipc.fd[1]);
+  //shuso_log_debug(ctx, "started shared channel, fds %d %d", proc->ipc.fd[0], proc->ipc.fd[1]);
   return true;
 }
 
@@ -168,7 +168,7 @@ bool shuso_ipc_channel_shared_stop(shuso_t *ctx, shuso_process_t *proc) {
 }
 
 static bool ipc_send_direct(shuso_t *ctx, shuso_process_t *src, shuso_process_t *dst, const uint8_t code, void *ptr) {
-  //shuso_log(ctx, "direct send to dst %p", (void *)dst);
+  //shuso_log_debug(ctx, "direct send to dst %p", (void *)dst);
   shuso_ipc_ringbuf_t   *buf = dst->ipc.buf;
   ssize_t                written;
   if(buf->next_read == buf->next_reserve && buf->code[buf->next_reserve] != SHUTTLESOCK_IPC_CMD_NIL) {
@@ -183,18 +183,18 @@ static bool ipc_send_direct(shuso_t *ctx, shuso_process_t *src, shuso_process_t 
     return false;
   }
   buf->ptr[next] = ptr;
-  //shuso_log(ctx, "write? [%u] ipc code buf %p #%d %p, code %d", (int )next, (void *)buf, next, (void *)&buf->code[next], (int )code);
+  //shuso_log_debug(ctx, "write? [%u] ipc code buf %p #%d %p, code %d", (int )next, (void *)buf, next, (void *)&buf->code[next], (int )code);
   buf->code[next] = code;
-  //shuso_log(ctx, "write! code at %d %d ptr %d", (int )next, buf->code[next], (int )(intptr_t )buf->ptr[next]);
+  //shuso_log_debug(ctx, "write! code at %d %d ptr %d", (int )next, buf->code[next], (int )(intptr_t )buf->ptr[next]);
   atomic_fetch_add(&buf->next_release, 1);
-  //shuso_log(ctx, "after write: next_reserve %d next_release %d", (int )buf->next_reserve, (int )buf->next_release);
+  //shuso_log_debug(ctx, "after write: next_reserve %d next_release %d", (int )buf->next_reserve, (int )buf->next_release);
 #ifdef SHUTTLESOCK_USE_EVENTFD
-  //shuso_log(ctx, "write to eventfd %d %d", dst->ipc.fd[0], dst->ipc.fd[1]);
+  //shuso_log_debug(ctx, "write to eventfd %d %d", dst->ipc.fd[0], dst->ipc.fd[1]);
   static const uint64_t incr = 1;
   written = write(dst->ipc.fd[1], &incr, sizeof(incr));
   assert(written != -1);
 #else
-  //shuso_log(ctx, "write to pipe %d %d", dst->ipc.fd[0], dst->ipc.fd[1]);
+  //shuso_log_debug(ctx, "write to pipe %d %d", dst->ipc.fd[0], dst->ipc.fd[1]);
   //just write to the pipe
   written = write(dst->ipc.fd[1], &code, 1);
   assert(written == 1);
@@ -229,17 +229,17 @@ static bool ipc_send_outbuf_append(shuso_t *ctx, shuso_process_t *src, shuso_pro
 
 bool shuso_ipc_send(shuso_t *ctx, shuso_process_t *dst, const uint8_t code, void *ptr) {
   shuso_process_t *src = ctx->process;
-  //shuso_log(ctx, "ipc send code %d ptr %p", (int )code, ptr);
+  //shuso_log_debug(ctx, "ipc send code %d ptr %p", (int )code, ptr);
   shuso_process_state_t dst_state = *dst->state;
   if(dst_state < SHUSO_PROCESS_STATE_STARTING) {
     return shuso_set_error(ctx, "tried sending IPC message to dead or nonexistent process");
   }
   if(ctx->ipc.buf.first || dst_state == SHUSO_PROCESS_STATE_STARTING) {
-    //shuso_log(ctx, "inbuf appears full from the start or process isn't running");
+    //shuso_log_debug(ctx, "inbuf appears full from the start or process isn't running");
     return ipc_send_outbuf_append(ctx, src, dst, code, ptr);
   }
   if(!ipc_send_direct(ctx, src, dst, code, ptr)) {
-    //shuso_log(ctx, "failed to send via inbuf...");
+    //shuso_log_debug(ctx, "failed to send via inbuf...");
     return ipc_send_outbuf_append(ctx, src, dst, code, ptr);
   }
   return true;
@@ -279,9 +279,9 @@ static void ipc_send_retry_cb(shuso_loop *loop, shuso_ev_timer *w, int revents) 
   shuso_process_t    *proc = shuso_ev_data(w);
   shuso_ipc_outbuf_t *cur;
   while((cur = ctx->ipc.buf.first) != NULL) {
-    //shuso_log(ctx, "retry send");
+    //shuso_log_debug(ctx, "retry send");
     if(!ipc_send_direct(ctx, proc, cur->dst, cur->code, cur->ptr)) {
-      //shuso_log(ctx, "retry send still fails");
+      //shuso_log_debug(ctx, "retry send still fails");
       //send still fails. retry again later
       shuso_ev_timer_again(ctx, w);
       return;
@@ -297,16 +297,16 @@ static void ipc_receive(shuso_t *ctx, shuso_process_t *proc) {
   uint_fast8_t          code;
   void                 *ptr;
   uint8_t               i;
-  //shuso_log(ctx, "ipc_receive at dst %p", (void *)proc);
-  //shuso_log(ctx, "first: %d next_reserve %d next_release %d", (int )in->next_read, (int )in->next_reserve, (int )in->next_release);
+  //shuso_log_debug(ctx, "ipc_receive at dst %p", (void *)proc);
+  //shuso_log_debug(ctx, "first: %d next_reserve %d next_release %d", (int )in->next_read, (int )in->next_reserve, (int )in->next_release);
   for(i=in->next_read; i!=in->next_release; i++) {
-    //shuso_log(ctx, "next_release while reading: %d", (int )in->next_release);
+    //shuso_log_debug(ctx, "next_release while reading: %d", (int )in->next_release);
     code = in->code[i];
     ptr = in->ptr[i];
-    //shuso_log(ctx, "read! ipc at %d code %d ptr %d", i, (int )code, (int )(intptr_t )ptr);
+    //shuso_log_debug(ctx, "read! ipc at %d code %d ptr %d", i, (int )code, (int )(intptr_t )ptr);
     in->code[i]=0;
     if(!code) {
-      shuso_log(ctx, "ipc: [%d] has nil code -- skip it.", (int )i);
+      shuso_log_error(ctx, "ipc: [%d] has nil code -- skip it.", (int )i);
     }
     else {
       ctx->common->ipc_handlers[code].receive(ctx, code, ptr);
@@ -341,7 +341,7 @@ bool shuso_ipc_send_fd(shuso_t *ctx, shuso_process_t *dst_proc, int fd, uintptr_
     //Ancillary data buffer, wrapped in a union in order to ensure it is suitably aligned
     char buf[CMSG_SPACE(sizeof(fd))];
     struct cmsghdr align;
-  } ancillary_buf = { 0 };
+  } ancillary_buf = {{0}};
   
   
   struct msghdr msg = {
@@ -381,7 +381,7 @@ bool shuso_ipc_receive_fd_start(shuso_t *ctx, const char *description, float tim
   }
   if(found) {
     if(found->callback != NULL) {
-      shuso_log(ctx, "ipc_receive_fd_start ref already exists, has already been started");
+      shuso_log_error(ctx, "ipc_receive_fd_start ref already exists, has already been started");
       return false;
     }
     found->callback = callback;
@@ -414,7 +414,7 @@ bool shuso_ipc_receive_fd_start(shuso_t *ctx, const char *description, float tim
   else {
     shuso_ipc_fd_receiver_t *reallocd = realloc(ctx->ipc.fd_receiver.array, sizeof(shuso_ipc_fd_receiver_t) * (ctx->ipc.fd_receiver.count + 1));
     if(!reallocd) {
-      shuso_log(ctx, "ipc_receive_fd_start ref failed, no memory for realloc()");
+      shuso_log_error(ctx, "ipc_receive_fd_start ref failed, no memory for realloc()");
       return false;
     }
     reallocd[ctx->ipc.fd_receiver.count] = (shuso_ipc_fd_receiver_t) {
@@ -471,7 +471,8 @@ bool shuso_ipc_receive_fd_finish(shuso_t *ctx, uintptr_t ref) {
   else {
     shuso_ipc_fd_receiver_t *reallocd = realloc(ctx->ipc.fd_receiver.array, sizeof(shuso_ipc_fd_receiver_t) * ctx->ipc.fd_receiver.count-1);
     if(!reallocd) {
-      shuso_log(ctx, "ipc_receive_fd_finish failed, no memory for shrinking realloc()");
+      //this is not terrible, and will not lead to undefined behavior. don't error out, just make a note of it
+      shuso_log_error(ctx, "ipc_receive_fd_finish failed, no memory for shrinking realloc()");
     }
     else {
       ctx->ipc.fd_receiver.array = reallocd;
@@ -489,13 +490,13 @@ static void ipc_receive_cb(shuso_loop *loop, shuso_ev_io *w, int revents) {
   uint64_t buf;
   ssize_t readsize = read(proc->ipc.fd[1], &buf, sizeof(buf));
   if(readsize <= 0) {
-    shuso_log(ctx, "ipc_receive callback got eventfd readsize %zd", readsize);
+    shuso_log_error(ctx, "ipc_receive callback got eventfd readsize %zd", readsize);
   }
 #else
   char buf[32];
   ssize_t readsize = read(proc->ipc.fd[0], buf, sizeof(buf));
   if(readsize <= 0) {
-    shuso_log(ctx, "ipc_receive callback got eventfd readsize %zd", readsize);
+    shuso_log_error(ctx, "ipc_receive callback got eventfd readsize %zd", readsize);
   }
 #endif
   
@@ -571,7 +572,7 @@ static void ipc_socket_transfer_receive_cb(shuso_loop *loop, shuso_ev_io *w, int
   while(true) {
     rc = shuso_recv_fd(ctx, proc->ipc.socket_transfer_fd[0], &fd, &ref, &pd);
     if(rc == SHUSO_FAIL) {
-      shuso_log(ctx, "failed to receive file descriptor: recvmsg error");
+      shuso_log_error(ctx, "failed to receive file descriptor: recvmsg error");
       //TODO: investigate the errno, decide if we should keep looping
       //for now, just bail out
       break;
@@ -591,7 +592,7 @@ static void ipc_socket_transfer_receive_cb(shuso_loop *loop, shuso_ev_io *w, int
     if(!found) {
       shuso_ipc_fd_receiver_t *reallocd = realloc(ctx->ipc.fd_receiver.array, sizeof(shuso_ipc_fd_receiver_t) * (ctx->ipc.fd_receiver.count+1));
       if(!reallocd) {
-        shuso_log(ctx, "failed to receive file descriptor: no memory for realloc()");
+        shuso_log_error(ctx, "failed to receive file descriptor: no memory for realloc()");
         if(fd != -1) close(fd);
         continue;
       }
@@ -613,7 +614,7 @@ static void ipc_socket_transfer_receive_cb(shuso_loop *loop, shuso_ev_io *w, int
     else {
       shuso_ipc_buffered_fd_t  *reallocd = realloc(found->buffered_fds.array, sizeof(shuso_ipc_buffered_fd_t) * (found->buffered_fds.count+1));
       if(!reallocd) {
-        shuso_log(ctx, "failed to receive file descriptor: no memory for buffered fd");
+        shuso_log_error(ctx, "failed to receive file descriptor: no memory for buffered fd");
         if(fd != -1) close(fd);
         continue;
       }

@@ -29,7 +29,7 @@ struct shuso_process_s {
   _Atomic(shuso_process_state_t)   *state;
   uint16_t                          generation;
   shuso_ipc_channel_shared_t        ipc;
-};
+}; // shuso_process_t
 
 //params for setsockopt()
 struct shuso_sockopt_s {
@@ -177,6 +177,7 @@ bool shuso_set_log_fd(shuso_t *ctx, int fd);
 bool shuso_set_error(shuso_t *ctx, const char *err);
 shuso_process_t *shuso_procnum_to_process(shuso_t *ctx, int procnum);
 int shuso_process_to_procnum(shuso_t *ctx, shuso_process_t *proc);
+const char *shuso_process_as_string(shuso_t *ctx);
 
 
 #define SHUSO_EACH_WORKER(ctx, cur) \

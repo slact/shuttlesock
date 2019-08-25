@@ -13,10 +13,10 @@
 static void signal_handle(shuso_t *ctx, const uint8_t code, void *ptr) {
   intptr_t sig = (intptr_t )ptr;
   if(ctx->procnum != SHUTTLESOCK_MASTER) {
-    shuso_log(ctx, "ignore signal %ld received via IPC", sig);
+    shuso_log_info(ctx, "ignore signal %ld received via IPC", sig);
     return; 
   }
-  shuso_log(ctx, "master received signal %ld via IPC", sig);
+  shuso_log_info(ctx, "master received signal %ld via IPC", sig);
   switch(sig) {
     case SIGINT:
     case SIGQUIT:
@@ -94,7 +94,7 @@ bool shuso_ipc_command_open_listener_sockets(shuso_t *ctx, shuso_hostinfo_t *hos
   struct sockaddr_in6   sa_inet6;
   size_t                addr_len = 0;
   assert(count > 0);
-  shuso_log(ctx, "shuso_ipc_command_open_listener_sockets");
+  //shuso_log_debug(ctx, "opening listener sockets...");
   if(ctx->procnum == SHUTTLESOCK_MASTER) {
     if((opened = calloc(count, sizeof(*opened))) == NULL) {
       err = "failed to allocate memory for opening listening sockets";
@@ -141,14 +141,14 @@ bool shuso_ipc_command_open_listener_sockets(shuso_t *ctx, shuso_hostinfo_t *hos
     }
     assert(sa);
     for(i=0; i < count; i++) {
-      shuso_log(ctx, "open socket #%d", i);
+      //shuso_log_debug(ctx, "open socket #%d", i);
       opened[i]=socket(hostinfo->addr_family, socktype, 0);
       if(opened[i] == -1) {
         err = "failed to create listener socket";
         goto fail;
       }
       for(unsigned j=0; j < sockopts->count; j++) {
-        shuso_log(ctx, "setsockopt #%d opt #%d", i, j);
+        //shuso_log_debug(ctx, "setsockopt #%d opt #%d", i, j);
         shuso_sockopt_t *opt = &sockopts->array[j];
         if(setsockopt(opened[i], opt->level, opt->name, &opt->intvalue, sizeof(opt->intvalue)) < 0) {
           err = "failed to set sockopt on new listener socket";
@@ -157,7 +157,7 @@ bool shuso_ipc_command_open_listener_sockets(shuso_t *ctx, shuso_hostinfo_t *hos
       }
       
       shuso_set_nonblocking(opened[i]);
-      shuso_log(ctx, "bind #%d", i);
+      //shuso_log_debug(ctx, "bind #%d", i);
       if(bind(opened[i], sa, addr_len) == -1) {
         err = "failed to bind listener socket";
         goto fail;
@@ -177,7 +177,6 @@ bool shuso_ipc_command_open_listener_sockets(shuso_t *ctx, shuso_hostinfo_t *hos
 fail:
   if(err) {
     shuso_set_error(ctx, err);
-    shuso_log(ctx, "ERROR: %s", err);
   }
   callback(ctx, SHUSO_FAIL, hostinfo, NULL, 0, pd);
   if(opened) {
@@ -278,24 +277,22 @@ fail:
 }
 
 static void open_listener_sockets_handle_callback(shuso_t *ctx, shuso_status_t status, shuso_hostinfo_t *hostinfo, int *sockets, int socket_count, void *pd) {
-  shuso_log(ctx, "open_listener_sockets_handle_callback");
   ipc_open_sockets_t *sockreq = pd;
   sockreq->status = status;
   shuso_ipc_send(ctx, &ctx->common->process.manager, SHUTTLESOCK_IPC_CMD_OPEN_LISTENER_SOCKETS_RESPONSE, sockreq);
   if(status == SHUSO_OK) {
     sockreq->status = SHUSO_OK;
     for(int i=0; i<socket_count; i++) {
-      shuso_log(ctx, "shuso_ipc_send_fd #%d socket %d", i, sockets[i]);
       if(!shuso_ipc_send_fd(ctx, &ctx->common->process.manager, sockets[i], (uintptr_t)sockreq, (void *)(intptr_t)i)) {
         //TODO: send ABORT to socket receiver
-        shuso_log(ctx, "shuso_ipc_send_fd #%d socket %d FAILED: %d %s", i, sockets[i], errno, strerror(errno));
+        shuso_log_error(ctx, "shuso_ipc_send_fd #%d socket %d FAILED: %d %s", i, sockets[i], errno, strerror(errno));
       }
       close(sockets[i]);
       sockets[i] = -1;
     }
   }
   else {
-    shuso_log(ctx, "SHUTTLESOCK_IPC_CMD_OPEN_LISTENER_SOCKETS_RESPONSE failed");
+    shuso_log_error(ctx, "SHUTTLESOCK_IPC_CMD_OPEN_LISTENER_SOCKETS_RESPONSE failed");
   }
 }
 static void open_listener_sockets_handle(shuso_t *ctx, const uint8_t code, void *ptr) {
@@ -308,20 +305,20 @@ static void listener_socket_receiver(shuso_t *ctx, bool ok, uintptr_t ref, int f
   uintptr_t n = (uintptr_t)received_pd;
   ipc_open_sockets_t *sockreq = pd;
   if(ok) {
-    shuso_log(ctx, "listener_socket_receiver ok...");
+    //shuso_log_debug(ctx, "listener_socket_receiver ok...");
     assert(n < sockreq->socket_count);
     assert(fd != -1);
     sockreq->sockets[n]=fd;
-    shuso_log(ctx, "RECEIVED SOCKET #%lu %d", n, fd);
+    //shuso_log_debug(ctx, "RECEIVED SOCKET #%lu %d", n, fd);
     if(n+1 == sockreq->socket_count) { //ok, that was the last one
-      shuso_log(ctx, "received socket, ok that was the last one");
+      //shuso_log_debug(ctx, "received socket, ok that was the last one");
       shuso_ipc_receive_fd_finish(ctx, ref);
       sockreq->callback(ctx, true, &sockreq->hostinfo, sockreq->sockets, sockreq->socket_count, sockreq->pd);
       free_shared_open_sockets_struct(ctx, sockreq);
     }
   }
   else {
-    shuso_log(ctx, "listener_socket_receiver fail...");
+    shuso_log_error(ctx, "listener_socket_receiver for ref %p failed", (void *)ref);
     shuso_ipc_receive_fd_finish(ctx, ref);
     sockreq->callback(ctx, false, &sockreq->hostinfo, NULL, 0, sockreq->pd);
     free_shared_open_sockets_struct(ctx, sockreq);
@@ -329,7 +326,7 @@ static void listener_socket_receiver(shuso_t *ctx, bool ok, uintptr_t ref, int f
 }
 
 static void open_listener_sockets_response_handle(shuso_t *ctx, const uint8_t code, void *ptr) {
-  shuso_log(ctx, "open_listener_sockets_response_handle");
+  //shuso_log_debug(ctx, "open_listener_sockets_response_handle");
   shuso_ipc_receive_fd_start(ctx, "open listener sockets response", 1.0, listener_socket_receiver, (uintptr_t) ptr, ptr);
 }
 

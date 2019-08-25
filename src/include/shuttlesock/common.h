@@ -10,6 +10,16 @@ typedef enum {
 } shuso_status_t;
 
 typedef enum {
+  SHUSO_LOG_FATAL =     1,
+  SHUSO_LOG_CRITICAL =  2,
+  SHUSO_LOG_ERROR =     3,
+  SHUSO_LOG_WARNING =   4,
+  SHUSO_LOG_NOTICE =    5, 
+  SHUSO_LOG_INFO =      6,
+  SHUSO_LOG_DEBUG =     7
+} shuso_loglevel_t;
+
+typedef enum {
   SHUSO_STOP_ASK =      1,
   SHUSO_STOP_INSIST =   2,
   SHUSO_STOP_DEMAND =   3,
