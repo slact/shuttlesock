@@ -23,6 +23,7 @@ set(libsrc
   src/stalloc.c
   src/resolver.c
   src/shared_slab.c
+  src/lua_bridge.c
 )
 
 add_library(shuttlesock SHARED ${libsrc})

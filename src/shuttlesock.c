@@ -1,17 +1,10 @@
 #include <stdlib.h>
+#include <stdio.h>
 #include <shuttlesock.h>
-#include <lualib.h>
-#include <lauxlib.h>
-#include <ev.h>
 #include <assert.h>
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/mman.h>
-#include "shuttlesock_private.h"
-#include <shuttlesock/log.h>
-#include <shuttlesock/sysutil.h>
-#include <shuttlesock/resolver.h>
-#include <stdio.h>
 
 static void shuso_cleanup_loop(shuso_t *ctx);
 static void signal_watcher_cb(shuso_loop *, shuso_ev_signal *w, int revents);
@@ -70,11 +63,10 @@ shuso_t *shuso_create(unsigned int ev_loop_flags, shuso_runtime_handlers_t *hand
     .common  = common_ctx
   };
   
-  if((ctx->lua = luaL_newstate()) == NULL) {
+  if(!shuso_lua_create(ctx)) {
     errmsg = "failed to create Lua VM";
     goto fail;
   }
-  luaL_openlibs(ctx->lua);
   
   common_ctx->log.fd = fileno(stdout);
   
@@ -136,8 +128,7 @@ fail:
   if(stalloc_initialized) shuso_stalloc_empty(&ctx->stalloc);
   if(shm_slab_created) shuso_shared_slab_destroy(ctx, &ctx->common->shm);
   if(ctx->lua) {
-    lua_close(ctx->lua);
-    ctx->lua = NULL;
+    shuso_lua_destroy(ctx);
   }
   if(ctx) free(ctx);
   if(common_ctx) free(common_ctx);
@@ -161,8 +152,7 @@ bool shuso_destroy(shuso_t *ctx) {
   if(ctx->procnum <= SHUTTLESOCK_MANAGER) {
     free(ctx->common);
   }
-  assert(ctx->lua);
-  lua_close(ctx->lua);
+  shuso_lua_destroy(ctx);
   free(ctx);
   shuso_resolver_global_cleanup();
   return true;
@@ -370,11 +360,10 @@ static bool shuso_worker_initialize(shuso_t *ctx) {
   shuso_ipc_channel_shared_start(ctx, ctx->process);
   shuso_ipc_channel_local_init(ctx);
   shuso_ipc_channel_local_start(ctx);
-  if((ctx->lua = luaL_newstate()) == NULL) {
+  if(!shuso_lua_create(ctx)) {
     *ctx->process->state = SHUSO_PROCESS_STATE_DEAD;
     return false;
   }
-  luaL_openlibs(ctx->lua);
   
   ctx->common->phase_handlers.start_worker(ctx, ctx->common->phase_handlers.privdata);
   *ctx->process->state = SHUSO_PROCESS_STATE_RUNNING;
@@ -389,8 +378,7 @@ static void shuso_worker_shutdown(shuso_t *ctx) {
   ev_loop_destroy(ctx->ev.loop);
 #endif
   ctx->ev.loop = NULL;
-  lua_close(ctx->lua);
-  ctx->lua = NULL;
+  shuso_lua_destroy(ctx);
   shuso_log(ctx, "stopped");
   shuso_resolver_cleanup(&ctx->resolver);
   shuso_stalloc_empty(&ctx->stalloc);

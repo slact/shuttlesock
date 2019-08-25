@@ -18,6 +18,9 @@
 #include <shuttlesock/stalloc.h>
 #include <shuttlesock/resolver.h>
 #include <shuttlesock/shared_slab.h>
+#include <shuttlesock/lua_bridge.h>
+#include <shuttlesock/sysutil.h>
+#include <shuttlesock/log.h>
 
 
 struct shuso_process_s {
