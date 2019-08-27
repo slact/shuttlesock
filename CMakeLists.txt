@@ -154,3 +154,12 @@ if(NOT (SHUTTLESOCK_DEFAULT_LOGLEVEL IN_LIST SHUTTLESOCK_LOG_LEVELS))
 endif()
 
 configure_file(src/include/shuttlesock/build_config.h.tmpl src/include/shuttlesock/build_config.h)
+
+#embed lua script to parse config
+include(text2h)
+TEXT2H(
+  SOURCE_FILE src/lua/config_parser.lua
+  VARIABLE_NAME SHUTTLESOCK_LUA_SCRIPT_CONFIG_PARSER
+  HEADER_FILE ${PROJECT_BINARY_DIR}/src/include/shuttlesock/embedded_lua_scripts.h
+)
+
