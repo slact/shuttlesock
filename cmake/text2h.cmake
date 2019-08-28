@@ -21,7 +21,6 @@ function(TEXT2H)
 
     # reads source file contents as text string
     file(READ ${TEXT2H_SOURCE_FILE} txtString)
-    message("${txtString}")
     string(LENGTH "${txtString}" txtStringLength)
 
     # appends null byte if asked
