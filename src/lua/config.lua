@@ -1,4 +1,4 @@
---local mm = require "mm"
+local mm = require "mm"
 local Parser = {}
 local parser_mt
 
@@ -95,7 +95,7 @@ function Parser.new(name, string, root_directive)
 end
 
 do --parser
-  local function countSlashesReverse(str, start, cur)
+  local function count_slashes_reverse(str, start, cur)
     local count = 0
     local rslash = string.byte("\\")
     for i=cur,start,-1 do
@@ -106,10 +106,6 @@ do --parser
       end
     end
     return count
-  end
-
-  local function indent(lvl)
-    return ("  "):rep(lvl)
   end
   
   local parser = {}
@@ -136,10 +132,10 @@ do --parser
   end
   
   function parser:inDirective(stack_position)
-    return self:inChunkType(self, "directive", stack_position)
+    return self:inChunkType("directive", stack_position)
   end
   function parser:inBlock(stack_position)
-    return self:inChunkType(self, "directive", stack_position)
+    return self:inChunkType("block", stack_position)
   end
   
   function parser:pushDirective(directive_name, module_name, is_root)
@@ -260,6 +256,7 @@ do --parser
       directives = {},
       comments = {},
       tokens = {},
+      source_directive = assert(self:inDirective())
     }
     table.insert(self.stack, block)
     self.top = block
@@ -284,17 +281,19 @@ do --parser
       token_count = token_count + 1
     end
     
-    if self.top.type == "directive" then
+    if self:inDirective() == "directive" then
       local err = "unexpected end of file, expected \";\""
       self:error(err)
       return nil, err
-    elseif self.top.type == "block" and self.top ~= self.root then
+    elseif self:inBlock() == "block" and self.top.source_directive ~= self.root then
       local err = "unexpected end of file, expected \"}\""
       self:error(err)
       return nil, err
+    else
+      self:popBlock()
     end
       
-    return self.top
+    return self.root
   end
   
   function parser:match(pattern, save_match)
@@ -364,7 +363,7 @@ do --parser
       unquote = self:find(quote_char, true, offset)
       if unquote then
         offset = unquote - self.cur + 1
-        if countSlashesReverse(self.str, self.cur, unquote - 1) % 2 == 0 then
+        if count_slashes_reverse(self.str, self.cur, unquote - 1) % 2 == 0 then
           --string end found
           self.last_match = self.str:sub(self.cur, unquote)
           self.cur = unquote + 1
@@ -443,6 +442,7 @@ do --parser
     if self.cur >= #self.str then
       return nil --we're done
     end
+    
     if self:inBlock() then
       if self:match("^}") then
         return self:popBlock()
@@ -455,6 +455,7 @@ do --parser
       end
       return true
     end
+    
     
     assert(self:inDirective())
     local char = self.str:sub(self.cur, self.cur)
@@ -501,53 +502,6 @@ do --parser
       end
     end
     return line, pos - cur
-  end
-  
-  function parser:debugString(cur, lvl)
-    lvl = lvl or 0
-    cur = cur or self.top
-    local buf = {}
-    if cur.type == "block" then
-      for _, v in ipairs(cur.tokens) do
-        table.insert(buf, self:debugString(v, lvl))
-      end
-      if cur == self.root then
-        return table.concat(buf, "\n")
-      else
-        return ("{\n%s\n%s}\n"):format(table.concat(buf, "\n"), indent(lvl-1))
-      end
-    elseif cur.type == "directive" then
-      local str = indent(lvl) .. cur.name
-      local prev_type = "none"
-      for _, token in ipairs(cur.tokens) do
-        local pre = prev_type == "newline" and indent(lvl+1) or " "
-        
-        if token.type == "newline" then
-          str = str .. "\n"
-        elseif token.type == "comment" then
-          str = str .. pre .. token.value
-        elseif token.type == "value" or token.type == "string" or token.type == "variable" then
-          str = str .. pre .. token.raw
-        elseif token.type == "semicolon" then
-          str = str .. (prev_type == "newline" and indent(lvl) or "")..";"
-        else
-          error("unexpected token type " .. token.type)
-        end
-        
-        prev_type = token.type
-      end
-      
-      if cur.block then
-        str = str .. " " .. self:debugString(cur.block, lvl + 1)
-        return str
-      else
-        return str
-      end
-    elseif cur.type == "comment" then
-      return indent(lvl)..cur.value
-    else
-      error("unexpected chunk type " .. cur.type)
-    end
   end
 end
 
@@ -627,28 +581,34 @@ do --config
   config_mt = {__index=config}
   
   local function build_handler_tree(handlers)
-    error("TODO")
+    --TODO
+    return {}
   end
   local function match_handler_tree(handler_tree, directive)
-    error("TODO")
+    -- TODO
+    return false
   end
   
-  function config:load(root)
+  function config:load(path_prefix)
     assert(not self.loaded, "config already loaded")
     local config_string
     if self.string then
       config_string = self.string
     else
       local err
-      config_string, err = read_file(resolve_path(self.path_prefix, self.name), "config")
+      config_string, err = read_file(resolve_path(path_prefix or ".", self.name), "config")
       if not config_string then
         return nil, err
       end
     end
     
-    local parser = Parser.new(self.name, config_string, root)
-    local ok, err = pcall(parser.parse, parser)
+    local parser = Parser.new(self.name, config_string)
+    local ok = true
+    local res, err = parser:parse()
     if not ok then
+      return nil, res
+    end
+    if not res then
       return nil, err
     end
     
@@ -656,8 +616,8 @@ do --config
     self.root = parser.root
     
     --now handle includes
-    config:handle("config.include_path")
-    config:handle("config.include")
+    self:handle("config.include_path")
+    self:handle("config.include")
     
     return self
   end
@@ -665,7 +625,8 @@ do --config
   function config:handle(shuttlesock_ctx, handlers)
     local handler_tree
     local err
-    if #handlers == 0 then
+    if handlers then assert(type(handlers) == "table") end
+    if not handlers or #handlers == 0 then
       handler_tree = self.handler_tree
     else
       for i, handler_name in ipairs(handlers) do
@@ -692,15 +653,18 @@ do --config
   
   function config:eachDirective(start) --for loop iterator
     local function walkDirective(block, parent_directive)
+      mm("yeah?..")
       for _, directive in ipairs(block.directives) do
+        mm("yeah")
         coroutine.yield(directive, parent_directive)
         if directive.block then
           walkDirective(start or directive.block, directive)
         end
       end
     end
+    assert(self.root.block)
     return coroutine.wrap(function()
-      return walkDirective(self.root, nil)
+      return walkDirective(self.root.block, nil)
     end)
   end
   
@@ -751,7 +715,7 @@ do --config
     
     assert(type(directive.path) == "string", "directive.path must be a string")
     assert(not directive.path:match("%/%/"), "directive.path \"" .. directive.path .."\" is invalid")
-    assert(directive.path:match("^[%w_%.%/]+"), "directive.path \"" .. directive.path .."\" is invalid")
+    assert(directive.path:match("^[%w_%.%/]*"), "directive.path \"" .. directive.path .."\" is invalid")
     path = directive.path:match("^(.+)/$") or directive.path
     
     description = assert(directive.description, "it may seem draconian, but drective.description is required.")
@@ -760,7 +724,7 @@ do --config
       args_min, args_max = 1, 1
     elseif type(directive.nargs) == "number" then
       if math.type then
-        assert(math.type(directive.nargs) ~= "integer", "directive.nargs must be an integer")
+        assert(math.type(directive.nargs) == "integer", "directive.nargs must be an integer")
       else
         assert(math.floor(directive.nargs) == directive.nargs, "directive.nargs must be an integer")
       end
@@ -818,10 +782,62 @@ do --config
       internal_handler = directive.internal_handler
     }
     
-    assert(not self.handlers[path], ('directive "%s" for module %s with path %s already exists'):format(name, module_name, path))
+    local full_name = module_name .. "." .. name
     
-    self.directives[module_name .. "." .. name] = handler
+    assert(not self.handlers[full_name], ('directive "%s" for module %s already exists'):format(name, module_name))
+    
+    self.handlers[full_name] = handler
     return true
+  end
+  
+  function config:configString(cur, lvl)
+    local function indent(lvl)
+      return ("  "):rep(lvl)
+    end
+    lvl = lvl or 0
+    cur = cur or self.root.block
+    local buf = {}
+    if cur.type == "block" then
+      for _, v in ipairs(cur.tokens) do
+        table.insert(buf, self:configString(v, lvl))
+      end
+      if cur == self.root.block then
+        return table.concat(buf, "\n")
+      else
+        return ("{\n%s\n%s}\n"):format(table.concat(buf, "\n"), indent(lvl-1))
+      end
+    elseif cur.type == "directive" then
+      local str = indent(lvl) .. cur.name
+      local prev_type = "none"
+      for _, token in ipairs(cur.tokens) do
+        local pre = prev_type == "newline" and indent(lvl+1) or " "
+        
+        if token.type == "newline" then
+          str = str .. "\n"
+        elseif token.type == "comment" then
+          str = str .. pre .. token.value
+        elseif token.type == "value" or token.type == "string" or token.type == "variable" then
+          str = str .. pre .. token.raw
+        elseif token.type == "semicolon" then
+          str = str .. (prev_type == "newline" and indent(lvl) or "")..";"
+        else
+          error("unexpected token type " .. token.type)
+        end
+        
+        prev_type = token.type
+      end
+      
+      if cur.block then
+        str = str .. " " .. self:configString(cur.block, lvl + 1)
+        return str
+      else
+        return str
+      end
+    elseif cur.type == "comment" then
+      return indent(lvl)..cur.value
+    else
+      error("unexpected chunk type " .. cur.type)
+    end
   end
 end
 
