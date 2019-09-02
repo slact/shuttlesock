@@ -8,10 +8,6 @@ include(CMakeParseArguments)
 #                     to this name and will be used a variable name for size variable.
 #   HEADER_FILE     - The path of header file.
 #   APPEND          - If specified appends to the header file instead of overwriting it
-#   NULL_TERMINATE  - If specified a null byte(zero) will be append to the byte array. This will be
-#                     useful if the source file is a text file and we want to use the file contents
-#                     as string. But the size variable holds size of the byte array without this
-#                     null byte.
 # Usage:
 #   text2h(SOURCE_FILE "Logo.png" HEADER_FILE "Logo.h" VARIABLE_NAME "LOGO_PNG")
 function(TEXT2H)
@@ -22,11 +18,6 @@ function(TEXT2H)
     # reads source file contents as text string
     file(READ ${TEXT2H_SOURCE_FILE} txtString)
     string(LENGTH "${txtString}" txtStringLength)
-
-    # appends null byte if asked
-    if(TEXT2H_NULL_TERMINATE)
-        set(txtString "${txtString}\\x00")
-    endif()
 
     # converts the variable name into proper C identifier
     string(MAKE_C_IDENTIFIER "${TEXT2H_VARIABLE_NAME}" TEXT2H_VARIABLE_NAME)
