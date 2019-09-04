@@ -2,7 +2,7 @@ include(CheckCSourceCompiles)
 include(CMakePushCheckState)
 
 function(test_overlength_strings overlength_strings_var)
-  message(STATUS "Check if compiler supports -Woverlength-strings")
+  message(STATUS "Check if compiler supports -Wno-overlength-strings")
   cmake_push_check_state(RESET)
   
   set(C_SOURCE "#include <stdio.h>
@@ -30,9 +30,9 @@ function(test_overlength_strings overlength_strings_var)
   
   if((NOT COMPILES_WITHOUT_NO_OVERLENGTH_STRINGS) AND COMPILES_WITH_NO_OVERLENGTH_STRINGS)
     set(${overlength_strings_var} "yes" PARENT_SCOPE)
-    message(STATUS "Check if compiler supports -Woverlength-strings - yes")
+    message(STATUS "Check if compiler supports -Wno-overlength-strings - yes")
   else()
     set(${overlength_strings_var} "" PARENT_SCOPE)
-    message(STATUS "Check if compiler supports -Woverlength-strings - no")
+    message(STATUS "Check if compiler supports -Wno-overlength-strings - no")
   endif()
 endfunction()

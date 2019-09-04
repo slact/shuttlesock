@@ -38,7 +38,7 @@ function(add_build_mode mode cflags linker_flags)
   )
 endfunction()
 
-if(NOT DEFINED ${overlength_strings_var})
+if(NOT DEFINED C_COMPILER_WARNS_ON_OVERLENGTH_STRINGS)
   test_overlength_strings(C_COMPILER_WARNS_ON_OVERLENGTH_STRINGS)
   set(C_COMPILER_WARNS_ON_OVERLENGTH_STRINGS ${C_COMPILER_WARNS_ON_OVERLENGTH_STRINGS} CACHE BOOL "-Wno-overlength-strings supported")
 endif()
