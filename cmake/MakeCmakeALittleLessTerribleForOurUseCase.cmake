@@ -1,3 +1,5 @@
+include(TestOverlengthStrings)
+
 set(GLOBAL_COMPILE_FLAGS "")
 set(GLOBAL_LINK_FLAGS "")
 
@@ -35,6 +37,14 @@ function(add_build_mode mode cflags linker_flags)
     CMAKE_SHARED_LINKER_FLAGS_${MODE}
   )
 endfunction()
+
+if(NOT DEFINED ${overlength_strings_var})
+  test_overlength_strings(C_COMPILER_WARNS_ON_OVERLENGTH_STRINGS)
+  set(C_COMPILER_WARNS_ON_OVERLENGTH_STRINGS ${C_COMPILER_WARNS_ON_OVERLENGTH_STRINGS} CACHE BOOL "-Wno-overlength-strings supported")
+endif()
+if(C_COMPILER_WARNS_ON_OVERLENGTH_STRINGS)
+  add_compiler_flags(-Wno-overlength-strings)
+endif()
 
 if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Debug)

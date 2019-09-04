@@ -158,8 +158,15 @@ configure_file(src/include/shuttlesock/build_config.h.tmpl src/include/shuttleso
 #embed lua script to parse config
 include(text2h)
 TEXT2H(
-  SOURCE_FILE src/lua/config_parser.lua
-  VARIABLE_NAME SHUTTLESOCK_LUA_SCRIPT_CONFIG_PARSER
+  SOURCE_FILE src/lua/config.lua
+  VARIABLE_NAME SHUTTLESOCK_LUA_SCRIPT_CONFIG
   HEADER_FILE ${PROJECT_BINARY_DIR}/src/include/shuttlesock/embedded_lua_scripts.h
 )
+#embed lua serialization module
+TEXT2H( APPEND
+  SOURCE_FILE src/lua/modules/binser/binser.lua
+  VARIABLE_NAME SHUTTLESOCK_LUA_MODULE_BINSER
+  HEADER_FILE ${PROJECT_BINARY_DIR}/src/include/shuttlesock/embedded_lua_scripts.h
+)
+
 
