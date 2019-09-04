@@ -160,6 +160,9 @@ bool shuso_configure_finish(shuso_t *ctx) {
   }
   
   assert(ctx->lua.state);
+  if(!shuso_lua_initialize(ctx)) {
+    goto fail;
+  }
   ctx->config.ready = true;
   return true;
   
