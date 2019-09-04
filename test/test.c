@@ -33,14 +33,14 @@ describe(shuttlesock_init_and_shutdown) {
     }
   }
   test("run loop") {
-    ss = runcheck_shuso_create(EVFLAG_AUTO, NULL);
+    ss = runcheck_shuso_create();
     shuso_add_timer_watcher(ss, 0.5, 0.0, stop_timer, (void *)(intptr_t)SHUTTLESOCK_MASTER);
     shuso_run(ss);
     assert_shuso(ss);
   }
   
   test("stop from manager") {
-    ss = runcheck_shuso_create(EVFLAG_AUTO, NULL);
+    ss = runcheck_shuso_create();
     shuso_add_timer_watcher(ss, 0.5, 0.0, stop_timer, (void *)(intptr_t)SHUTTLESOCK_MANAGER);
     shuso_run(ss);
     assert_shuso(ss);
@@ -211,7 +211,7 @@ describe(ipc) {
     before_each() {
       ss = NULL;
       ipc_check = shmalloc(ipc_check);
-      ss = runcheck_shuso_create(EVFLAG_AUTO, NULL);
+      ss = runcheck_shuso_create();
       ss->data = ipc_check;
     }
     after_each() {
@@ -273,7 +273,7 @@ describe(ipc) {
     before_each() {
       ss = NULL;
       ipc_check = shmalloc(ipc_check);
-      ss = runcheck_shuso_create(EVFLAG_AUTO, NULL);
+      ss = runcheck_shuso_create();
       ss->data = ipc_check;
     }
     after_each() {
@@ -418,7 +418,7 @@ describe(resolver) {
     }
   }
   test("resolve using system") {
-    ss = runcheck_shuso_create(EVFLAG_AUTO, NULL);
+    ss = runcheck_shuso_create();
     
     shuso_add_timer_watcher(ss, 0.01, 0.0, resolve_check_start, 0);
     
@@ -438,7 +438,7 @@ describe(shared_memory_allocator) {
   static shuso_shared_slab_t shm;
   before_each() {
     shuso_system_initialize();
-    ss = runcheck_shuso_create(EVFLAG_AUTO, NULL);
+    ss = runcheck_shuso_create();
   }
   after_each() {
     shuso_destroy(ss);
@@ -554,7 +554,7 @@ describe(listener_sockets) {
     static listener_port_test_t *pt = NULL;
   before_each() {
     shuso_system_initialize();
-    ss = runcheck_shuso_create(EVFLAG_AUTO, NULL);
+    ss = runcheck_shuso_create();
     pt = shmalloc(pt);
     pt->err = NULL;
   }

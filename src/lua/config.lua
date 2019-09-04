@@ -1,9 +1,19 @@
-local mm = require "mm"
 local Parser = {}
 local parser_mt
 
 local Config = {}
 local config_mt
+
+local function mm_directive(directive)
+  local mm = require "mm"
+  local cpy = {}
+  for k,v in pairs(directive) do
+    cpy[k]=v
+  end
+  cpy.parent = "..."
+  cpy.block = "..."
+  mm(cpy)
+end
 
 local config_directives = {
   {
@@ -23,10 +33,10 @@ local config_directives = {
     description = "include configs matching the provided glob pattern",
     nargs   = 1,
     default = nil,
-    internal_handler = function(directive, config)
-      local path = directive.values[1]
+    internal_handler = function(directive, config, shuttlesock_ctx)
+      local path = directive.values[1].raw
       
-      local include_path = directive.parent:get("config.include_path")
+      local include_path = config:getDirective("include_path", directive.parent)
       local paths
       if path:match("[%[%]%?%*]") then
         paths = Config.glob(include_path, directive.values[1])
@@ -40,6 +50,7 @@ local config_directives = {
       local directives = { }
       
       config.config_include_stack = config.config_include_stack or {}
+      table.insert(config.config_include_stack, config.name)
       if #config.config_include_stack > 32 then
         return nil, "too many include levels, there's probably an include loop : \n" ..
           "    loaded ".. table.concat(config.config_include_stack, "\n  included ")
@@ -50,21 +61,25 @@ local config_directives = {
         included_config.config_include_stack = config.config_include_stack
         local ok, err = included_config:load()
         if not ok then return nil, err end
-        ok, err = config:handle("config.include_path", "config.include")
+        ok, err = included_config:handle("config.include_path")
+        if not ok then return nil, err end
+        ok, err = included_config:handle("config.include")
         if not ok then return nil, err end
         
         table.insert(tokens, {type="comment", value = "# included file " .. p ..";"})
-        for _, d in ipairs(included_config.root.directives) do
+        
+        for _, d in ipairs(included_config.root.block.directives) do
           table.insert(directives, d)
           d.parent = directive.parent
         end
-        for _, t in ipairs(included_config.root.tokens) do
+        
+        for _, t in ipairs(included_config.root.block.tokens) do
           table.insert(tokens, t)
         end
       end
       
-      assert(config:replaceToken(directive.parent, directive, table.unpack(tokens)))
-      assert(config:replaceDirective(directive.parent, directive, table.unpack(tokens)))
+      assert(config:replaceToken(directive, table.unpack(tokens)))
+      assert(config:replaceDirective(directive, table.unpack(directives)))
       
       config.config_include_stack = nil
       
@@ -112,15 +127,17 @@ do --parser
   
   parser_mt = {__index = parser}
     
-  function parser:error(err)
+  function parser:error(err, offset)
     if err then
-      local line, column = self:location()
+      local line, column = self:location(offset)
       self.errmsg = ("%s in %s:%d:%d"):format(err, self.name or "config", line, column)
-      error(self.errmsg)
-      return nil, err
+      return err
     else
       return self.errmsg
     end
+  end
+  function parser:lastError()
+    return self.errmsg
   end
   
   function parser:inChunkType(chunk_type, stack_position)
@@ -154,7 +171,7 @@ do --parser
       directive = {
         type = "directive",
         name = directive_name,
-        module_name = module_name,
+        module = module_name,
         position = {
           first = self.cur,
           last = self.cur,
@@ -167,7 +184,7 @@ do --parser
         block = nil,
       }
       if module_name then
-        directive.full_name = directive.module_name .. "." .. directive.name
+        directive.full_name = directive.module .. "." .. directive.name
       end
       if is_root and not directive.parent then
         directive.parent = directive --i'm my own grandpa
@@ -282,13 +299,9 @@ do --parser
     end
     
     if self:inDirective() == "directive" then
-      local err = "unexpected end of file, expected \";\""
-      self:error(err)
-      return nil, err
+      return nil, self:error("unexpected end of file, expected \";\"")
     elseif self:inBlock() == "block" and self.top.source_directive ~= self.root then
-      local err = "unexpected end of file, expected \"}\""
-      self:error(err)
-      return nil, err
+      return nil, self:error("unexpected end of file, expected \"}\"")
     else
       self:popBlock()
     end
@@ -381,27 +394,23 @@ do --parser
     end
     
     if self:match("^%$[^%s;]+") then
-      self:error("invalid variable name " .. self:match())
-      return nil
+      return nil, self:error("invalid variable name " .. self:match())
     elseif self:match("^%$") then
-      self:error("empty variable name")
-      return nil
+      return nil, self:error("empty variable name")
     else
-      self:error("invalid variable")
-      return nil
+      return nil, self:error("invalid variable")
     end
   end
   
   function parser:matchValue()
     if not self:match("^[^%s;]+") then
-      self:error("invalid value")
-      return nil
+      return nil, self:error("invalid value")
     end
     return self:addValueToDirective("value")
   end
   
   function parser:matchDirectiveName()
-    if not self:match("^[%w%.%_%:]+") then
+    if not self:match("^[^%s]+") then
       if self:match("^;") then
         self:error("unexpected \";\"")
       elseif self:match("^{") then
@@ -411,13 +420,13 @@ do --parser
       else
         self:error("expected config directive")
       end
-      return nil
+      return nil, self:lastError()
     end
     local module_name, name = nil, self:match()
     if name:match("%.") then
-      module_name, name = name:match("^([%w%_]+)%.([%w%_%:])$")
+      module_name, name = name:match("^([^%.]+)%.([^%s]+)$")
       if not module_name then
-        self:error("invalid config directive name \""..self:match().."\"")
+        return nil, self:error("invalid config directive name \""..self:match().."\"")
       end
     end
     self:pushDirective(name, module_name)
@@ -449,8 +458,7 @@ do --parser
       else
         local ok, err = self:matchDirectiveName()
         if not ok then
-          self:error(err)
-          return nil
+          return nil, self:error(err)
         end
       end
       return true
@@ -476,8 +484,7 @@ do --parser
     end
     
     if not ok then
-      self:error(err)
-      return nil
+      return nil, self:error(err)
     end
     return true
   end
@@ -533,7 +540,7 @@ local function mock(strength)
 end
 
 local function resolve_path(prefix, name)
-  if name:match("^%/") then
+  if not prefix or name:match("^%/") then
     --absolute path
     return name
   else
@@ -547,9 +554,9 @@ local function read_file(path, file_description)
   if not f then
     return nil, "failed to open "..file_description.." file " .. err
   end
-  local str = f:read("*all")
+  local str, readerr = f:read("*all")
   if not str then
-    return nil, "failed to read "..file_description.." file path" .. path
+    return nil, "failed to read "..file_description.." at " .. path .. ": " .. (readerr or "")
   end
   f:close()
   return str
@@ -564,8 +571,9 @@ function Config.new(name, string)
     name = name, --could be the filename
     string = string,
     handlers = {},
-    handlers_tree = {},
-    parent_lookup_table = setmetatable({}, {__mode='kv'})
+    handlers_any_module = {},
+    parent_lookup_table = setmetatable({}, {__mode='kv'}),
+    parsers = {}
   }
   setmetatable(config, config_mt)
   
@@ -580,13 +588,111 @@ do --config
   local config = {}
   config_mt = {__index=config}
   
-  local function build_handler_tree(handlers)
-    --TODO
-    return {}
+  local function split_path(pathy_thing)
+    if pathy_thing.split_path then
+      return pathy_thing.split_path
+    end
+    
+    local tbl = {}
+    if not pathy_thing.path:match("^%/") then
+      table.insert(tbl, "*.*")
+    end
+    for pathpart in pathy_thing.path:gmatch("^[^%/]+") do
+      table.insert(tbl, pathpart:match("%.") and pathpart or "*."..pathpart)
+    end
+    pathy_thing.split_path = tbl
+    return tbl
   end
-  local function match_handler_tree(handler_tree, directive)
-    -- TODO
-    return false
+
+  local function match_path(directive, handler)
+    local dpath = split_path(directive)
+    local hpath = split_path(handler)
+    for i=#dpath, 1, -1 do
+      local d = dpath[i]
+      for j = #hpath, 1, -1 do
+        local h = hpath[j]
+        if d ~= h and h ~= "*.*" and h:match("^%*%.(.+)") ~= d:match("^[^%.]*%.(.+)") then
+          return false
+        end
+      end
+    end
+    return true
+  end
+  
+  function config:getDirective(name, context)
+    if not context then context = self.root end
+    local module
+    if not name:match("%.") then
+      module = false
+    elseif name:match("^%*") then
+      module = false
+      name = name:match("^[^%.]+%.(.*)")
+    else
+      module, name = name:match("^([^%.]+)%.(.*)")
+    end
+    
+    while context and context.parent ~= context do
+      for _, d in ipairs(context.block.directives) do
+        if name == d.name and (module and module == d.module or true) then
+          return d
+        end
+      end
+      context = context.parent
+    end
+    
+    return nil, "directive not found"
+  end
+  
+  function config:findHandlerForDirective(directive)
+    if directive.full_name then
+      local handler = self.handlers[directive.full_name]
+      if handler then
+        return handler
+      else
+        return nil, "unknown directive " .. directive.full_name
+      end
+    else
+      local name = "*."..directive.name
+      local possible_handlers = self.handlers_any_module[name]
+      if not possible_handlers then
+        return nil, "unknown directive " .. directive.name
+      end
+      self:getDirectivePath(directive)
+      local matches = {}
+      for _, handler in ipairs(possible_handlers) do
+        if match_path(directive, handler) then
+          table.insert(matches, handler)
+        end
+      end
+      if #matches == 0 then
+        return nil, "unknown directive " .. directive.name
+      elseif #matches > 1 then
+        local handler_names = {}
+        for _, h in ipairs(possible_handlers) do
+          table.insert(handler_names, h.module .. "," ..h.name)
+        end
+        return nil, "ambiguous directive " .. directive.name..", could be any of :" .. table.concat(handler_names, ", ")
+      else
+        return matches[1]
+      end
+    end
+  end
+  
+  function config:getDirectivePath(directive)
+    if directive.path then
+      return directive.path
+    end
+    local buf = {}
+    local cur = directive
+    while true do
+      cur = cur.parent
+      if cur.parent == cur or not cur then
+        directive.path = "/"..table.concat(buf, "/")
+        return directive.path
+      else
+        table.insert(cur, directive.full_name or ("*."..directive.name))
+      end
+    end
   end
   
   function config:load(path_prefix)
@@ -596,7 +702,7 @@ do --config
       config_string = self.string
     else
       local err
-      config_string, err = read_file(resolve_path(path_prefix or ".", self.name), "config")
+      config_string, err = read_file(resolve_path(path_prefix, self.name), "config")
       if not config_string then
         return nil, err
       end
@@ -612,59 +718,61 @@ do --config
       return nil, err
     end
     
-    self.parser = parser
     self.root = parser.root
     
+    table.insert(self.parsers, parser)
+    for directive in self:eachDirective() do
+      directive.parser_index = #self.parsers
+    end
+    
     --now handle includes
-    self:handle("config.include_path")
-    self:handle("config.include")
+    assert(self:handle("config.include_path"))
+    assert(self:handle("config.include"))
     
     return self
   end
 
-  function config:handle(shuttlesock_ctx, handlers)
-    local handler_tree
-    local err
-    if handlers then assert(type(handlers) == "table") end
-    if not handlers or #handlers == 0 then
-      handler_tree = self.handler_tree
-    else
-      for i, handler_name in ipairs(handlers) do
-        local h = self.handlers[handler_name]
-        if not h then error("handler " .. handler_name .. " not found") end
-        handlers[i]=h
-      end
-      handler_tree = assert(build_handler_tree(handlers))
-    end
-    
+  function config:handle(handlers, shuttlesock_ctx)
     for directive in self:eachDirective() do
-      local ok, handler
-      handler, err = match_handler_tree(directive, handler_tree)
-      if not handler then return nil, err end
-      if handler.handler then
-        ok, err = handler.handler(directive.values, directive, shuttlesock_ctx)
-      elseif handler.internal_handler then
-        ok, err = handler.internal_handler(shuttlesock_ctx, directive, self)
+      local ok, handler, err
+      handler, err = self:findHandlerForDirective(directive)
+      if handler then
+        if handler.handler then
+          ok, err = handler.handler(directive.values, directive, shuttlesock_ctx)
+        elseif handler.internal_handler then
+          ok, err = handler.internal_handler(directive, self, shuttlesock_ctx)
+        end
+      else
+        ok = true
       end
-      if not ok then return nil, err end
+      if not ok then
+        local err_prefix = "error in \""..(directive.full_name or directive.name).."\" directive"
+        local parser = self.parsers[directive.parser_index]
+        if parser then
+          return nil, parser:error(err_prefix, directive.position.first) .. ": " .. err
+        else
+          return nil, err_prefix .. ": " .. err
+        end
+      end
     end
     return true
   end
   
-  function config:eachDirective(start) --for loop iterator
+  function config:eachDirective(start, filters) --for loop iterator
+    local walk_directive = filters and filters.directive_block or function(directive)
+      return directive.block
+    end
     local function walkDirective(block, parent_directive)
-      mm("yeah?..")
       for _, directive in ipairs(block.directives) do
-        mm("yeah")
         coroutine.yield(directive, parent_directive)
-        if directive.block then
-          walkDirective(start or directive.block, directive)
+        if walk_directive(directive) then
+          walkDirective(directive.block, directive)
         end
       end
     end
-    assert(self.root.block)
+    assert(self.root)
     return coroutine.wrap(function()
-      return walkDirective(self.root.block, nil)
+      return walkDirective(self.root.block or start, nil)
     end)
   end
   
@@ -673,7 +781,7 @@ do --config
       if v == element then
         table.remove(tbl, i)
         for j, rd in ipairs(replacements) do
-          table.insert(tbl, rd, i+j-1)
+          table.insert(tbl, i+j-1, rd)
         end
         return true
       end
@@ -681,11 +789,11 @@ do --config
     return nil, element_name .. " to replace not found"
   end
   
-  function config:replaceDirective(context, directive, ...)
-    return replace_in_table("directive", context.directives, directive, {...})
+  function config:replaceDirective(directive, ...)
+    return replace_in_table("directive", directive.parent.block.directives, directive, {...})
   end
-  function config:replaceToken(context, directive, ...)
-    return replace_in_table("token", context.directives, directive, {...})
+  function config:replaceToken(directive, ...)
+    return replace_in_table("token", directive.parent.block.tokens, directive, {...})
   end
   
   function config:register(module_name, directive)
@@ -787,12 +895,19 @@ do --config
     assert(not self.handlers[full_name], ('directive "%s" for module %s already exists'):format(name, module_name))
     
     self.handlers[full_name] = handler
+    
+    local shortname="*."..name
+    if not self.handlers_any_module[shortname] then
+      self.handlers_any_module[shortname] = {}
+    end
+    table.insert(self.handlers_any_module[shortname], handler)
+    
     return true
   end
   
   function config:configString(cur, lvl)
-    local function indent(lvl)
-      return ("  "):rep(lvl)
+    local function indent(level)
+      return ("  "):rep(level)
     end
     lvl = lvl or 0
     cur = cur or self.root.block
@@ -807,7 +922,7 @@ do --config
         return ("{\n%s\n%s}\n"):format(table.concat(buf, "\n"), indent(lvl-1))
       end
     elseif cur.type == "directive" then
-      local str = indent(lvl) .. cur.name
+      local str = indent(lvl) .. (cur.full_name or cur.name)
       local prev_type = "none"
       for _, token in ipairs(cur.tokens) do
         local pre = prev_type == "newline" and indent(lvl+1) or " "

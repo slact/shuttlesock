@@ -48,6 +48,7 @@ typedef struct shuso_ev_timer_s shuso_ev_timer;
 typedef struct shuso_ev_child_s shuso_ev_child;
 typedef struct shuso_ev_signal_s shuso_ev_signal;
 
+typedef int lua_reference_t;
 
 typedef struct ev_loop shuso_loop; //don't want to write struct ev_loop everywhere or use EV_A and EV_P_ macros, they're ugly.
 typedef struct shuso_s shuso_t;

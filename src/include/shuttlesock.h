@@ -21,6 +21,7 @@
 #include <shuttlesock/lua_bridge.h>
 #include <shuttlesock/sysutil.h>
 #include <shuttlesock/log.h>
+#include <shuttlesock/config_file.h>
 
 
 struct shuso_process_s {
@@ -162,16 +163,34 @@ struct shuso_s {
     shuso_ev_child               child;
     LLIST_STRUCT(shuso_ev_timer) timer;
   }                           base_watchers;
-  lua_State                  *lua;
+  struct {
+    lua_State                  *state;
+    bool                        external;
+    
+    lua_reference_t             config_parser;
+  }                           lua;
   shuso_stalloc_t             stalloc;
   shuso_shared_slab_t         shm;
   shuso_resolver_t            resolver;
   void                       *data;  //custom data attached to this shuttlesock context
+  struct {
+    bool                        ready;
+    lua_reference_t             index;
+  } config;
   const char                 *errmsg;
   char                        logbuf[1024];
 }; //shuso_t;
 
-shuso_t *shuso_create(unsigned int ev_loop_flags, shuso_runtime_handlers_t *handlers, shuso_config_t *config, const char **err);
+//shuso_t *shuso_create(unsigned int ev_loop_flags, shuso_runtime_handlers_t *handlers, shuso_config_t *config, const char **err);
+shuso_t *shuso_create(const char **err);
+shuso_t *shuso_create_with_lua(lua_State *lua, const char **err);
+
+bool shuso_configure_file(shuso_t *ctx, const char *path);
+bool shuso_configure_string(shuso_t *ctx, const char *str_title, const char *str);
+bool shuso_configure_handlers(shuso_t *ctx, const shuso_runtime_handlers_t *handlers);
+bool shuso_configure_finish(shuso_t *ctx);
+
+
 bool shuso_destroy(shuso_t *ctx);
 bool shuso_run(shuso_t *);
 bool shuso_stop(shuso_t *ctx, shuso_stop_t forcefulness);

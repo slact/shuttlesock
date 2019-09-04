@@ -32,7 +32,7 @@ static void stop_worker(shuso_t *ctx, void *pd) {
   chk->count.stop_worker++;
 }
 
-shuso_t *___runcheck_shuso_create(unsigned int ev_loop_flags, shuso_config_t *config) {
+shuso_t *___runcheck_shuso_create(void) {
   shuso_t             *ctx;
   const char          *err = NULL;
   test_runcheck_t     *chk = shmalloc(chk);
@@ -51,7 +51,10 @@ shuso_t *___runcheck_shuso_create(unsigned int ev_loop_flags, shuso_config_t *co
   };
   chk->master_pid = -1;
   chk->manager_pid = -1;
-  ctx = shuso_create(ev_loop_flags, &runcheck_handlers, NULL, &err);
+  ctx = shuso_create(&err);
+  assert(shuso_configure_handlers(ctx, &runcheck_handlers));
+  assert(shuso_configure_finish(ctx));
+  
   /*printf("RUNCHECK %p:\n"
     "master_pid: %d\n"
     "manager_pid: %d\n"

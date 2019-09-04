@@ -42,14 +42,15 @@ const char *shuso_process_as_string(shuso_t *ctx) {
       }
   }
 }
-shuso_t *shuso_create(unsigned int ev_loop_flags, shuso_runtime_handlers_t *handlers, shuso_config_t *config, const char **err) {
+shuso_t *shuso_create(const char **err) {
+  return shuso_create_with_lua(NULL, err);
+}
+shuso_t *shuso_create_with_lua(lua_State *lua, const char **err) {
   shuso_common_t     *common_ctx = NULL;
   shuso_t            *ctx = NULL;
   bool                stalloc_initialized = false;
-  bool                shm_slab_created = false;
   bool                resolver_global_initialized = false;
   const char         *errmsg = NULL;
-  shuso_loop         *loop;
   
   shuso_system_initialize();
   
@@ -66,30 +67,57 @@ shuso_t *shuso_create(unsigned int ev_loop_flags, shuso_runtime_handlers_t *hand
     goto fail;
   }
   
-  // create the default loop so that we can catch SIGCHLD
-  // http://pod.tst.eu/http://cvs.schmorp.de/libev/ev.pod#FUNCTIONS_CONTROLLING_EVENT_LOOPS:
-  // "The default loop is the only loop that can handle ev_child watchers [...]"
-  if((loop = ev_default_loop(ev_loop_flags)) == NULL) {
-    errmsg = "failed to create event loop";
-    goto fail;
-  }
-  
   *ctx = (shuso_t ){
     .procnum = SHUTTLESOCK_NOPROCESS,
-    .ev.loop = loop,
-    .ev.flags = ev_loop_flags,
+    .ev.loop = NULL,
+    .ev.flags = EVFLAG_AUTO,
+    .config.ready = false,
     .common  = common_ctx
   };
-  
-  if(!shuso_lua_create(ctx)) {
+  if(lua) {
+      ctx->lua.state = lua;
+      ctx->lua.external = true;
+  }
+  else if(!shuso_lua_create(ctx)) {
     errmsg = "failed to create Lua VM";
     goto fail;
   }
   
   common_ctx->log.fd = fileno(stdout);
   
-  if(config) {
-    common_ctx->config = *config;
+  stalloc_initialized = shuso_stalloc_init(&ctx->stalloc, 0);
+  if(!stalloc_initialized) {
+    goto fail;
+  }
+  return ctx;
+  
+fail:
+  if(resolver_global_initialized) shuso_resolver_global_cleanup();
+  if(stalloc_initialized) shuso_stalloc_empty(&ctx->stalloc);
+  if(ctx->lua.state && !ctx->lua.external) {
+    shuso_lua_destroy(ctx);
+  }
+  if(ctx) free(ctx);
+  if(common_ctx) free(common_ctx);
+  if(err) *err = errmsg;
+
+  return NULL;
+}
+
+bool shuso_configure_handlers(shuso_t *ctx, const shuso_runtime_handlers_t *handlers) {
+  ctx->common->phase_handlers = *handlers;
+  return true;
+}
+
+bool shuso_configure_finish(shuso_t *ctx) {
+  bool             shm_slab_created = false;
+  const char      *errmsg;
+  // create the default loop so that we can catch SIGCHLD
+  // http://pod.tst.eu/http://cvs.schmorp.de/libev/ev.pod#FUNCTIONS_CONTROLLING_EVENT_LOOPS:
+  // "The default loop is the only loop that can handle ev_child watchers [...]"
+  if((ctx->ev.loop = ev_default_loop(ctx->ev.flags)) == NULL) {
+    errmsg = "failed to create event loop";
+    goto fail;
   }
   set_default_config(ctx, ipc.send_retry_delay, SHUTTLESOCK_CONFIG_DEFAULT_IPC_SEND_RETRY_DELAY);
   set_default_config(ctx, ipc.send_timeout, SHUTTLESOCK_CONFIG_DEFAULT_IPC_SEND_TIMEOUT);
@@ -101,9 +129,6 @@ shuso_t *shuso_create(unsigned int ev_loop_flags, shuso_runtime_handlers_t *hand
     goto fail;
   }
   
-  if(handlers) {
-    common_ctx->phase_handlers = *handlers;
-  }
   init_phase_handler(ctx, start_master);
   init_phase_handler(ctx, stop_master);
   init_phase_handler(ctx, start_manager);
@@ -111,8 +136,8 @@ shuso_t *shuso_create(unsigned int ev_loop_flags, shuso_runtime_handlers_t *hand
   init_phase_handler(ctx, start_worker);
   init_phase_handler(ctx, stop_worker);
   
-  ev_set_userdata(loop, ctx);
-  
+  ev_set_userdata(ctx->ev.loop, ctx);
+   
   if(!shuso_ipc_commands_init(ctx)) {
     errmsg = "failed to initialize IPC commands";
     goto fail;
@@ -124,35 +149,23 @@ shuso_t *shuso_create(unsigned int ev_loop_flags, shuso_runtime_handlers_t *hand
     errmsg = "failed to allocate shared memory for process states";
     goto fail;
   }
-  common_ctx->process.master.state = &states[0];
-  common_ctx->process.manager.state = &states[1];
+  ctx->common->process.master.state = &states[0];
+  ctx->common->process.manager.state = &states[1];
   for(int i=0; i < SHUTTLESOCK_MAX_WORKERS; i++) {
-    common_ctx->process.worker[i].state = &states[i+2];
+    ctx->common->process.worker[i].state = &states[i+2];
   }
   
   if(!test_features(ctx, &errmsg)) {
     goto fail;
   }
   
-  stalloc_initialized = shuso_stalloc_init(&ctx->stalloc, 0);
-  if(!stalloc_initialized) {
-    goto fail;
-  }
-  assert(ctx->lua);
-  return ctx;
+  assert(ctx->lua.state);
+  ctx->config.ready = true;
+  return true;
   
 fail:
-  if(resolver_global_initialized) shuso_resolver_global_cleanup();
-  if(stalloc_initialized) shuso_stalloc_empty(&ctx->stalloc);
   if(shm_slab_created) shuso_shared_slab_destroy(ctx, &ctx->common->shm);
-  if(ctx->lua) {
-    shuso_lua_destroy(ctx);
-  }
-  if(ctx) free(ctx);
-  if(common_ctx) free(common_ctx);
-  if(err) *err = errmsg;
-
-  return NULL;
+  return false;
 }
 
 static bool test_features(shuso_t *ctx, const char **errmsg) {

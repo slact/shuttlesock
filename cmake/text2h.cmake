@@ -29,7 +29,7 @@ function(TEXT2H)
     string(REGEX REPLACE "\n" "\\\\n\"\n  \"" txtString "${txtString}")
     
     # declares byte array and the length variables
-    set(arrayDefinition "const unsigned char ${TEXT2H_VARIABLE_NAME}[] = \n  \"${txtString}\";")
+    set(arrayDefinition "const char ${TEXT2H_VARIABLE_NAME}[] = \n  \"${txtString}\";")
     set(arraySizeDefinition "const size_t ${TEXT2H_VARIABLE_NAME}_SIZE = ${txtStringLength};")
 
     set(declarations "${arrayDefinition}\n${arraySizeDefinition}\n\n")
