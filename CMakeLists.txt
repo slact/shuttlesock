@@ -162,10 +162,10 @@ TEXT2H(
   VARIABLE_NAME SHUTTLESOCK_LUA_SCRIPT_CONFIG
   HEADER_FILE ${PROJECT_BINARY_DIR}/src/include/shuttlesock/embedded_lua_scripts.h
 )
-#embed lua serialization module
+#embed argparse
 TEXT2H( APPEND
-  SOURCE_FILE src/lua/modules/binser/binser.lua
-  VARIABLE_NAME SHUTTLESOCK_LUA_MODULE_BINSER
+  SOURCE_FILE src/lua/modules/argparse/src/argparse.lua
+  VARIABLE_NAME SHUTTLESOCK_LUA_MODULE_ARGPARSE
   HEADER_FILE ${PROJECT_BINARY_DIR}/src/include/shuttlesock/embedded_lua_scripts.h
 )
 
