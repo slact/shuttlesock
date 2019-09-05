@@ -17,13 +17,25 @@ end
 
 local config_directives = {
   {
+    name = "lua_path",
+    path = "/",
+    description = "path to all the internal ",
+    nargs = "1..10",
+    default = {".", "/usr/lib/shuttlesock/lua"}
+    handler = function(values, default, module_ctx, shuttlesock_ctx)
+      values = values or default
+      parent.config_include_path = directive.values[1]
+      return true
+    end
+  },
+  {
     name = "include_path",
     path = "",
     description = "include path for relative paths in config.include directives",
     nargs = 1,
-    handler = function(values, directive, module_ctx, shuttlesock_ctx)
+    handler = function(values, default, module_ctx, shuttlesock_ctx)
       local parent = directive.parent
-      parent.config_include_path = directive.values[1]
+      parent.config_include_path = values[1]
       return true
     end
   },
@@ -33,7 +45,7 @@ local config_directives = {
     description = "include configs matching the provided glob pattern",
     nargs   = 1,
     default = nil,
-    internal_handler = function(directive, config, shuttlesock_ctx)
+    internal_handler = function(directive, default, config, shuttlesock_ctx)
       local path = directive.values[1].raw
       
       local include_path = config:getDirective("include_path", directive.parent)
@@ -738,9 +750,9 @@ do --config
       handler, err = self:findHandlerForDirective(directive)
       if handler then
         if handler.handler then
-          ok, err = handler.handler(directive.values, directive, shuttlesock_ctx)
+          ok, err = handler.handler(directive.values, handler.default, shuttlesock_ctx)
         elseif handler.internal_handler then
-          ok, err = handler.internal_handler(directive, self, shuttlesock_ctx)
+          ok, err = handler.internal_handler(directive, handler.default, self, shuttlesock_ctx)
         end
       else
         ok = true
