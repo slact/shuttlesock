@@ -23,6 +23,7 @@ set(libsrc
   src/stalloc.c
   src/resolver.c
   src/shared_slab.c
+  ${PROJECT_BINARY_DIR}/src/embedded_lua_scripts.c
   src/lua_bridge.c
 )
 
@@ -155,18 +156,8 @@ endif()
 
 configure_file(src/include/shuttlesock/build_config.h.tmpl src/include/shuttlesock/build_config.h)
 
-#embed lua script to parse config
-include(text2h)
-TEXT2H(
-  SOURCE_FILE src/lua/config.lua
-  VARIABLE_NAME SHUTTLESOCK_LUA_SCRIPT_CONFIG
-  HEADER_FILE ${PROJECT_BINARY_DIR}/src/include/shuttlesock/embedded_lua_scripts.h
-)
-#embed argparse
-TEXT2H( APPEND
-  SOURCE_FILE src/lua/modules/argparse/src/argparse.lua
-  VARIABLE_NAME SHUTTLESOCK_LUA_MODULE_ARGPARSE
-  HEADER_FILE ${PROJECT_BINARY_DIR}/src/include/shuttlesock/embedded_lua_scripts.h
-)
-
-
+include(PackLuaScripts)
+pack_lua_scripts_start(SOURCE embedded_lua_scripts.c)
+pack_lua_scripts_add(NAME "shuttlesock.config" SCRIPT src/lua/config.lua MODULE)
+pack_lua_scripts_add(NAME "argparse" SCRIPT src/lua/modules/argparse/src/argparse.lua MODULE)
+pack_lua_scripts_finish()

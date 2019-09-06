@@ -103,24 +103,45 @@ bool shuso_lua_create(shuso_t *ctx) {
   return true;
 }
 
+static int shuso_lua_do_embedded_script(lua_State *L) {
+  const char *name = luaL_checkstring(L, -1);
+  shuso_lua_embedded_scripts_t *script;
+  for(script = &shuttlesock_lua_embedded_scripts[0]; script->name != NULL; script++) {
+    if(strcmp(script->name, name) == 0) {
+      int rc = luaL_loadbuffer(L, script->script, script->strlen, script->name);
+      if(rc != LUA_OK) {
+        lua_error(L);
+        return 0;
+      }
+      lua_call(L, 0, 1);
+      return 1;
+    }
+  }
+  luaL_error(L, "embedded script %s not found", name);
+  return 0;
+}
+
+
 bool shuso_lua_initialize(shuso_t *ctx) {
   lua_State *L = ctx->lua.state;
-  
   lua_pushlightuserdata(L, ctx);
   lua_setfield(L, LUA_REGISTRYINDEX, "shuttlesock.self");
   
-  int rc = luaL_loadbuffer(L, SHUTTLESOCK_LUA_SCRIPT_CONFIG, SHUTTLESOCK_LUA_SCRIPT_CONFIG_SIZE, "shuttlesock.config");
-  if(rc != LUA_OK) {
-    shuso_set_error(ctx, lua_tostring(L, -1));
-    return false;
+  for(shuso_lua_embedded_scripts_t *script = &shuttlesock_lua_embedded_scripts[0]; script->name != NULL; script++) {
+    if(script->module) {
+      luaL_requiref(L, script->name, shuso_lua_do_embedded_script, 0);
+      lua_pop(L, 1);
+    }
   }
   
-  lua_call(L, 0, 1);
-  
   //lua doesn't come with a glob, and config needs it when including files
+  lua_getglobal(L, "require");
+  lua_pushliteral(L, "shuttlesock.config");
+  lua_call(L, 1, 1);
   lua_pushcfunction(L, shuso_lua_glob);
   lua_setfield(L, -2, "glob");
-  
+  lua_pop(L, 1);
+
   ctx->config.index = luaL_ref(L, LUA_REGISTRYINDEX);
   
   return true;
