@@ -103,7 +103,7 @@ bool shuso_lua_create(shuso_t *ctx) {
   return true;
 }
 
-static int shuso_lua_do_embedded_script(lua_State *L) {
+static int shuso_Lua_do_embedded_script(lua_State *L) {
   const char *name = luaL_checkstring(L, -1);
   shuso_lua_embedded_scripts_t *script;
   for(script = &shuttlesock_lua_embedded_scripts[0]; script->name != NULL; script++) {
@@ -127,9 +127,11 @@ bool shuso_lua_initialize(shuso_t *ctx) {
   lua_pushlightuserdata(L, ctx);
   lua_setfield(L, LUA_REGISTRYINDEX, "shuttlesock.self");
   
+  luaL_requiref(L, "shuttlesock.binding", shuso_Lua_binding_module, 0);
+  
   for(shuso_lua_embedded_scripts_t *script = &shuttlesock_lua_embedded_scripts[0]; script->name != NULL; script++) {
     if(script->module) {
-      luaL_requiref(L, script->name, shuso_lua_do_embedded_script, 0);
+      luaL_requiref(L, script->name, shuso_Lua_do_embedded_script, 0);
       lua_pop(L, 1);
     }
   }
@@ -154,3 +156,4 @@ bool shuso_lua_destroy(shuso_t *ctx) {
   ctx->lua.state = NULL;
   return true;
 }
+
