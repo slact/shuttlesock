@@ -192,7 +192,7 @@ bool shuso_configure_finish(shuso_t *ctx);
 
 
 bool shuso_destroy(shuso_t *ctx);
-bool shuso_run(shuso_t *);
+bool shuso_run(shuso_t *ctx);
 bool shuso_stop(shuso_t *ctx, shuso_stop_t forcefulness);
 bool shuso_spawn_manager(shuso_t *ctx);
 bool shuso_stop_manager(shuso_t *ctx, shuso_stop_t forcefulness);
