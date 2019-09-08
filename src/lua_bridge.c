@@ -6,14 +6,6 @@
 
 #include <glob.h>
 
-shuso_t *lua_shuttlesock_context(lua_State *L) {
-  lua_getfield(L, LUA_REGISTRYINDEX, "shuttlesock.self");
-  shuso_t *ctx = (shuso_t *)lua_topointer(L, -1);
-  lua_pop(L, 1);
-  return ctx;
-}
-
-
 static char *lua_dbgval(lua_State *L, int n) {
   static char buf[255];
   int         type = lua_type(L, n);
@@ -46,7 +38,7 @@ static char *lua_dbgval(lua_State *L, int n) {
 }
 void lua_printstack(lua_State *L) {
   int        top = lua_gettop(L);
-  shuso_t   *ctx = lua_shuttlesock_context(L);
+  shuso_t   *ctx = shuso_lua_ctx(L);
   shuso_log_warning(ctx, "lua stack:");
   for(int n=top; n>0; n--) {
     shuso_log_warning(ctx, "  [%i]: %s", n, lua_dbgval(L, n));
@@ -54,7 +46,7 @@ void lua_printstack(lua_State *L) {
 }
 
 
-static int shuso_lua_glob(lua_State *L) {
+static int shuso_Lua_glob(lua_State *L) {
   const char *pattern = luaL_checkstring(L, 1);
   int         rc = 0;
   glob_t      globres;
@@ -123,11 +115,10 @@ static int shuso_Lua_do_embedded_script(lua_State *L) {
 
 
 bool shuso_lua_initialize(shuso_t *ctx) {
+  shuso_lua_set_ctx(ctx);
   lua_State *L = ctx->lua.state;
-  lua_pushlightuserdata(L, ctx);
-  lua_setfield(L, LUA_REGISTRYINDEX, "shuttlesock.self");
   
-  luaL_requiref(L, "shuttlesock.binding", shuso_Lua_binding_module, 0);
+  luaL_requiref(L, "shuttlesock.core", shuso_Lua_shuttlesock_core_module, 0);
   
   for(shuso_lua_embedded_scripts_t *script = &shuttlesock_lua_embedded_scripts[0]; script->name != NULL; script++) {
     if(script->module) {
@@ -140,7 +131,7 @@ bool shuso_lua_initialize(shuso_t *ctx) {
   lua_getglobal(L, "require");
   lua_pushliteral(L, "shuttlesock.config");
   lua_call(L, 1, 1);
-  lua_pushcfunction(L, shuso_lua_glob);
+  lua_pushcfunction(L, shuso_Lua_glob);
   lua_setfield(L, -2, "glob");
   lua_pop(L, 1);
 

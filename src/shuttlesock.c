@@ -210,6 +210,14 @@ static bool shuso_init_signal_watchers(shuso_t *ctx) {
 
 bool shuso_spawn_manager(shuso_t *ctx) {
   int failed_worker_spawns = 0;
+  
+  if(ctx->procnum == SHUTTLESOCK_MANAGER) {
+    return shuso_set_error(ctx, "can't spawn manager from manager");
+  }
+  else if(ctx->procnum >= SHUTTLESOCK_WORKER) {
+    return shuso_set_error(ctx, "can't spawn manager from worker");
+  }
+  
   pid_t pid = fork();
   if(pid > 0) {
     //master
@@ -457,6 +465,15 @@ bool shuso_spawn_worker(shuso_t *ctx, shuso_process_t *proc) {
   assert(proc);
   assert(procnum >= SHUTTLESOCK_WORKER);
   
+  if(ctx->procnum == SHUTTLESOCK_MASTER) {
+    err = "can't spawn worker from master";
+    goto fail;
+  }
+  else if(ctx->procnum >= SHUTTLESOCK_WORKER) {
+    err = "can't spawn worker from another worker";
+    goto fail;
+  }
+  
   if(*proc->state > SHUSO_PROCESS_STATE_NIL) {
     err = "can't spawn worker here, it looks like there's a running worker already";
     goto fail;
@@ -666,6 +683,14 @@ bool shuso_set_log_fd(shuso_t *ctx, int fd) {
 
 void shuso_listen(shuso_t *ctx, shuso_hostinfo_t *bind, shuso_handler_fn handler, shuso_handler_fn cleanup, void *pd) {
   assert(ctx->procnum == SHUTTLESOCK_MASTER);
-  
-  
+  //TODO
+}
+
+bool shuso_configure_file(shuso_t *ctx, const char *path) {
+  //TODO
+  return false;
+}
+bool shuso_configure_string(shuso_t *ctx, const char *str_title, const char *str) {
+  //TODO
+  return false;
 }
