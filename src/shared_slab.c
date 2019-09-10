@@ -1,5 +1,7 @@
 // This is an adaptation of Nginx's pretty good shared memory slab allocator
 
+#ifndef __clang_analyzer__
+
 /* 
  * Copyright (C) Igor Sysoev
  * Copyright (C) Nginx, Inc.
@@ -909,3 +911,4 @@ void shuso_shared_slab_free_locked(shuso_shared_slab_t *shm, void *p) {
   ngx_slab_free_locked(shm->pool, p);
 }
 
+#endif
