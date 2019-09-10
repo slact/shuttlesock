@@ -45,7 +45,10 @@ bool shuso_resolver_init(shuso_t *ctx, shuso_config_t *cf, shuso_resolver_t *res
   ares_initialized = true;
   
   ares_set_socket_functions(resolver->channel, &ares_sockfuncs, resolver);
-  
+  if(hosts_count > 4096) {
+    err = "DNS resolver initialization failed: too many hosts (must not exceed 4096)";
+    goto fail;
+  }
   if(hosts_count > 0) {
     //create linked list of ares configuration hosts
     if((hosts = malloc(sizeof(*hosts) * hosts_count)) == NULL) {
