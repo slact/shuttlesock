@@ -11,6 +11,7 @@ static void signal_watcher_cb(shuso_loop *, shuso_ev_signal *w, int revents);
 static void child_watcher_cb(shuso_loop *, shuso_ev_child *w, int revents);
 static bool test_features(shuso_t *ctx, const char **errmsg);
 
+int shuttlesock_watched_signals[] = SHUTTLESOCK_WATCHED_SIGNALS;
 
 static void do_nothing(void) {}
 #define init_phase_handler(ctx, phase) \
@@ -94,7 +95,7 @@ shuso_t *shuso_create_with_lua(lua_State *lua, const char **err) {
 fail:
   if(resolver_global_initialized) shuso_resolver_global_cleanup();
   if(stalloc_initialized) shuso_stalloc_empty(&ctx->stalloc);
-  if(ctx->lua.state && !ctx->lua.external) {
+  if(ctx && ctx->lua.state && !ctx->lua.external) {
     shuso_lua_destroy(ctx);
   }
   if(ctx) free(ctx);
@@ -195,12 +196,11 @@ bool shuso_destroy(shuso_t *ctx) {
 static bool shuso_init_signal_watchers(shuso_t *ctx) {
   //attach master signal handlers
 
-  int sigs[] = SHUTTLESOCK_WATCHED_SIGNALS;
-  assert(sizeof(ctx->base_watchers.signal)/sizeof(shuso_ev_signal) >= sizeof(sigs)/sizeof(int));
+  assert(sizeof(ctx->base_watchers.signal)/sizeof(shuso_ev_signal) >= sizeof(shuttlesock_watched_signals)/sizeof(int));
   
-  for(unsigned i=0; i<sizeof(sigs)/sizeof(int); i++) {
+  for(unsigned i=0; i<sizeof(shuttlesock_watched_signals)/sizeof(int); i++) {
     shuso_ev_signal         *w = &ctx->base_watchers.signal[i];
-    shuso_ev_signal_init(ctx, w, sigs[i], signal_watcher_cb, NULL);
+    shuso_ev_signal_init(ctx, w, shuttlesock_watched_signals[i], signal_watcher_cb, NULL);
     shuso_ev_signal_start(ctx, w);
   }
   
@@ -618,8 +618,7 @@ static void shuso_cleanup_loop(shuso_t *ctx) {
   shuso_ipc_channel_shared_stop(ctx, ctx->process);
   
   if(ctx->procnum < SHUTTLESOCK_WORKER) {
-    int sigs[] = SHUTTLESOCK_WATCHED_SIGNALS;
-    for(unsigned i=0; i<sizeof(sigs)/sizeof(int); i++) {
+    for(unsigned i=0; i<sizeof(shuttlesock_watched_signals)/sizeof(int); i++) {
       shuso_ev_signal_stop(ctx, &ctx->base_watchers.signal[i]);
     }
     shuso_ev_child_stop(ctx, &ctx->base_watchers.child);
