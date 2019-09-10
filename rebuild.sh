@@ -12,7 +12,11 @@ YELLOW="\e[1;33m"
 OPTS=()
 compiler=""
 build_dir="./build"
-ANALYZE_FLAGS=( --use-cc=clang -maxloop 100 -enable-checker alpha.clone -enable-checker alpha.core -enable-checker alpha.deadcode -enable-checker alpha.security -enable-checker alpha.unix -enable-checker nullability )
+ANALYZE_FLAGS=( --use-cc=clang -maxloop 100 -enable-checker alpha.core -enable-checker alpha.deadcode -enable-checker alpha.security -enable-checker alpha.unix )
+
+# ANALYZE_FLAGS+=("-enable-checker alpha.clone") #code duplication checker is wonky
+# ANALYZE_FLAGS+=("-enable-checker alpha.nondeterminism") #not widely available
+
 ANALYZE=()
 ANALYZE_VIEW=()
 export CLICOLOR_FORCE=1
