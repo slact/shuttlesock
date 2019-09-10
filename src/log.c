@@ -4,10 +4,12 @@
 #include <stdio.h>
 #include <stdarg.h>
 
-static void shuso_log_level_vararg(shuso_t *ctx, shuso_loglevel_t level, const char *fmt, va_list args) {
+#define NONNULL(...) __attribute__((nonnull(__VA_ARGS__)))
+
+static NONNULL(1,3) void shuso_log_level_vararg(shuso_t *ctx, shuso_loglevel_t level, const char *fmt, va_list args)   {
   char *log = ctx->logbuf;
   char *cur = log;
-  int procnum = ctx ? ctx->procnum : SHUTTLESOCK_UNKNOWN_PROCESS;
+  int procnum = ctx->procnum;
   const char *procname;
   const char *lvl;
   if(procnum == SHUTTLESOCK_NOPROCESS) {
