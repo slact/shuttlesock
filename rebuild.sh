@@ -12,8 +12,9 @@ YELLOW="\e[1;33m"
 OPTS=()
 compiler=""
 build_dir="./build"
-ANALYZE_FLAGS=( --use-cc=clang -maxloop 100 -enable-checker alpha.clone -enable-checker alpha.core -enable-checker alpha.deadcode -enable-checker alpha.security -enable-checker alpha.unix -enable-checker nullability --view )
+ANALYZE_FLAGS=( --use-cc=clang -maxloop 100 -enable-checker alpha.clone -enable-checker alpha.core -enable-checker alpha.deadcode -enable-checker alpha.security -enable-checker alpha.unix -enable-checker nullability )
 ANALYZE=()
+ANALYZE_VIEW=()
 export CLICOLOR_FORCE=1
 build_type=Debug
 for opt in $*; do
@@ -175,6 +176,8 @@ fi
 if [[ -n $clang_analyze ]]; then
   ANALYZE=("scan-build")
   ANALYZE+=($ANALYZE_FLAGS)
+  ANALYZE_VIEW=($ANALYZE)
+  ANALYZE_VIEW+=("--view" "")
   ANALYZE+=("")
 fi
 
@@ -194,7 +197,16 @@ if [[ "$cmake_help" == *" -B "* ]]; then
     print -n " ${GREEN}\\\\\n $opt${ALL_OFF}"
   done
   print -n " ${GREEN}\\\\\n ${YELLOW}-B$build_dir $ALL_OFF\n\n"
-  $ANALYZE cmake $OPTS -B$build_dir
+  
+  if [[ -n $clang_analyze ]]; then
+    $ANALYZE cmake $OPTS -B$build_dir &
+    scan_view_pid=$!
+    wait $scan_view_pid
+    scan_view_pid=""
+  else
+    cmake $OPTS -B$build_dir
+  fi
+  
   if ! [ $? -eq 0 ]; then;
     exit 1
   fi
@@ -211,7 +223,16 @@ else
     print -n " ${GREEN}\\\\\n $opt${ALL_OFF}"
   done
   print -n " ${GREEN}\\\\\n ${YELLOW}../ $ALL_OFF\n\n"
-  $ANALYZE cmake $OPTS ../
+  
+  if [[ -n $clang_analyze ]]; then
+    $ANALYZE cmake $OPTS ../
+    scan_view_pid=$!
+    wait $scan_view_pid
+    scan_view_pid=""
+  else
+    cmake $OPTS ../
+  fi
+  
   if ! [ $? -eq 0 ]; then;
     exit 1
   fi
@@ -239,15 +260,15 @@ else
   echo ""
   MAKE_COMMAND=( cmake --build $build_dir $verbose_build_flag )
 fi
-echo "$YELLOW>> ${BLUE}${ANALYZE}${YELLOW}${MAKE_COMMAND}${ALL_OFF}\n"
+echo "$YELLOW>> ${BLUE}${ANALYZE_VIEW}${YELLOW}${MAKE_COMMAND}${ALL_OFF}\n"
 
 if [[ -n $clang_analyze ]]; then
-  $ANALYZE $MAKE_COMMAND &
+  $ANALYZE_VIEW $MAKE_COMMAND &
   scan_view_pid=$!
   wait $scan_view_pid
   scan_view_pid=""
 else
-  $ANALYZE $MAKE_COMMAND
+  $MAKE_COMMAND
 fi
 if ! [ $? -eq 0 ]; then;
   exit 1
