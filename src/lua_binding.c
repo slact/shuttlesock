@@ -880,11 +880,53 @@ int Lua_shuso_new_watcher(lua_State *L) {
 }
 
 //shared memory slab
-int Lua_shuso_shared_slab_alloc_string(lua_State *L) {
-  return 0;
+
+static int Lua_shared_string_tostring(lua_State *L) {
+  shuso_lua_shared_string_t **shstr = luaL_checkudata(L, 1, "shuttlesock.shared_string");
+  if(*shstr == NULL) {
+    lua_pushnil(L);
+    return 1;
+  }
+  lua_pushlstring(L, (*shstr)->data, (*shstr)->len);
+  return 1;
 }
-int Lua_shuso_shared_slab_free_string(lua_State *L) {
-  return 0;
+static int Lua_shuso_shared_slab_alloc_string(lua_State *L) {
+  shuso_t    *ctx = shuso_lua_ctx(L);
+  size_t      len;
+  const char *str = luaL_checklstring(L, 1, &len);
+  shuso_lua_shared_string_t **shstr;
+  if((shstr = lua_newuserdata(L, sizeof(shstr))) == NULL) {
+    return luaL_error(L, "unable to allocate memory for new shared string");
+  }
+  if((*shstr = shuso_shared_slab_alloc(&ctx->common->shm, sizeof(shuso_lua_shared_string_t) + len)) == NULL) {
+    return luaL_error(L, "unable to allocate shared memory of size %d for new shared string", (int )len);
+  }
+  (*shstr)->len = len;
+  memcpy((void *)(*shstr)->data, str, len);
+  
+  if(luaL_newmetatable(L, "shuttlesock.shared_string")) {
+    //lua_pushcfunction(L, Lua_shared_string_gc);
+    //lua_setfield(L, -2, "__gc");
+    
+    lua_pushcfunction(L, Lua_shared_string_tostring);
+    lua_setfield(L, -2, "__tostring");
+  }
+  
+  lua_setmetatable(L, -2);
+  return 1;
+}
+static int Lua_shuso_shared_slab_free_string(lua_State *L) {
+  shuso_lua_shared_string_t **shstr = luaL_checkudata(L, 1, "shuttlesock.shared_string");
+  shuso_t                    *ctx = shuso_lua_ctx(L);
+  if(*shstr == NULL) {
+    lua_pushnil(L);
+    lua_pushliteral(L, "shuttlesock.shared_string already freed");
+    return 2;
+  }
+  shuso_shared_slab_free(&ctx->common->shm, *shstr);
+  *shstr = NULL;
+  lua_pushboolean(L, 1);
+  return 1;
 }
 
 //resolver
