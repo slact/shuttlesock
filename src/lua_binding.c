@@ -5,24 +5,31 @@
 #include <unistd.h>
 
 typedef enum {
-  LUA_EV_WATCHER_IO,
-  LUA_EV_WATCHER_TIMER,
-  LUA_EV_WATCHER_CHILD,
-  LUA_EV_WATCHER_SIGNAL
+  LUA_EV_WATCHER_IO =       0,
+  LUA_EV_WATCHER_TIMER =    1,
+  LUA_EV_WATCHER_CHILD =    2,
+  LUA_EV_WATCHER_SIGNAL =   3
 } shuso_lua_ev_watcher_type_t;
 
 typedef struct {
-  shuso_lua_ev_watcher_type_t type;
   shuso_ev_any      watcher;
   struct {
     int               self;
     int               handler;
   }                 ref;
+  unsigned          type:4;
+  lua_State        *coroutine_thread;
 } shuso_lua_ev_watcher_t;
 
 static int Lua_watcher_stop(lua_State *L);
 static void lua_watcher_unref(lua_State *L, shuso_lua_ev_watcher_t *w);
 static const char *watchertype_str(shuso_lua_ev_watcher_type_t type);
+
+
+typedef struct {
+  size_t      len;
+  const char  data[];
+} shuso_lua_shared_string_t;
 
 shuso_t *shuso_lua_ctx(lua_State *L) {
   lua_getfield(L, LUA_REGISTRYINDEX, "shuttlesock.userdata");
@@ -30,6 +37,27 @@ shuso_t *shuso_lua_ctx(lua_State *L) {
   shuso_t *ctx = (shuso_t *)lua_topointer(L, -1);
   lua_pop(L, 1);
   return ctx;
+}
+
+static int shuso_lua_resume(lua_State *thread, lua_State *from, int nargs) {
+  int          rc;
+  const char  *errmsg;
+  shuso_t     *ctx;
+  rc = lua_resume(thread, from, nargs);
+  switch(rc) {
+    case LUA_OK:
+    case LUA_YIELD:
+      break;
+    default:
+      ctx = shuso_lua_ctx(thread);
+      errmsg = lua_tostring(thread, -1);
+      luaL_traceback(thread, thread, errmsg, 1);
+      shuso_log_error(ctx, "lua coroutine error: %s", lua_tostring(thread, -1));
+      lua_pop(thread, 1);
+      lua_gc(thread, LUA_GCCOLLECT, 0);
+      break;
+  }
+  return rc;
 }
 
 bool shuso_lua_set_ctx(shuso_t *ctx) {
@@ -172,7 +200,7 @@ static int Lua_function_dump(lua_State *L) {
   return 1;
 }
 
-int Lua_shuso_configure_handlers(lua_State *L) {
+static int Lua_shuso_configure_handlers(lua_State *L) {
   shuso_t         *ctx = shuso_lua_ctx(L);
   handlers_data_t *hdata = shuso_stalloc(&ctx->stalloc, sizeof(*hdata));
   if(!hdata) {
@@ -242,7 +270,7 @@ int Lua_shuso_configure_handlers(lua_State *L) {
   lua_pushboolean(L, 1);
   return 1;
 }
-int Lua_shuso_configure_finish(lua_State *L) {
+static int Lua_shuso_configure_finish(lua_State *L) {
   shuso_t *ctx = shuso_lua_ctx(L);
   if(!shuso_configure_finish(ctx)) {
     return luaL_error(L, ctx->errmsg);
@@ -251,7 +279,7 @@ int Lua_shuso_configure_finish(lua_State *L) {
   return 1;
 }
 
-int Lua_shuso_destroy(lua_State *L) {
+static int Lua_shuso_destroy(lua_State *L) {
   shuso_t *ctx = shuso_lua_ctx(L);
   if(!shuso_destroy(ctx)) {
     return luaL_error(L, ctx->errmsg);
@@ -260,7 +288,7 @@ int Lua_shuso_destroy(lua_State *L) {
   return 1;
 }
 
-int Lua_shuso_run(lua_State *L) {
+static int Lua_shuso_run(lua_State *L) {
   shuso_t *ctx = shuso_lua_ctx(L);
   if(!shuso_run(ctx)) {
     return luaL_error(L, ctx->errmsg);
@@ -291,7 +319,7 @@ static shuso_stop_t stop_level_string_arg_to_enum(lua_State *L, const char *defa
   }
 }
 
-int Lua_shuso_stop(lua_State *L) {
+static int Lua_shuso_stop(lua_State *L) {
   shuso_t       *ctx = shuso_lua_ctx(L);
   shuso_stop_t   lvl = stop_level_string_arg_to_enum(L, "ask", 1);
   if(!shuso_stop(ctx, lvl)) {
@@ -301,7 +329,7 @@ int Lua_shuso_stop(lua_State *L) {
   return 1;
 }
 
-int Lua_shuso_spawn_manager(lua_State *L) {
+static int Lua_shuso_spawn_manager(lua_State *L) {
   shuso_t *ctx = shuso_lua_ctx(L);
   if(!shuso_spawn_manager(ctx)) {
     return luaL_error(L, ctx->errmsg);
@@ -309,7 +337,7 @@ int Lua_shuso_spawn_manager(lua_State *L) {
   lua_pushboolean(L, 1);
   return 1;
 }
-int Lua_shuso_stop_manager(lua_State *L) {
+static int Lua_shuso_stop_manager(lua_State *L) {
   shuso_t      *ctx = shuso_lua_ctx(L);
   shuso_stop_t  lvl = stop_level_string_arg_to_enum(L, "ask", 1);
   if(!shuso_stop_manager(ctx, lvl)) {
@@ -318,7 +346,7 @@ int Lua_shuso_stop_manager(lua_State *L) {
   lua_pushboolean(L, 1);
   return 1;
 }
-int Lua_shuso_spawn_worker(lua_State *L) {
+static int Lua_shuso_spawn_worker(lua_State *L) {
   shuso_t    *ctx = shuso_lua_ctx(L);
   int         workernum = ctx->common->process.workers_end;
   shuso_process_t   *proc = &ctx->common->process.worker[workernum];
@@ -328,7 +356,7 @@ int Lua_shuso_spawn_worker(lua_State *L) {
   lua_pushboolean(L, 1);
   return 1;
 }
-int Lua_shuso_stop_worker(lua_State *L) {
+static int Lua_shuso_stop_worker(lua_State *L) {
   shuso_t     *ctx = shuso_lua_ctx(L);
   int          workernum = luaL_checkinteger(L, 1);
   if(workernum < ctx->common->process.workers_start || workernum > ctx->common->process.workers_end) {
@@ -344,7 +372,7 @@ int Lua_shuso_stop_worker(lua_State *L) {
   return 1;
 }
 
-int Lua_shuso_set_log_fd(lua_State *L) {
+static int Lua_shuso_set_log_fd(lua_State *L) {
   shuso_t       *ctx = shuso_lua_ctx(L);
   luaL_Stream   *io = luaL_checkudata(L, 1, LUA_FILEHANDLE);
   int fd = fileno(io->f);
@@ -362,7 +390,7 @@ int Lua_shuso_set_log_fd(lua_State *L) {
   return 1;
 }
 
-int Lua_shuso_set_error(lua_State *L) {
+static int Lua_shuso_set_error(lua_State *L) {
   int            nargs = lua_gettop(L);
   shuso_t       *ctx = shuso_lua_ctx(L);
   luaL_checkstring(L, 1);
@@ -403,11 +431,13 @@ static int Lua_watcher_gc(lua_State *L) {
   lua_watcher_unref(L, w);
   return 0;
 }
-
 static void watcher_callback(struct ev_loop *loop, ev_watcher *watcher, int events) {
   shuso_lua_ev_watcher_t *w = watcher->data;
   shuso_t                *ctx = shuso_ev_ctx(loop, w);
   lua_State              *L = ctx->lua.state;
+  lua_State              *coro = NULL;
+  bool                    handler_is_coroutine;
+  int                     rc;
   
   if(w->ref.handler == LUA_NOREF) {
     luaL_error(L, "no handler for shuttlesock io watcher");
@@ -415,13 +445,27 @@ static void watcher_callback(struct ev_loop *loop, ev_watcher *watcher, int even
   }
   
   lua_rawgeti(L, LUA_REGISTRYINDEX, w->ref.handler);
-  lua_rawgeti(L, LUA_REGISTRYINDEX, w->ref.self);
-  lua_call(L, 1, 0);
-  
-  if(w->type == LUA_EV_WATCHER_TIMER && w->watcher.timer.ev.repeat == 0.0) {
+  handler_is_coroutine = lua_isthread(L, -1);
+  if(!handler_is_coroutine) {
+    lua_rawgeti(L, LUA_REGISTRYINDEX, w->ref.self);
+    lua_call(L, 1, 0);
+    rc = LUA_OK;
+  }
+  else {
+    coro = lua_tothread(L, -1);
+    lua_rawgeti(coro, LUA_REGISTRYINDEX, w->ref.self);
+    rc = shuso_lua_resume(coro, NULL, 1);
+  }
+  if((handler_is_coroutine && rc == LUA_OK) /* coroutine is finished */
+   ||(w->type == LUA_EV_WATCHER_TIMER && w->watcher.timer.ev.repeat == 0.0) /* timer is finished */
+  ) {
     lua_pushcfunction(L, Lua_watcher_stop);
     lua_rawgeti(L, LUA_REGISTRYINDEX, w->ref.self);
     lua_call(L, 1, 0);
+    
+    if(rc == LUA_YIELD) {
+      luaL_error(coro ? coro : L, "watcher is finished, but the coroutine isn't");
+    }
   }
 }
 
@@ -556,6 +600,9 @@ static void lua_watcher_unref(lua_State *L, shuso_lua_ev_watcher_t *w) {
   luaL_unref(L, -1, w->ref.self);
   */
   luaL_unref(L, LUA_REGISTRYINDEX, w->ref.self);
+  if(w->coroutine_thread) {
+    w->coroutine_thread = NULL;
+  }
   w->ref.self = LUA_NOREF;
   
   //cleanup
@@ -565,6 +612,12 @@ static void lua_watcher_unref(lua_State *L, shuso_lua_ev_watcher_t *w) {
 static int Lua_watcher_start(lua_State *L) {
   shuso_t                *ctx = shuso_lua_ctx(L);
   shuso_lua_ev_watcher_t *w = luaL_checkudata(L, 1, "shuttlesock.watcher");
+  if(ev_is_active(&w->watcher.watcher)) {
+    return luaL_error(L, "shuttlesock.watcher already active");
+  }
+  if(w->ref.handler == LUA_NOREF) {
+    return luaL_error(L, "shuttlesock.watcher cannot be started without a handler");
+  }
   switch(w->type) {
     case LUA_EV_WATCHER_IO: 
       shuso_ev_io_start(ctx, &w->watcher.io);
@@ -584,6 +637,7 @@ static int Lua_watcher_start(lua_State *L) {
   lua_pushvalue(L, 1);
   return 1;
 }
+
 static int Lua_watcher_stop(lua_State *L) {
   shuso_t                *ctx = shuso_lua_ctx(L);
   shuso_lua_ev_watcher_t *w = luaL_checkudata(L, 1, "shuttlesock.watcher");
@@ -601,10 +655,45 @@ static int Lua_watcher_stop(lua_State *L) {
       shuso_ev_child_stop(ctx, &w->watcher.child);
       break;
   }
-  lua_watcher_ref(L, w, 1);
-  
+  lua_watcher_unref(L, w);
   lua_pushvalue(L, 1);
   return 1;
+}
+
+static int Lua_watcher_yield(lua_State *L) {
+  shuso_lua_ev_watcher_t *w = luaL_checkudata(L, 1, "shuttlesock.watcher");
+  if(w->coroutine_thread == L) {
+    //yielding to the same coroutine as before
+    assert(w->ref.handler != LUA_NOREF);
+  }
+  else if(w->ref.handler != LUA_NOREF) {
+    if(lua_isthread(L, -1)) {
+      luaL_error(L, "can't yield to shuttlesock.watcher, it's already yielding to a different coroutine");
+    }
+    else {
+      luaL_error(L, "can't yield to shuttlesock.watcher, its handler has already been set");
+    }
+  }
+  
+  if(lua_pushthread(L) == 1) {
+    return luaL_error(L, "cannot yield from main thread");
+  }
+  else if(!lua_isyieldable(L)) {
+    return luaL_error(L, "cannot yield from here");
+  }
+  
+  if(w->ref.handler == LUA_NOREF) {
+    w->ref.handler = luaL_ref(L, LUA_REGISTRYINDEX);
+    w->coroutine_thread = L;
+  }
+  else {
+    assert(w->coroutine_thread == L);
+  }
+  
+  lua_pushcfunction(L, Lua_watcher_start);
+  lua_pushvalue(L, 1);
+  lua_call(L, 1, 1);
+  return lua_yield(L, 1);
 }
 
 static int Lua_watcher_newindex(lua_State *L) {
@@ -615,13 +704,21 @@ static int Lua_watcher_newindex(lua_State *L) {
   if(strcmp(field, "handler") == 0) {
     if(w->ref.handler != LUA_NOREF) {
       luaL_unref(L, LUA_REGISTRYINDEX, w->ref.handler);
+      w->coroutine_thread = NULL;
     }
-    if(!lua_isfunction(L, -1)) {
-      return luaL_error(L, "watcher handler must be a function");
+    if(lua_isfunction(L, -1)) {
+      w->ref.handler = luaL_ref(L, LUA_REGISTRYINDEX);
+      w->coroutine_thread = NULL;
     }
-    w->ref.handler = luaL_ref(L, LUA_REGISTRYINDEX);
+    else if(lua_isthread(L, -1)) {
+      w->ref.handler = luaL_ref(L, LUA_REGISTRYINDEX);
+      w->coroutine_thread = lua_tothread(L, -1);
+      assert(w->coroutine_thread);
+    }
+    else {
+      return luaL_error(L, "watcher handler must be a coroutine or function");
+    }
   }
-  
   
   //watcher.repeat=(float)
   else if(w->type == LUA_EV_WATCHER_TIMER && strcmp(field, "repeat") == 0) {
@@ -647,8 +744,12 @@ static int Lua_watcher_index(lua_State *L) {
     lua_pushcfunction(L, Lua_watcher_start);
     return 1;
   }
+  else if(strcmp(field, "yield") == 0) {
+    lua_pushcfunction(L, Lua_watcher_yield);
+    return 1;
+  }
   else if(strcmp(field, "stop") == 0) {
-    lua_pushcfunction(L, Lua_watcher_start);
+    lua_pushcfunction(L, Lua_watcher_stop);
     return 1;
   }
   else if(strcmp(field, "active") == 0) {
