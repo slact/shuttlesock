@@ -930,8 +930,74 @@ static int Lua_shuso_shared_slab_free_string(lua_State *L) {
 }
 
 //resolver
-int Lua_shuso_resolve_hostname(lua_State *L) {
-  return 0;
+
+static void resplve_hostname_callback(shuso_t *, shuso_resolver_result_t, struct hostent *, void *);
+
+static int Lua_shuso_resolve_hostname(lua_State *L) {
+  int         nargs = lua_gettop(L);
+  const char *name = luaL_checkstring(L, 1);
+  const char *addr_family_str = "ipv4";
+  int         addr_family;
+  int         handler_function_index = 0;
+  int         handler_ref = LUA_NOREF;
+  shuso_t    *ctx = shuso_lua_ctx(L);
+  
+  if(nargs > 1) {
+    addr_family_str = luaL_optstring(L, 2, "ipv4");
+  }
+  
+  if(nargs == 2 && !lua_isstring(L, 2)) {
+    handler_function_index = 2;
+  }
+  else if(nargs > 2) {
+    handler_function_index = 3;
+  }
+  
+  if(strcmp(addr_family_str, "ipv4") == 0 || strcmp(addr_family_str, "INET") == 0) {
+    addr_family = AF_INET;
+  }
+  else if(strcmp(addr_family_str, "ipv6") == 0 || strcmp(addr_family_str, "INET6") == 0) {
+    addr_family = AF_INET6;
+  }
+  else {
+    return luaL_error(L, "shuttlesock.resolve unknown address family \"%s\"", addr_family_str);
+  }
+  
+  if(handler_function_index > 0) {
+    if(lua_isfunction(L, handler_function_index)) {
+      lua_pushvalue(L, handler_function_index);
+      handler_ref = luaL_ref(L, LUA_REGISTRYINDEX);
+    }
+    else {
+      return luaL_error(L, "shuttlesock.resolve invalid handler parameter, must be a function (if provided)");
+    }
+  }
+  else {
+    if(!lua_isyieldable(L)) {
+      return luaL_error(L, "shuttlesock.resolve calling coroutine isn't yieldable");
+    }
+    lua_pushthread(L);
+    handler_ref = luaL_ref(L, LUA_REGISTRYINDEX);
+  }
+  
+  if(handler_ref == LUA_NOREF) {
+    return luaL_error(L, "shuttlesock.resolve has no handler reference. this is quite strange indeed.");
+  }
+  
+  shuso_resolve_hostname(&ctx->resolver, name, addr_family, resplve_hostname_callback, (void *)(intptr_t)handler_ref);
+  
+  lua_pushboolean(L, 1);
+  if(handler_function_index) {
+    return 1;
+  }
+  else {
+    return lua_yield(L, 1);
+  }
+}
+
+static void resplve_hostname_callback(shuso_t *ctx, shuso_resolver_result_t result, struct hostent *hostent, void *pd) {
+  //TODO!!!
+  
 }
 
 //logger
