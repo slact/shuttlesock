@@ -3,6 +3,10 @@
 #include <lualib.h>
 #include <lauxlib.h>
 #include <unistd.h>
+#include <strings.h>
+#include <arpa/inet.h>
+#include <ares.h>
+#include <errno.h>
 
 typedef enum {
   LUA_EV_WATCHER_IO =       0,
@@ -21,10 +25,27 @@ typedef struct {
   lua_State        *coroutine_thread;
 } shuso_lua_ev_watcher_t;
 
+typedef struct {
+  struct {
+    int               self;
+    int               handler;
+  }                 ref;
+  lua_State        *coroutine_thread;
+} shuso_lua_fd_receiver_t;
+
 static int Lua_watcher_stop(lua_State *L);
 static void lua_watcher_unref(lua_State *L, shuso_lua_ev_watcher_t *w);
 static const char *watchertype_str(shuso_lua_ev_watcher_type_t type);
 
+static void lua_get_registry_table(lua_State *L, const char *name) {
+  lua_getfield(L, LUA_REGISTRYINDEX, name);
+  if(lua_isnil(L, -1)) {
+    lua_pop(L, 1);
+    lua_newtable(L);
+    lua_pushvalue(L, -1);
+    lua_setfield(L, LUA_REGISTRYINDEX, name);
+  }
+}
 
 typedef struct {
   size_t      len;
@@ -58,6 +79,75 @@ static int shuso_lua_resume(lua_State *thread, lua_State *from, int nargs) {
       break;
   }
   return rc;
+}
+
+static int lua_call_or_resume(lua_State *L, int nargs) {
+  int         state_or_func_index = -1 - nargs;
+  int         type = lua_type(L, state_or_func_index);
+  lua_State  *coro;
+  switch(type) {
+    case LUA_TFUNCTION:
+      lua_call(L, nargs, 0);
+      return 0;
+    case LUA_TTHREAD:
+      coro = lua_tothread(L, state_or_func_index);
+      lua_xmove(L, coro, nargs);
+      lua_resume(coro, L, nargs);
+      return 0;
+    default:
+      return luaL_error(L, "attempted to call-or-resume something that's not a function or coroutine");
+  }
+}
+
+static bool lua_push_handler_function_or_coroutine(lua_State *L, int nargs, lua_State **coroutine, bool caller_can_be_handler, bool allow_no_handler) {
+//is there a handler as the last argument? no? then is the caller a yieldable coroutine?
+  lua_State *coro = NULL;
+  int type = nargs > 0 ? lua_type(L, nargs) : LUA_TNIL;
+  if(type == LUA_TFUNCTION) {
+    if(coroutine) *coroutine = NULL;
+    lua_pushvalue(L, nargs);
+    return true;
+  }
+  else if(type == LUA_TTHREAD) {
+    coro = lua_tothread(L, nargs);
+    lua_pushvalue(L, nargs);
+  }
+  else if(caller_can_be_handler) {
+    coro = L;
+    if(lua_pushthread(L) == 1) {
+      lua_pop(L, 1);
+      if(!allow_no_handler) {
+        return luaL_error(L, "handler can't be the main thread because it's not a coroutine and can't yield and spindly spiders");
+      }
+    }
+  }
+  
+  if(!coro && allow_no_handler) {
+    if(coroutine) *coroutine = NULL;
+    return false;
+  }
+  
+  if(!lua_isyieldable(coro)) {
+    if(coroutine) *coroutine = NULL;
+    if(!allow_no_handler) {
+      return luaL_error(L, "handler coroutine isn't yieldable");
+    }
+    return false;
+  }
+  
+  //reference coroutine
+  if(coroutine) {
+    *coroutine = coro;
+  }
+  return true;
+}
+
+static int lua_ref_handler_function_or_coroutine(lua_State *L, int nargs, lua_State **coroutine, bool caller_can_be_handler, bool allow_no_handler) {
+//is there a handler as the last argument? no? then is the caller a yieldable coroutine?
+  if(lua_push_handler_function_or_coroutine(L, nargs, coroutine, caller_can_be_handler, allow_no_handler)) {
+    return luaL_ref(L, LUA_REGISTRYINDEX);
+  }
+  return LUA_NOREF;
 }
 
 bool shuso_lua_set_ctx(shuso_t *ctx) {
@@ -96,7 +186,7 @@ int Lua_shuso_configure_file(lua_State *L) {
   shuso_t    *ctx = shuso_lua_ctx(L);
   if(!shuso_configure_file(ctx, path)) {
     lua_pushnil(L);
-    lua_pushstring(L, ctx->errmsg);
+    lua_pushstring(L, ctx->error.msg);
     return 2;
   }
   lua_pushboolean(L, 1);
@@ -108,7 +198,7 @@ int Lua_shuso_configure_string(lua_State *L) {
   shuso_t    *ctx = shuso_lua_ctx(L);
   if(!shuso_configure_string(ctx, name, string)) {
     lua_pushnil(L);
-    lua_pushstring(L, ctx->errmsg);
+    lua_pushstring(L, ctx->error.msg);
     return 2;
   }
   lua_pushboolean(L, 1);
@@ -264,7 +354,7 @@ static int Lua_shuso_configure_handlers(lua_State *L) {
   
   if(!shuso_configure_handlers(ctx, &runtime_handlers)) {
     free_handlers_data(L, hdata);
-    return luaL_error(L, ctx->errmsg);
+    return luaL_error(L, ctx->error.msg);
   }
   
   lua_pushboolean(L, 1);
@@ -273,7 +363,7 @@ static int Lua_shuso_configure_handlers(lua_State *L) {
 static int Lua_shuso_configure_finish(lua_State *L) {
   shuso_t *ctx = shuso_lua_ctx(L);
   if(!shuso_configure_finish(ctx)) {
-    return luaL_error(L, ctx->errmsg);
+    return luaL_error(L, ctx->error.msg);
   }
   lua_pushboolean(L, 1);
   return 1;
@@ -282,7 +372,7 @@ static int Lua_shuso_configure_finish(lua_State *L) {
 static int Lua_shuso_destroy(lua_State *L) {
   shuso_t *ctx = shuso_lua_ctx(L);
   if(!shuso_destroy(ctx)) {
-    return luaL_error(L, ctx->errmsg);
+    return luaL_error(L, ctx->error.msg);
   }
   lua_pushboolean(L, 1);
   return 1;
@@ -291,7 +381,7 @@ static int Lua_shuso_destroy(lua_State *L) {
 static int Lua_shuso_run(lua_State *L) {
   shuso_t *ctx = shuso_lua_ctx(L);
   if(!shuso_run(ctx)) {
-    return luaL_error(L, ctx->errmsg);
+    return luaL_error(L, ctx->error.msg);
   }
   lua_pushboolean(L, 1);
   return 1;
@@ -323,7 +413,7 @@ static int Lua_shuso_stop(lua_State *L) {
   shuso_t       *ctx = shuso_lua_ctx(L);
   shuso_stop_t   lvl = stop_level_string_arg_to_enum(L, "ask", 1);
   if(!shuso_stop(ctx, lvl)) {
-    return luaL_error(L, ctx->errmsg);
+    return luaL_error(L, ctx->error.msg);
   }
   lua_pushboolean(L, 1);
   return 1;
@@ -332,7 +422,7 @@ static int Lua_shuso_stop(lua_State *L) {
 static int Lua_shuso_spawn_manager(lua_State *L) {
   shuso_t *ctx = shuso_lua_ctx(L);
   if(!shuso_spawn_manager(ctx)) {
-    return luaL_error(L, ctx->errmsg);
+    return luaL_error(L, ctx->error.msg);
   }
   lua_pushboolean(L, 1);
   return 1;
@@ -341,7 +431,7 @@ static int Lua_shuso_stop_manager(lua_State *L) {
   shuso_t      *ctx = shuso_lua_ctx(L);
   shuso_stop_t  lvl = stop_level_string_arg_to_enum(L, "ask", 1);
   if(!shuso_stop_manager(ctx, lvl)) {
-    return luaL_error(L, ctx->errmsg);
+    return luaL_error(L, ctx->error.msg);
   }
   lua_pushboolean(L, 1);
   return 1;
@@ -351,7 +441,7 @@ static int Lua_shuso_spawn_worker(lua_State *L) {
   int         workernum = ctx->common->process.workers_end;
   shuso_process_t   *proc = &ctx->common->process.worker[workernum];
   if(!shuso_spawn_worker(ctx, proc)) {
-    return luaL_error(L, ctx->errmsg);
+    return luaL_error(L, ctx->error.msg);
   }
   lua_pushboolean(L, 1);
   return 1;
@@ -365,7 +455,7 @@ static int Lua_shuso_stop_worker(lua_State *L) {
   shuso_process_t   *proc = &ctx->common->process.worker[workernum];
   shuso_stop_t       lvl = stop_level_string_arg_to_enum(L, "ask", 2);
   if(!shuso_stop_worker(ctx, proc, lvl)) {
-    return luaL_error(L, ctx->errmsg);
+    return luaL_error(L, ctx->error.msg);
   }
   ctx->common->process.workers_end++;
   lua_pushboolean(L, 1);
@@ -384,7 +474,7 @@ static int Lua_shuso_set_log_fd(lua_State *L) {
     return luaL_error(L, "couldn't dup file");
   }
   if(!shuso_set_log_fd(ctx, fd2)) {
-    return luaL_error(L, ctx->errmsg);
+    return luaL_error(L, ctx->error.msg);
   }
   lua_pushboolean(L, 1);
   return 1;
@@ -473,7 +563,6 @@ static int Lua_watcher_set(lua_State *L) {
   shuso_t                *ctx = shuso_lua_ctx(L);
   int                     nargs = lua_gettop(L);
   shuso_lua_ev_watcher_t *w = luaL_checkudata(L, 1, "shuttlesock.watcher");
-  int                     handler_index = 0;
   
   if(ev_is_active(&w->watcher.watcher) || ev_is_pending(&w->watcher.watcher)) {
     return luaL_error(L, "cannot call %s watcher:set(), the event is already active", watchertype_str(w->type));
@@ -481,84 +570,73 @@ static int Lua_watcher_set(lua_State *L) {
   
   switch(w->type) {
     case LUA_EV_WATCHER_IO: {
-      if(nargs < 3) {
-        return luaL_error(L, "io watcher:set() expects at least 2 arguments");
+      if(nargs-1 < 2 && nargs-1 > 3) {
+        return luaL_error(L, "io watcher:set() expects 2-3 arguments");
       }
-      handler_index = 4;
       int fd = luaL_checkinteger(L, 2);
       int           events = 0;
       size_t        evstrlen;
       const char   *evstr = luaL_checklstring(L, 3, &evstrlen);
-      if(evstrlen < 1 || evstrlen > 2) {
-        return luaL_error(L, "invalid io watcher events string \"%s\"", evstr);
-      }
-      if(evstr[0]=='r' || evstr[1] == 'r') {
+      if(strchr(evstr, 'r')) {
         events |= EV_READ;
       }
-      if(evstr[0]=='w' || evstr[1] == 'w') {
+      if(strchr(evstr, 'w')) {
         events |= EV_WRITE;
+      }
+      if((events & (EV_READ | EV_WRITE)) == 0) {
+        return luaL_error(L, "invalid io watcher events string \"%s\"", evstr);
       }
       shuso_ev_io_init(ctx, &w->watcher.io, fd, events, (shuso_ev_io_fn *)watcher_callback, w);
     } break;
     
     case LUA_EV_WATCHER_TIMER: {
-      if(nargs < 2) {
-        return luaL_error(L, "timer watcher:set() expects at least 1 argument");
+      if(nargs-1 < 1 || nargs-1 > 2) {
+        return luaL_error(L, "timer watcher:set() expects 1-2 arguments");
       }
       double after = luaL_checknumber(L, 2);
       double repeat;
-      if(nargs == 3 && lua_isfunction(L, 3)) {
+      if(nargs-1 == 2 && (lua_isfunction(L, 3) || lua_isthread(L, 3))) {
         //the [repeat] argument is optional, and may be followed by the handler
-        handler_index = 3;
         repeat = 0.0;
       }
       else {
-        handler_index = 4;
         repeat = luaL_optnumber(L, 3, 0.0);
       }
       shuso_ev_timer_init(ctx, &w->watcher.timer, after, repeat, (shuso_ev_timer_fn *)watcher_callback, w);
     } break;
     
     case LUA_EV_WATCHER_SIGNAL: {
-      if(nargs < 2) {
-        return luaL_error(L, "signal watcher:set() expects at least 1 argument");
+      if(nargs-1 < 1 || nargs-1>2) {
+        return luaL_error(L, "signal watcher:set() expects 1-2 arguments");
       }
       int signum = luaL_checkinteger(L, 2);
-      handler_index = 3;
       shuso_ev_signal_init(ctx, &w->watcher.signal, signum, (shuso_ev_signal_fn *)watcher_callback, w);
     } break;
     
     case LUA_EV_WATCHER_CHILD: {
-      if(nargs < 2) {
+      if(nargs-1 < 2 || nargs-1 > 3) {
         return luaL_error(L, "child watcher:set() expects at least 1 argument");
       }
       int pid = luaL_checkinteger(L, 2);
       int trace;
-      if(nargs == 3 && lua_isfunction(L, 3)) {
+      if(nargs-1 == 2 && (lua_isfunction(L, 3) || lua_isthread(L, 3))) {
         //the [trace] argument is optional, and may be followed by the handler
-        handler_index = 3;
         trace = 0;
       }
       else {
-        handler_index = 4;
-        trace = luaL_optinteger(L, 3, 0);
+        trace = luaL_checkinteger(L, 3);
       }
       shuso_ev_child_init(ctx, &w->watcher.child, pid, trace, (shuso_ev_child_fn *)watcher_callback, w);
     } break;
   }
-  const char *handler_err = "last optional argument must be the handler. it's optional though, so you probably slapped an extra argument at the end that isn't a handler function";
-  if(nargs > handler_index) {
-    return luaL_error(L, handler_err);
-  }
   
-  if(lua_isfunction(L, handler_index)) {
+  int handler_ref = lua_ref_handler_function_or_coroutine(L, nargs, NULL, false, true);
+  
+  if(handler_ref != LUA_NOREF) {
     if(w->ref.handler != LUA_NOREF) {
       luaL_unref(L, LUA_REGISTRYINDEX, w->ref.handler);
     }
-    w->ref.handler = luaL_ref(L, LUA_REGISTRYINDEX);
-  }
-  else if(!lua_isnil(L, handler_index)) {
-    return luaL_error(L, handler_err);
+    w->ref.handler = handler_ref;
   }
   
   lua_pushvalue(L, 1);
@@ -668,32 +746,23 @@ static int Lua_watcher_yield(lua_State *L) {
   }
   else if(w->ref.handler != LUA_NOREF) {
     if(lua_isthread(L, -1)) {
-      luaL_error(L, "can't yield to shuttlesock.watcher, it's already yielding to a different coroutine");
+      return luaL_error(L, "can't yield to shuttlesock.watcher, it's already yielding to a different coroutine");
     }
     else {
-      luaL_error(L, "can't yield to shuttlesock.watcher, its handler has already been set");
+      return luaL_error(L, "can't yield to shuttlesock.watcher, its handler has already been set");
     }
   }
   
-  if(lua_pushthread(L) == 1) {
-    return luaL_error(L, "cannot yield from main thread");
-  }
-  else if(!lua_isyieldable(L)) {
-    return luaL_error(L, "cannot yield from here");
-  }
+  assert(w->ref.handler == LUA_NOREF);
+  assert(w->coroutine_thread == NULL);
+  w->ref.handler = lua_ref_handler_function_or_coroutine(L, 0, &w->coroutine_thread, true, false);
+  assert(w->coroutine_thread);
+  assert(w->ref.handler != LUA_NOREF);
   
-  if(w->ref.handler == LUA_NOREF) {
-    w->ref.handler = luaL_ref(L, LUA_REGISTRYINDEX);
-    w->coroutine_thread = L;
-  }
-  else {
-    assert(w->coroutine_thread == L);
-  }
-  
-  lua_pushcfunction(L, Lua_watcher_start);
-  lua_pushvalue(L, 1);
-  lua_call(L, 1, 1);
-  return lua_yield(L, 1);
+  lua_pushcfunction(w->coroutine_thread, Lua_watcher_start);
+  lua_pushvalue(w->coroutine_thread, 1);
+  lua_call(w->coroutine_thread, 1, 1);
+  return lua_yield(w->coroutine_thread, 1);
 }
 
 static int Lua_watcher_newindex(lua_State *L) {
@@ -706,26 +775,20 @@ static int Lua_watcher_newindex(lua_State *L) {
       luaL_unref(L, LUA_REGISTRYINDEX, w->ref.handler);
       w->coroutine_thread = NULL;
     }
-    if(lua_isfunction(L, -1)) {
-      w->ref.handler = luaL_ref(L, LUA_REGISTRYINDEX);
-      w->coroutine_thread = NULL;
+    if(lua_isnil(L, 3)) {
+      return 0;
     }
-    else if(lua_isthread(L, -1)) {
-      w->ref.handler = luaL_ref(L, LUA_REGISTRYINDEX);
-      w->coroutine_thread = lua_tothread(L, -1);
-      assert(w->coroutine_thread);
-    }
-    else {
+    w->ref.handler = lua_ref_handler_function_or_coroutine(L, 3, &w->coroutine_thread, false, false);
+    if(w->ref.handler == LUA_NOREF) {
+      assert(w->coroutine_thread == NULL);
       return luaL_error(L, "watcher handler must be a coroutine or function");
     }
   }
-  
   //watcher.repeat=(float)
   else if(w->type == LUA_EV_WATCHER_TIMER && strcmp(field, "repeat") == 0) {
-    double repeat = luaL_checknumber(L, -1);
+    double repeat = luaL_checknumber(L, 3);
     w->watcher.timer.ev.repeat = repeat;
   }
-  
   else {
     return luaL_error(L, "don't know how to set shuttlesock %s watcher field \"%s\"", watchertype_str(w->type), field);
   }
@@ -756,19 +819,17 @@ static int Lua_watcher_index(lua_State *L) {
     lua_pushboolean(L, ev_is_active(&w->watcher.watcher) || ev_is_pending(&w->watcher.watcher));
     return 1;
   }
-  
   else if(strcmp(field, "pending") == 0) {
     lua_pushboolean(L, ev_is_pending(&w->watcher.watcher));
     return 1;
   }
-  
   else if(strcmp(field, "handler") == 0) {
-    if(w->ref.handler == LUA_NOREF) {
-      lua_pushnil(L);
-    }
-    else {
-      lua_rawgeti(L, LUA_REGISTRYINDEX, w->ref.handler);
-    }
+    lua_rawgeti(L, LUA_REGISTRYINDEX, w->ref.handler);
+    //TODO: check that LUA_REGISTRYINDEX[LUA_NOREF] == nil
+    return 1;
+  }
+  else if(strcmp(field, "type") == 0) {
+    lua_pushstring(L, watchertype_str(w->type));
     return 1;
   }
   
@@ -832,7 +893,7 @@ int Lua_shuso_new_watcher(lua_State *L) {
   shuso_lua_ev_watcher_type_t  wtype;
   int                          nargs = lua_gettop(L);
   
-  if(strcmp(type, "io")==0) {
+  if(strcmp(type, "io") == 0) {
     wtype = LUA_EV_WATCHER_IO;
   }
   else if(strcmp(type, "timer") == 0) {
@@ -870,10 +931,11 @@ int Lua_shuso_new_watcher(lua_State *L) {
   }
   lua_setmetatable(L, -2);
   
-  if(nargs > 1) {
-    lua_replace(L, 1);
-    return Lua_watcher_set(L);
-  }
+  lua_replace(L, 1);
+  
+  lua_pushcfunction(L, Lua_watcher_set);
+  lua_insert(L, 1);
+  lua_call(L, nargs, 1);
   
   ev_init(&watcher->watcher.watcher, NULL);
   return 1;
@@ -931,89 +993,585 @@ static int Lua_shuso_shared_slab_free_string(lua_State *L) {
 
 //resolver
 
-static void resplve_hostname_callback(shuso_t *, shuso_resolver_result_t, struct hostent *, void *);
+static void resolve_hostname_callback(shuso_t *, shuso_resolver_result_t, struct hostent *, void *);
 
 static int Lua_shuso_resolve_hostname(lua_State *L) {
   int         nargs = lua_gettop(L);
   const char *name = luaL_checkstring(L, 1);
-  const char *addr_family_str = "ipv4";
+  const char *addr_family_str = "IPv4";
   int         addr_family;
-  int         handler_function_index = 0;
-  int         handler_ref = LUA_NOREF;
-  shuso_t    *ctx = shuso_lua_ctx(L);
   
-  if(nargs > 1) {
-    addr_family_str = luaL_optstring(L, 2, "ipv4");
+  if(nargs > 1 && lua_type(L, 2) != LUA_TFUNCTION && lua_type(L, 2) != LUA_TTHREAD) {
+    addr_family_str = luaL_checkstring(L, 2);
   }
   
-  if(nargs == 2 && !lua_isstring(L, 2)) {
-    handler_function_index = 2;
-  }
-  else if(nargs > 2) {
-    handler_function_index = 3;
-  }
-  
-  if(strcmp(addr_family_str, "ipv4") == 0 || strcmp(addr_family_str, "INET") == 0) {
+  if(strcasecmp(addr_family_str, "IPv4") == 0 || strcasecmp(addr_family_str, "INET") == 0) {
     addr_family = AF_INET;
   }
-  else if(strcmp(addr_family_str, "ipv6") == 0 || strcmp(addr_family_str, "INET6") == 0) {
+  else if(strcasecmp(addr_family_str, "IPv6") == 0 || strcasecmp(addr_family_str, "INET6") == 0) {
+#ifdef	AF_INET6
     addr_family = AF_INET6;
+#else
+    return luaL_error(L, "shuttlesock.resolve cannot handle IPv6 because it's not enabled on this system");
+#endif
   }
   else {
     return luaL_error(L, "shuttlesock.resolve unknown address family \"%s\"", addr_family_str);
   }
   
-  if(handler_function_index > 0) {
-    if(lua_isfunction(L, handler_function_index)) {
-      lua_pushvalue(L, handler_function_index);
-      handler_ref = luaL_ref(L, LUA_REGISTRYINDEX);
-    }
-    else {
-      return luaL_error(L, "shuttlesock.resolve invalid handler parameter, must be a function (if provided)");
-    }
+  shuso_t    *ctx = shuso_lua_ctx(L);
+  lua_State  *coro;
+  int         handler_ref = lua_ref_handler_function_or_coroutine(L, nargs, &coro, true, false);;
+  assert(handler_ref != LUA_NOREF);
+  
+  shuso_resolve_hostname(&ctx->resolver, name, addr_family, resolve_hostname_callback, (void *)(intptr_t)handler_ref);
+  
+  if(coro) {
+    lua_pushboolean(coro, 1);
+    return lua_yield(coro, 1);
   }
   else {
-    if(!lua_isyieldable(L)) {
-      return luaL_error(L, "shuttlesock.resolve calling coroutine isn't yieldable");
-    }
-    lua_pushthread(L);
-    handler_ref = luaL_ref(L, LUA_REGISTRYINDEX);
-  }
-  
-  if(handler_ref == LUA_NOREF) {
-    return luaL_error(L, "shuttlesock.resolve has no handler reference. this is quite strange indeed.");
-  }
-  
-  shuso_resolve_hostname(&ctx->resolver, name, addr_family, resplve_hostname_callback, (void *)(intptr_t)handler_ref);
-  
-  lua_pushboolean(L, 1);
-  if(handler_function_index) {
+    lua_pushboolean(L, 1);
     return 1;
-  }
-  else {
-    return lua_yield(L, 1);
   }
 }
 
-static void resplve_hostname_callback(shuso_t *ctx, shuso_resolver_result_t result, struct hostent *hostent, void *pd) {
-  //TODO!!!
+static void resolve_hostname_callback(shuso_t *ctx, shuso_resolver_result_t result, struct hostent *hostent, void *pd) {
+  lua_State     *L = ctx->lua.state;
+  int            handler_ref = (intptr_t )pd;
   
+  lua_rawgeti(L, LUA_REGISTRYINDEX, handler_ref);
+  luaL_unref(L, LUA_REGISTRYINDEX, handler_ref);
+  if(result != SHUSO_RESOLVER_SUCCESS) {
+    lua_pushnil(L);
+    switch(result) {
+      case SHUSO_RESOLVER_FAILURE:
+        lua_pushliteral(L, "failed to resolve name");
+        break;
+      case SHUSO_RESOLVER_FAILURE_NOTIMP:
+        lua_pushliteral(L, "failed to resolve name: address family not implemented");
+        break;
+      case SHUSO_RESOLVER_FAILURE_BADNAME:
+        lua_pushliteral(L, "failed to resolve name: invalid name");
+        break;
+      case SHUSO_RESOLVER_FAILURE_NODATA:
+        lua_pushliteral(L, "failed to resolve name: no data from DNS server");
+        break;
+      case SHUSO_RESOLVER_FAILURE_NOTFOUND:
+        lua_pushliteral(L, "failed to resolve name: not found");
+        break;
+      case SHUSO_RESOLVER_FAILURE_NOMEM:
+        lua_pushliteral(L, "failed to resolve name: out of memory");
+        break;
+      case SHUSO_RESOLVER_FAILURE_CANCELLED:
+        lua_pushliteral(L, "failed to resolve name: request cancelled");
+        break;
+      case SHUSO_RESOLVER_FAILURE_CONNREFUSED:
+        lua_pushliteral(L, "failed to resolve name: connection refused");
+        break;
+      case SHUSO_RESOLVER_SUCCESS:
+        //for enumeration purposes
+        break;
+    }
+    lua_pushinteger(L, result);
+    lua_call_or_resume(L, 3);
+    return;
+  }
+  
+  if(!hostent) {
+    lua_pushnil(L);
+    lua_pushliteral(L, "failed to resolve name: missing hostent struct");
+    lua_pushinteger(L, SHUSO_RESOLVER_FAILURE);
+    lua_call_or_resume(L, 3);
+    return;
+  }
+  
+  char  **pstr;
+#ifdef INET6_ADDRSTRLEN
+  char  address_str[INET6_ADDRSTRLEN];
+#else
+  char  address_str[INET_ADDRSTRLEN];
+#endif  
+  int   i;
+  
+  lua_newtable(L);
+  
+  //hostname
+  lua_pushstring(L, hostent->h_name);
+  lua_setfield(L, -2, "name");
+  
+  //aliases
+  lua_newtable(L);
+  i = 1;
+  for (pstr = hostent->h_aliases; *pstr != NULL; pstr++) {
+    lua_pushstring(L, *pstr);
+    lua_rawseti(L, -2, i++);
+  }
+  lua_setfield(L, -2, "aliases");
+  
+  switch(hostent->h_addrtype) {
+    case AF_INET:
+      lua_pushliteral(L, "IPv4");
+      break;
+#ifdef	AF_INET6
+    case AF_INET6:
+      lua_pushliteral(L, "IPv6");
+      break;
+#endif
+    default:
+      lua_pushliteral(L, "unknown");
+      break;
+  }
+  lua_setfield(L, -2, "addrtype");
+  
+  lua_pushinteger(L, hostent->h_length);
+  lua_setfield(L, -2, "length");
+  
+  i=1;
+  lua_newtable(L); //binary addresses
+  lua_newtable(L); //text addresses
+  for(pstr = hostent->h_addr_list; *pstr != NULL; pstr++) {
+    if(inet_ntop(hostent->h_addrtype, *pstr, address_str, sizeof(address_str)) == NULL) {
+      luaL_error(L, "inet_ntop failed on address in list. this is very weird");
+      return;
+    }
+    lua_pushstring(L, address_str);
+    lua_rawseti(L, -2, i);
+    lua_pushlstring(L, *pstr, hostent->h_length);
+    lua_rawseti(L, -3, i);
+    i++;
+  }
+  lua_setfield(L, -3, "addresses");
+  lua_setfield(L, -2, "addresses_binary");
+  
+  if(inet_ntop(hostent->h_addrtype, hostent->h_addr, address_str, sizeof(address_str)) == NULL) {
+    luaL_error(L, "inet_ntop failed on address. this is very weird");
+    return;
+  }
+  lua_pushstring(L, address_str);
+  lua_setfield(L, -2, "address");
+  
+  lua_pushlstring(L, hostent->h_addr, hostent->h_length);
+  lua_setfield(L, -2, "address_binary");
+  
+  lua_call_or_resume(L, 1);
 }
 
 //logger
-int Lua_shuso_log(lua_State *L) {
-  return 0;
+static int log_internal(lua_State *L, void (*logfunc)(shuso_t *ctx, const char *fmt, ...)) {
+  int            nargs = lua_gettop(L);
+  shuso_t       *ctx = shuso_lua_ctx(L);
+  luaL_checkstring(L, 1);
+  
+  lua_getlib_field(L, "string", "format");
+  lua_call(L, nargs, 1);
+  logfunc(ctx, "%s", lua_tostring(L, -1));
+  lua_pushboolean(L, 1);
+  return 1;
+}
+static int Lua_shuso_log(lua_State *L) {
+  return log_internal(L, &shuso_log);
+}
+static int Lua_shuso_log_debug(lua_State *L) {
+  return log_internal(L, &shuso_log_debug);
+}
+static int Lua_shuso_log_info(lua_State *L) {
+  return log_internal(L, &shuso_log_info);
+}
+static int Lua_shuso_log_notice(lua_State *L) {
+  return log_internal(L, &shuso_log_notice);
+}
+static int Lua_shuso_log_warning(lua_State *L) {
+  return log_internal(L, &shuso_log_warning);
+}
+static int Lua_shuso_log_error(lua_State *L) {
+  return log_internal(L, &shuso_log_error);
+}
+static int Lua_shuso_log_critical(lua_State *L) {
+  return log_internal(L, &shuso_log_critical);
+}
+static int Lua_shuso_log_fatal(lua_State *L) {
+  return log_internal(L, &shuso_log_fatal);
 }
 
 //ipc
-int Lua_shuso_ipc_send_fd(lua_State *L) {
-  return 0;
-}
-int Lua_shuso_ipc_receive_fd(lua_State *L) {
-  return 0;
+static shuso_process_t *lua_shuso_checkprocnum(lua_State *L, int index) {
+  int       type = lua_type(L, index);
+  shuso_process_t *proc;
+  shuso_t  *ctx = shuso_lua_ctx(L);
+  
+  if(type == LUA_TSTRING) {
+    const char *str = lua_tostring(L, index);
+    if(strcmp(str, "master")==0) {
+      proc = &ctx->common->process.master;
+    }
+    else if(strcmp(str, "manager")==0) {
+      proc = &ctx->common->process.manager;
+    }
+    else {
+      luaL_error(L, "process string must be 'master' or 'manager', or integer number of the worker");
+      return NULL;
+    }
+  }
+  else if(type == LUA_TNUMBER) {
+    int procnum = lua_tointeger(L, index);
+    if(procnum <= SHUTTLESOCK_NOPROCESS) {
+      luaL_error(L, "invalid procnum");
+      return NULL;
+    }
+    else if(procnum == SHUTTLESOCK_MASTER) {
+      proc = &ctx->common->process.master;
+    }
+    else if(procnum == SHUTTLESOCK_MANAGER) {
+      proc = &ctx->common->process.manager;
+    }
+    else if(procnum >= SHUTTLESOCK_WORKER) {
+      if(procnum < ctx->common->process.workers_start || procnum > ctx->common->process.workers_end) {
+        luaL_error(L, "invalid worker number %d, must be between %d and %d", procnum, (int)ctx->common->process.workers_start, (int)ctx->common->process.workers_end);
+        return NULL;
+      }
+      proc = &ctx->common->process.worker[procnum];
+    }
+    else {
+      raise(SIGABRT); // how did we get here?... these clauses should have covered the entire range.
+      return NULL;
+    }
+  }
+  else {
+    luaL_error(L, "procnum must be a number or string");
+    return NULL;
+  }
+  return proc;
 }
 
-int Lua_shuso_ipc_open_listener_sockets(lua_State *L) {
+static int Lua_shuso_ipc_send_fd(lua_State *L) {
+  int              nargs = lua_gettop(L);
+  shuso_process_t *proc = lua_shuso_checkprocnum(L, 1);
+  int              fd = luaL_checkinteger(L, 2);
+  uintptr_t        ref;
+  if(nargs < 3) {
+    return luaL_error(L, "not enough arguments");
+  }
+  if(lua_isnumber(L, 3)) {
+    lua_Integer num = luaL_checkinteger(L, 3);
+    if(num < 0) {
+      return luaL_error(L, "ref must be non-negative");
+    }
+    ref = num;
+  }
+  else {
+    return luaL_error(L, "ref must be a number");
+  }
+
+  //size_t           strlen = 0;
+  //const char      *str = nargs >= 4 ? luaL_checklstring(L, 4, &strlen);
+  //TODO: support sending privdata along with the fd
+  
+  shuso_t *ctx = shuso_lua_ctx(L);
+  bool ok = shuso_ipc_send_fd(ctx, proc, fd, ref, NULL);
+  if(!ok) {
+    return luaL_error(L, "%s", ctx->error.msg);
+  }
+  lua_pushboolean(L, 1);
+  return 1;
+}
+
+static int Lua_ipc_file_receiver_gc(lua_State *L) {
+  return 0;
+}
+static int Lua_ipc_file_receiver_index(lua_State *L) {
+  return 0;
+}
+static int Lua_ipc_file_receiver_newindex(lua_State *L) {
+  return 0;
+}
+static int Lua_shuso_ipc_file_receiver_new(lua_State *L) {
+  //int           nargs = lua_gettop(L);
+  //uintptr_t     fd_receiver_ref = luaL_checkinteger(L, 1);
+  //const char   *description = luaL_checkstring(L, 2);
+  //double        timeout_sec = luaL_checknumber(L, 3);
+  
+  shuso_lua_fd_receiver_t *receiver;
+  if((receiver = lua_newuserdata(L, sizeof(*receiver))) == NULL) {
+    return luaL_error(L, "unable to allocate memory for new file receiver");
+  }
+  
+  if(luaL_newmetatable(L, "shuttlesock.ipc.fd_receiver")) {
+    lua_pushcfunction(L, Lua_ipc_file_receiver_gc);
+    lua_setfield(L, -2, "__gc");
+    
+    lua_pushcfunction(L, Lua_ipc_file_receiver_index);
+    lua_setfield(L, -2, "__index");
+    
+    lua_pushcfunction(L, Lua_ipc_file_receiver_newindex);
+    lua_setfield(L, -2, "__newindex");
+  }
+  lua_setmetatable(L, -2);
+  return 1;
+}
+
+static shuso_ipc_receive_fd_fn lua_receive_fd_callback;
+
+int Lua_shuso_ipc_receive_fd_start(lua_State *L) {
+  int           nargs = lua_gettop(L);
+  uintptr_t     fd_receiver_ref = luaL_checkinteger(L, 1);
+  const char   *description = luaL_checkstring(L, 2);
+  double        timeout_sec = luaL_checknumber(L, 3);
+  shuso_t      *ctx = shuso_lua_ctx(L);
+  
+  lua_get_registry_table(L, "shuttlesock.ipc.fd_receiver");
+  lua_pushvalue(L, 1);
+  lua_rawget(L, -2);
+  if(!lua_isnil(L, -1)) {
+    return luaL_error(L, "fd receiver for ref %d already exists", (int )fd_receiver_ref);
+  }
+  lua_pop(L, 1);
+  lua_pushvalue(L, 1);
+  lua_push_handler_function_or_coroutine(L, nargs, NULL, true, false);
+  assert(lua_type(L, -1) == LUA_TFUNCTION || lua_type(L, -1) == LUA_TTHREAD);
+  lua_rawset(L, -3);
+  
+  bool ok = shuso_ipc_receive_fd_start(shuso_lua_ctx(L), description, timeout_sec, lua_receive_fd_callback, fd_receiver_ref, NULL);
+  if(!ok) {
+    lua_get_registry_table(L, "shuttlesock.ipc.fd_receiver");
+    lua_pushvalue(L, 1);
+    lua_pushnil(L);
+    lua_rawset(L, -3);
+    return luaL_error(L, ctx->error.msg);
+  }
+  
+  lua_pushboolean(L, 1);
+  return 1;
+}
+
+static void lua_receive_fd_callback(shuso_t *ctx, bool ok, uintptr_t ref, int fd, void *received_pd, void *pd) {
+  
+}
+
+int Lua_shuso_ipc_receive_fd_finish(lua_State *L) {
+  shuso_t      *ctx = shuso_lua_ctx(L);
+  uintptr_t     fd_receiver_ref = luaL_checkinteger(L, 1);
+  lua_get_registry_table(L, "shuttlesock.ipc.fd_receiver");
+  lua_pushvalue(L, 1);
+  lua_rawget(L, -2);
+  if(lua_isnil(L, -1)) {
+    return luaL_error(L, "fd receiver for ref %d does not exist", (int )fd_receiver_ref);
+  }
+  lua_pop(L, 1);
+  //unreference handler
+  lua_pushvalue(L, 1);
+  lua_pushnil(L);
+  lua_rawset(L, -3);
+  
+  if(!shuso_ipc_receive_fd_finish(shuso_lua_ctx(L), fd_receiver_ref)) {
+    lua_pushnil(L);
+    lua_pushstring(L, ctx->error.msg);
+    return 2;
+  }
+  lua_pushboolean(L, 1);
+  return 1;
+}
+
+
+static int hostinfo_set_addr(lua_State *L, int tbl_index, const char *field_name, void *dst, int addr_family) {
+  lua_getfield(L, tbl_index, field_name);
+  const char *addr = lua_tostring(L, -1);
+  if(!addr) {
+    return luaL_error(L, "missing %s", field_name);
+  }
+  if(addr_family == AF_UNIX) {
+    dst = (char *)addr;
+  }
+  else {
+    int rc = inet_pton(addr_family, addr, dst);
+    if(rc == 0) {
+      return luaL_error(L, "invalid %s", field_name);
+    }
+    else if(rc == -1) {
+      return luaL_error(L, "failed to parse %s: %s", strerror(errno));
+    }
+  }
+  return 1;
+}
+
+static int shuso_lua_handle_sockopt(lua_State *L, int k, int v, shuso_sockopts_t *sockopts) {
+  bool is_flag = false;
+  const char *strname;
+  if(lua_type(L, k) == LUA_TNUMBER && lua_type(L, v) == LUA_TSTRING) {
+    strname = lua_tostring(L, v);
+    is_flag = true;
+  }
+  else if(lua_type(L, k) == LUA_TSTRING) {
+    strname = lua_tostring(L, k);
+  }
+  else {
+    return luaL_error(L, "invalid sockopts table key");
+  }
+  assert(strname != NULL);
+  
+  shuso_system_sockopts_t *found = NULL;
+  for(shuso_system_sockopts_t *known = &shuso_system_sockopts[0]; known->str != NULL; known++) {
+    if(strcmp(strname, known->str) == 0) {
+      found = known;
+      break;
+    }
+  }
+  if(!found) {
+    return luaL_error(L, "invalid sockopt %s", strname);
+  }
+  
+  if(is_flag) {
+    if(found->value_type != SHUSO_SYSTEM_SOCKOPT_VALUE_TYPE_FLAG) {
+      return luaL_error(L, "sockopt %s is not a flag", strname);
+    }
+    sockopts->array[sockopts->count++] = (shuso_sockopt_t ) {
+      .level = found->level,
+      .name = found->name,
+      .value.flag = 1
+    };
+  }
+  else {
+    sockopts->array[sockopts->count++] = (shuso_sockopt_t ) {
+      .level = found->level,
+      .name = found->name
+    };
+    switch(found->value_type) {
+      case SHUSO_SYSTEM_SOCKOPT_VALUE_TYPE_INT:
+        sockopts->array[sockopts->count].value.integer = luaL_checkinteger(L, v);
+        break;
+      case SHUSO_SYSTEM_SOCKOPT_VALUE_TYPE_FLAG:
+        sockopts->array[sockopts->count].value.integer = lua_toboolean(L, v);
+        break;
+      case SHUSO_SYSTEM_SOCKOPT_VALUE_TYPE_TIMEVAL:
+        if(lua_type(L, v) != LUA_TNUMBER) {
+          return luaL_error(L, "invalid timeval, must be a floating-point number");
+        }
+        else {
+          double          time = lua_tonumber(L, v);
+          struct timeval  tv;
+          tv.tv_sec = (time_t )time;
+          tv.tv_usec = (int )((time - (double )tv.tv_sec) * 1000.0);
+          sockopts->array[sockopts->count].value.timeval = tv;
+        }
+        break;
+      case SHUSO_SYSTEM_SOCKOPT_VALUE_TYPE_LINGER:
+        if(lua_type(L, v) == LUA_TNUMBER) {
+          sockopts->array[sockopts->count].value.linger.l_onoff = 1;
+          sockopts->array[sockopts->count].value.linger.l_linger = lua_tointeger(L, v);
+        }
+        else if(lua_type(L, v) == LUA_TTABLE) {
+          lua_getfield(L, v, "onoff");
+          sockopts->array[sockopts->count].value.linger.l_onoff = lua_toboolean(L, -1);
+          lua_pop(L, 1);
+          
+          lua_getfield(L, v, "linger");
+          if(lua_type(L, -1) != LUA_TNUMBER) {
+            return luaL_error(L, "invalid \"linger\" field in table, must be an integer");
+          }
+          sockopts->array[sockopts->count].value.linger.l_onoff = lua_tointeger(L, -1);
+          lua_pop(L, 1);
+        }
+        else {  
+          return luaL_error(L, "linger value must be a number or a table");
+        }
+        break;
+      default:
+        return luaL_error(L, "invalid value_type, this should never happen");
+    }
+  }
+  return 1;
+}
+shuso_ipc_open_sockets_fn open_listener_sockets_callback;
+
+#define OPEN_LISTENER_MAX_SOCKOPTS 20
+static int Lua_shuso_ipc_open_listener_sockets(lua_State *L) {
+  shuso_hostinfo_t host;
+  luaL_checktype(L, 1, LUA_TTABLE);
+  
+  int nargs = lua_gettop(L);
+  
+  host.name = NULL;
+  
+  lua_getfield(L, 1, "family");
+  const char *fam = luaL_checkstring(L, -1);
+  
+  if(strcasecmp(fam, "AF_INET") == 0 || strcasecmp(fam, "INET") == 0 || strcasecmp(fam, "ipv4") == 0) {
+    hostinfo_set_addr(L, 1, "address", &host.addr, AF_INET);
+    host.addr_family = AF_INET;
+  }
+  else if(strcasecmp(fam, "AF_INET6") == 0 || strcasecmp(fam, "INET6") == 0 || strcasecmp(fam, "ipv6") == 0) {
+#ifndef AF_INET6
+    return luaL_argerror(L, 1, "can't use IPv6 address, this system isn't built with IPv6 support");
+#else
+    hostinfo_set_addr(L, 1, "address", &host.addr6, AF_INET6);
+    host.addr_family = AF_INET6;
+#endif
+  }
+  else if(strcasecmp(fam, "AF_UNIX") == 0 || strcasecmp(fam, "UNIX")) {
+    hostinfo_set_addr(L, 1, "path", &host.path, AF_UNIX);
+    host.addr_family = AF_UNIX;
+  }
+  else {
+    return luaL_argerror(L, 1, "invalid address family");
+  }
+  
+  lua_getfield(L, 1, "port");
+  if(!lua_isinteger(L, -1)) {
+    return luaL_argerror(L, 1, "port is not an integer or nil");
+  }
+  host.port = lua_tointeger(L, -1);
+    
+  lua_getfield(L, 1, "protocol");
+  if(lua_isnil(L, -1)) {
+    //no "protocol" field, default to TCP
+    host.udp = 0;
+  }
+  else {
+    if(!lua_isstring(L, -1)) {
+      return luaL_argerror(L, 1, "protocol field is not a string or nil");
+    }
+    const char *protocol = lua_tostring(L, -1);
+    
+    if(strcasecmp(protocol, "tcp") == 0) {
+      host.udp = 0;
+    }
+    else if(strcasecmp(protocol, "udp") == 0) {
+      host.udp = 1;
+    }
+    else {
+      return luaL_argerror(L, 1, "invalid protocol, must be \"tcp\" or \"udp\"");
+    }
+  }
+  
+  shuso_sockopt_t  sockopt[OPEN_LISTENER_MAX_SOCKOPTS];
+  shuso_sockopts_t sockopts = {
+    .count = 0,
+    .array = sockopt
+  };
+  
+  if(nargs > 1 && lua_istable(L, 2)) {
+    lua_pushnil(L);
+    for(int n = 0; lua_next(L, 2); n++) {
+      if(n >= OPEN_LISTENER_MAX_SOCKOPTS) {
+        return luaL_argerror(L, 2, "too many socket options");
+      }
+      shuso_lua_handle_sockopt(L, -2, -1, &sockopts);  
+    }
+  }
+  else {
+    sockopts.count = 1;
+    sockopt[0] = (shuso_sockopt_t ){
+      .level = SOL_SOCKET,
+      .name = SO_REUSEPORT,
+      .value.integer = 1
+    };
+  }
+  
+  
+  //TODO: finish it
+  
+  
+  
   return 0;
 }
 
@@ -1065,10 +1623,17 @@ luaL_Reg shuttlesock_core_module_methods[] = {
   
 //logger
   {"log", Lua_shuso_log},
+  {"logDebug", Lua_shuso_log_debug},
+  {"logInfo", Lua_shuso_log_info},
+  {"logNotice", Lua_shuso_log_notice},
+  {"logWarning", Lua_shuso_log_warning},
+  {"logError", Lua_shuso_log_error},
+  {"logCritical", Lua_shuso_log_critical},
+  {"logFatal", Lua_shuso_log_fatal},
 
 //ipc
   {"sendFile", Lua_shuso_ipc_send_fd},
-  {"receiveFile", Lua_shuso_ipc_receive_fd},
+  {"newFileReceiver", Lua_shuso_ipc_file_receiver_new},
   {"openListenerSockets", Lua_shuso_ipc_open_listener_sockets},
   {"addMessageHandler", Lua_shuso_ipc_add_handler},
   {"sendMessage", Lua_shuso_ipc_send},
