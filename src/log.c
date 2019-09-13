@@ -68,14 +68,13 @@ static NONNULL(1,3) void shuso_log_level_vararg(shuso_t *ctx, shuso_loglevel_t l
   write((ctx)->common->log.fd, log, cur - log);
 }
 
-/*
 void shuso_log(shuso_t *ctx, const char *fmt, ...) {
   va_list args;
   va_start(args, fmt);
   shuso_log_level_vararg(ctx, SHUTTLESOCK_DEFAULT_LOGLEVEL, fmt, args);
   va_end (args);
 }
-*/
+
 void shuso_log_fatal(shuso_t *ctx, const char *fmt, ...) {
   va_list args;
   va_start(args, fmt);

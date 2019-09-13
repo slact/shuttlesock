@@ -9,6 +9,7 @@
 #include <stdbool.h>
 #include <stdatomic.h>
 #include <netinet/in.h>
+#include <sys/time.h>
 #include <shuttlesock/build_config.h>
 #include <shuttlesock/watchers.h>
 #include <shuttlesock/common.h>
@@ -36,13 +37,19 @@ struct shuso_process_s {
 struct shuso_sockopt_s {
   int           level;
   int           name;
-  int           intvalue;
+  union {
+    int           integer;
+    int           flag;
+    struct timeval timeval;
+    struct linger linger;
+  }             value;
 }; //shuso_sockopt_t
 
 struct shuso_sockopts_s {
   size_t           count;
   shuso_sockopt_t *array;
 }; //shuso_sockopts_t
+
 
 struct shuso_hostinfo_s {
   const char        *name;
@@ -177,7 +184,11 @@ struct shuso_s {
     bool                        ready;
     lua_reference_t             index;
   } config;
-  const char                 *errmsg;
+  struct {
+    char                       *msg;
+    int                         error_number; //errno
+    bool                        allocd;
+  }                           error;
   char                        logbuf[1024];
 }; //shuso_t;
 
@@ -206,7 +217,8 @@ bool shuso_is_forked_manager(shuso_t *ctx);
 
 bool shuso_set_log_fd(shuso_t *ctx, int fd);
 
-bool shuso_set_error(shuso_t *ctx, const char *err);
+bool shuso_set_error(shuso_t *ctx, const char *fmt, ...);
+bool shuso_set_error_errno(shuso_t *ctx, const char *fmt, ...);
 shuso_process_t *shuso_procnum_to_process(shuso_t *ctx, int procnum);
 int shuso_process_to_procnum(shuso_t *ctx, shuso_process_t *proc);
 const char *shuso_process_as_string(shuso_t *ctx);
@@ -219,4 +231,6 @@ const char *shuso_process_as_string(shuso_t *ctx);
 
 void shuso_listen(shuso_t *ctx, shuso_hostinfo_t *bind, shuso_handler_fn handler, shuso_handler_fn cleanup, void *pd);
   
+//network utilities
+bool shuso_setsockopt(shuso_t *ctx, int fd, shuso_sockopt_t *opt);
 #endif //SHUTTLESOCK_H

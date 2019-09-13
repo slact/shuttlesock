@@ -538,7 +538,7 @@ void listener_port_test_runner(EV_P_ shuso_ev_timer *w, int revent) {
     { 
       .level = SOL_SOCKET,
       .name = SO_REUSEPORT,
-      .intvalue = 1
+      .value.integer = 1
     }
   };
   shuso_sockopts_t opts = {

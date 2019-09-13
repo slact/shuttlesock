@@ -2,6 +2,7 @@
 #define SHUTTLESOCK_RESOLVER_H
 
 #include <ares.h>
+#include <netdb.h>
 #include <shuttlesock/common.h>
 
 typedef struct shuso_resolver_s shuso_resolver_t;

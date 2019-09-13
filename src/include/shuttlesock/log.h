@@ -3,7 +3,7 @@
 
 #include <shuttlesock/common.h>
 
-//void shuso_log(shuso_t *ctx, const char *fmt, ...);
+void shuso_log(shuso_t *ctx, const char *fmt, ...);
 void shuso_log_debug(shuso_t *ctx, const char *fmt, ...);
 void shuso_log_info(shuso_t *ctx, const char *fmt, ...);
 void shuso_log_notice(shuso_t *ctx, const char *fmt, ...);

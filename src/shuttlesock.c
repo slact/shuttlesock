@@ -5,6 +5,7 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/mman.h>
+#include <errno.h>
 
 static void shuso_cleanup_loop(shuso_t *ctx);
 static void signal_watcher_cb(shuso_loop *, shuso_ev_signal *w, int revents);
@@ -576,11 +577,39 @@ bool shuso_stop_worker(shuso_t *ctx, shuso_process_t *proc, shuso_stop_t forcefu
   }
 }
 
-bool shuso_set_error(shuso_t *ctx, const char *err) {
-  ctx->errmsg = err;
-  shuso_log_error(ctx, "%s", err);
+static void shuso_set_error_vararg(shuso_t *ctx, const char *fmt, va_list args) {
+  if(ctx->error.msg && ctx->error.allocd) {
+    free(ctx->error.msg);
+    ctx->error.msg = NULL;
+  }
+  
+  int strlen = vsnprintf(NULL, 0, fmt, args);
+  ctx->error.msg = malloc(strlen+1);
+  if(!ctx->error.msg) {
+    ctx->error.msg = "failed to set error: out of memory";
+    ctx->error.allocd = false;
+  }
+  vsnprintf(ctx->error.msg, strlen, fmt, args);
+  shuso_log_error(ctx, "%s", ctx->error.msg);
+}
+
+bool shuso_set_error(shuso_t *ctx, const char *fmt, ...) {
+  va_list args;
+  ctx->error.error_number = 0;
+  va_start(args, fmt);
+  shuso_set_error_vararg(ctx, fmt, args);
+  va_end(args);
   return false;
 }
+bool shuso_set_error_errno(shuso_t *ctx, const char *fmt, ...) {
+  va_list args;
+  ctx->error.error_number = errno;
+  va_start(args, fmt);
+  shuso_set_error_vararg(ctx, fmt, args);
+  va_end(args);
+  return false;
+}
+
 
 shuso_process_t *shuso_procnum_to_process(shuso_t *ctx, int procnum) {
  if(procnum < SHUTTLESOCK_MASTER || procnum > SHUTTLESOCK_MAX_WORKERS) {
@@ -633,6 +662,42 @@ static void shuso_cleanup_loop(shuso_t *ctx) {
   }
 }
 #undef DELETE_BASE_WATCHERS
+
+bool shuso_setsockopt(shuso_t *ctx, int fd, shuso_sockopt_t *opt) {
+  bool found = false;
+  shuso_system_sockopts_t *known;
+  for(known = &shuso_system_sockopts[0]; known->str != NULL; known++) {
+    if(opt->level == known->level && opt->name == known->name) {
+      found = true;
+      break;
+    }
+  }
+  if(!found) {
+    return shuso_set_error(ctx, "unknown socket option");
+  }
+  
+  int rc = -1;
+  switch(known->value_type) {
+    case SHUSO_SYSTEM_SOCKOPT_MISSING:
+      return shuso_set_error(ctx, "failed to set socket option %s: this system does not support it", known->str);
+    case SHUSO_SYSTEM_SOCKOPT_VALUE_TYPE_INT:
+      rc = setsockopt(fd, opt->level, opt->name, &opt->value.integer, sizeof(opt->value.integer));
+      break;
+    case SHUSO_SYSTEM_SOCKOPT_VALUE_TYPE_FLAG:
+      rc = setsockopt(fd, opt->level, opt->name, &opt->value.flag, sizeof(opt->value.flag));
+      break;
+    case SHUSO_SYSTEM_SOCKOPT_VALUE_TYPE_LINGER:
+      rc = setsockopt(fd, opt->level, opt->name, &opt->value.linger, sizeof(opt->value.linger));
+      break;
+    case SHUSO_SYSTEM_SOCKOPT_VALUE_TYPE_TIMEVAL:
+      rc = setsockopt(fd, opt->level, opt->name, &opt->value.timeval, sizeof(opt->value.timeval));
+      break;
+  }
+  if(rc != 0) {
+    return shuso_set_error_errno(ctx, "failed to set socket option %s: %s", known->str, strerror(errno));
+  }
+  return true;
+}
 
 static void signal_watcher_cb(shuso_loop *loop, shuso_ev_signal *w, int revents) {
   shuso_t *ctx = shuso_ev_ctx(loop, w);

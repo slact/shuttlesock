@@ -86,7 +86,6 @@ bool shuso_ipc_command_open_listener_sockets(shuso_t *ctx, shuso_hostinfo_t *hos
   int                  *opened = NULL;
   int                   i = 0;
   int                   socktype;
-  const char           *err = NULL;
   size_t                path_len = 0;
   struct sockaddr      *sa = NULL;
   struct sockaddr_un    sa_unix;
@@ -97,7 +96,7 @@ bool shuso_ipc_command_open_listener_sockets(shuso_t *ctx, shuso_hostinfo_t *hos
   //shuso_log_debug(ctx, "opening listener sockets...");
   if(ctx->procnum == SHUTTLESOCK_MASTER) {
     if((opened = calloc(count, sizeof(*opened))) == NULL) {
-      err = "failed to allocate memory for opening listening sockets";
+      shuso_set_error(ctx, "failed to allocate memory for opening listening sockets");
       goto fail;
     }
     if(hostinfo->addr_family == AF_UNIX) {
@@ -106,7 +105,7 @@ bool shuso_ipc_command_open_listener_sockets(shuso_t *ctx, shuso_hostinfo_t *hos
       sa_unix.sun_family = AF_UNIX;
       path_len = strlen(hostinfo->path);
       if((path_len+1) > sizeof(sa_unix.sun_path)) {
-        err = "unix socket path is too long";
+        shuso_set_error(ctx, "unix socket path is too long");
         goto fail;
       }
       memcpy(&sa_unix.sun_path, hostinfo->path, path_len);
@@ -144,14 +143,13 @@ bool shuso_ipc_command_open_listener_sockets(shuso_t *ctx, shuso_hostinfo_t *hos
       //shuso_log_debug(ctx, "open socket #%d", i);
       opened[i]=socket(hostinfo->addr_family, socktype, 0);
       if(opened[i] == -1) {
-        err = "failed to create listener socket";
+        shuso_set_error_errno(ctx, "failed to create listener socket: %s", strerror(errno));
         goto fail;
       }
       for(unsigned j=0; j < sockopts->count; j++) {
         //shuso_log_debug(ctx, "setsockopt #%d opt #%d", i, j);
         shuso_sockopt_t *opt = &sockopts->array[j];
-        if(setsockopt(opened[i], opt->level, opt->name, &opt->intvalue, sizeof(opt->intvalue)) < 0) {
-          err = "failed to set sockopt on new listener socket";
+        if(!shuso_setsockopt(ctx, opened[i], opt)) {
           goto fail;
         }
       }
@@ -159,7 +157,7 @@ bool shuso_ipc_command_open_listener_sockets(shuso_t *ctx, shuso_hostinfo_t *hos
       shuso_set_nonblocking(opened[i]);
       //shuso_log_debug(ctx, "bind #%d", i);
       if(bind(opened[i], sa, addr_len) == -1) {
-        err = "failed to bind listener socket";
+        shuso_set_error_errno(ctx, "failed to bind listener socket: %s", strerror(errno));
         goto fail;
       }
     }
@@ -175,9 +173,6 @@ bool shuso_ipc_command_open_listener_sockets(shuso_t *ctx, shuso_hostinfo_t *hos
   }
   
 fail:
-  if(err) {
-    shuso_set_error(ctx, err);
-  }
   callback(ctx, SHUSO_FAIL, hostinfo, NULL, 0, pd);
   if(opened) {
     for(int j=0; j<count; j++) {

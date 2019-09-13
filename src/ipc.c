@@ -367,7 +367,10 @@ bool shuso_ipc_send_fd(shuso_t *ctx, shuso_process_t *dst_proc, int fd, uintptr_
   do {
     n = sendmsg(dst_proc->ipc.socket_transfer_fd[1], &msg, 0);
   } while(n == -1 && errno == EINTR);
-  return n > 0;
+  if(n <= 0) {
+    return shuso_set_error_errno(ctx, "failed to send fd: %s", strerror(errno));
+  }
+  return true;
 }
 
 bool shuso_ipc_receive_fd_start(shuso_t *ctx, const char *description, float timeout_sec, shuso_ipc_receive_fd_fn *callback, uintptr_t ref, void *pd) {
@@ -381,8 +384,7 @@ bool shuso_ipc_receive_fd_start(shuso_t *ctx, const char *description, float tim
   }
   if(found) {
     if(found->callback != NULL) {
-      shuso_log_error(ctx, "ipc_receive_fd_start ref already exists, has already been started");
-      return false;
+      return shuso_set_error(ctx, "ipc_receive_fd_start ref already exists, has already been started");
     }
     found->callback = callback;
     found->pd = pd;
@@ -414,8 +416,7 @@ bool shuso_ipc_receive_fd_start(shuso_t *ctx, const char *description, float tim
   else {
     shuso_ipc_fd_receiver_t *reallocd = realloc(ctx->ipc.fd_receiver.array, sizeof(shuso_ipc_fd_receiver_t) * (ctx->ipc.fd_receiver.count + 1));
     if(!reallocd) {
-      shuso_log_error(ctx, "ipc_receive_fd_start ref failed, no memory for realloc()");
-      return false;
+      return shuso_set_error(ctx, "ipc_receive_fd_start ref failed, no memory for realloc()");
     }
     reallocd[ctx->ipc.fd_receiver.count] = (shuso_ipc_fd_receiver_t) {
       .ref = ref,
@@ -449,6 +450,7 @@ bool shuso_ipc_receive_fd_finish(shuso_t *ctx, uintptr_t ref) {
     }
   }
   if(!found) {
+    shuso_set_error(ctx, "no ipc fd receiver found with reference %p", (char *)ref);
     return false;
   }
   
@@ -472,7 +474,7 @@ bool shuso_ipc_receive_fd_finish(shuso_t *ctx, uintptr_t ref) {
     shuso_ipc_fd_receiver_t *reallocd = realloc(ctx->ipc.fd_receiver.array, sizeof(shuso_ipc_fd_receiver_t) * ctx->ipc.fd_receiver.count-1);
     if(!reallocd) {
       //this is not terrible, and will not lead to undefined behavior. don't error out, just make a note of it
-      shuso_log_error(ctx, "ipc_receive_fd_finish failed, no memory for shrinking realloc()");
+      shuso_log_error(ctx, "ipc_receive_fd_finish failed, no memory for shrinking realloc(). this isn't fatal, continue anyway.");
     }
     else {
       ctx->ipc.fd_receiver.array = reallocd;
