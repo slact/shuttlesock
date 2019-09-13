@@ -80,6 +80,15 @@ test_pthread_setname("${CMAKE_THREAD_LIBS_INIT}"
   SHUTTLESOCK_PTHREAD_SETNAME_INCLUDE_PTRHEAD_NP
 )
 
+#SO_REUSEPORT
+include(TestSO_REUSEPORT)
+test_SO_REUSEPORT(SHUTTLESOCK_HAVE_SO_REUSEPORT)
+if(NOT SHUTTLESOCK_HAVE_SO_REUSEPORT)
+  message(FATAL_ERROR "Shuttlesock requires SO_REUSEPORT support. Unfortunately this system doesn't have it.")
+else()
+  set(SHUTTLESOCK_HAVE_SO_REUSEPORT "TRUE" CACHE INTERNAL "Have SO_REUSEPORT on this system" FORCE)
+endif()
+
 #lua (we want 5.3)
 set(Lua_FIND_VERSION 5.3)
 include(FindLua)
