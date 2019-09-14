@@ -850,13 +850,13 @@ ngx_slab_free_pages(shuso_slab_pool_t *pool, shuso_slab_page_t *page,
 static void
 ngx_slab_error(shuso_slab_pool_t *pool, ngx_uint_t level, char *text)
 {
-    shuso_t *ctx = NULL;
-    shuso_log_error(ctx, "%s", text);
+    shuso_t *S = NULL;
+    shuso_log_error(S, "%s", text);
 }
 
 
 
-bool shuso_shared_slab_create(shuso_t *ctx, shuso_shared_slab_t *slab, size_t sz, const char *name) {
+bool shuso_shared_slab_create(shuso_t *S, shuso_shared_slab_t *slab, size_t sz, const char *name) {
   int                 rc;
   shuso_slab_pool_t  *sp;
   if(sz == 0) {
@@ -864,7 +864,7 @@ bool shuso_shared_slab_create(shuso_t *ctx, shuso_shared_slab_t *slab, size_t sz
   }
   slab->ptr = mmap(NULL, sz, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_SHARED,-1, 0);
   if(slab->ptr == MAP_FAILED) {
-    return shuso_set_error(ctx, "failed to create shared memory slab");
+    return shuso_set_error(S, "failed to create shared memory slab");
   }
   slab->size = sz;
   slab->name = name;
@@ -879,7 +879,7 @@ bool shuso_shared_slab_create(shuso_t *ctx, shuso_shared_slab_t *slab, size_t sz
   
   if((rc = pthread_mutex_init(&sp->mutex, NULL)) != 0) {
     munmap(slab->ptr, sz);
-    return shuso_set_error(ctx, "failed to create mutex for shared memory slab");
+    return shuso_set_error(S, "failed to create mutex for shared memory slab");
   }
   
   ngx_slab_init(sp);
@@ -887,7 +887,7 @@ bool shuso_shared_slab_create(shuso_t *ctx, shuso_shared_slab_t *slab, size_t sz
   return true;
 }
 
-bool shuso_shared_slab_destroy(struct shuso_s *ctx, shuso_shared_slab_t *shm) {
+bool shuso_shared_slab_destroy(struct shuso_s *S, shuso_shared_slab_t *shm) {
   return munmap(shm->ptr, shm->size) == 0;
 }
 

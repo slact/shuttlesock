@@ -23,7 +23,7 @@ static void ares_ev_io_callback(shuso_loop *, shuso_ev_io *, int);
 
 const struct ares_socket_functions ares_sockfuncs;
 
-bool shuso_resolver_init(shuso_t *ctx, shuso_config_t *cf, shuso_resolver_t *resolver) {
+bool shuso_resolver_init(shuso_t *S, shuso_config_t *cf, shuso_resolver_t *resolver) {
   bool                         ares_initialized = false;
   const char                  *err = NULL;
   int                          rc;
@@ -33,7 +33,7 @@ bool shuso_resolver_init(shuso_t *ctx, shuso_config_t *cf, shuso_resolver_t *res
   struct ares_options          opt = resolver->options;
   int                          optmask = resolver->options_mask | ARES_OPT_SOCK_STATE_CB;
   
-  resolver->ctx = ctx;
+  resolver->ctx = S;
   resolver->cf = cf;
   
   opt.sock_state_cb = ares_socket_state_callback;
@@ -106,7 +106,7 @@ fail:
     }
   }
   if(err) {
-    shuso_set_error(ctx, err);
+    shuso_set_error(S, err);
   }
   if(ares_initialized) ares_destroy(resolver->channel);
   if(hosts) free(hosts);
@@ -137,11 +137,11 @@ static void ares_socket_state_callback(void *data, ares_socket_t socket_fd, int 
 
 static ares_socket_t ares_socket_open(int domain, int type, int protocol, void *user_data) {
   shuso_resolver_t        *resolver = user_data;
-  shuso_t                 *ctx = resolver->ctx;
+  shuso_t                 *S = resolver->ctx;
   ares_socket_t            fd;
   shuso_resolver_socket_t *rsock = malloc(sizeof(*rsock));
   if(!rsock) {
-    shuso_set_error(ctx, "DNS resolver: failed to allocate memory for socket struct");
+    shuso_set_error(S, "DNS resolver: failed to allocate memory for socket struct");
     return -1;
   }
   do {
@@ -149,13 +149,13 @@ static ares_socket_t ares_socket_open(int domain, int type, int protocol, void *
   } while(fd < 0 && errno == EINTR);
   if(fd < 0) {
     free(rsock);
-    shuso_set_error(ctx, "DNS resolver: failed to open socket");
+    shuso_set_error(S, "DNS resolver: failed to open socket");
     return -1;
   }
   if(shuso_set_nonblocking(fd) == -1) {
     free(rsock);
     close(fd);
-    shuso_set_error(ctx, "DNS resolver: failed to set socket as non-blocking");
+    shuso_set_error(S, "DNS resolver: failed to set socket as non-blocking");
     return -1;
   }
   
@@ -166,9 +166,9 @@ static ares_socket_t ares_socket_open(int domain, int type, int protocol, void *
   rsock->fd = fd;
   rsock->resolver = resolver;
   
-  shuso_ev_io_init(ctx, &rsock->ev.io, rsock->fd, EV_READ | EV_WRITE, ares_ev_io_callback, rsock);
+  shuso_ev_io_init(S, &rsock->ev.io, rsock->fd, EV_READ | EV_WRITE, ares_ev_io_callback, rsock);
   
-  shuso_ev_io_start(ctx, &rsock->ev.io);
+  shuso_ev_io_start(S, &rsock->ev.io);
   
   return fd;
   

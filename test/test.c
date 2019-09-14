@@ -88,33 +88,33 @@ typedef struct {
 } ipc_one_to_many_check_t;
 
 
-#define check_ipc(test, ctx, chk, ...) \
+#define check_ipc(test, S, chk, ...) \
 do { \
   if(!(test)) { \
     chk->failure = true;\
     sprintf(chk->err, __VA_ARGS__); \
-    shuso_stop(ctx, SHUSO_STOP_INSIST); \
+    shuso_stop(S, SHUSO_STOP_INSIST); \
     return; \
   } \
 } while(0)
 
-void ipc_echo_srcdst(shuso_t *ctx, ipc_check_oneway_t **self, ipc_check_oneway_t **dst) {
-  ipc_check_t   *chk = ctx->data;
-  if(ctx->procnum == chk->ping.procnum) {
+void ipc_echo_srcdst(shuso_t *S, ipc_check_oneway_t **self, ipc_check_oneway_t **dst) {
+  ipc_check_t   *chk = S->data;
+  if(S->procnum == chk->ping.procnum) {
     *self = &chk->ping;
     *dst = &chk->pong;
   }
-  else if(ctx->procnum == chk->pong.procnum) {
+  else if(S->procnum == chk->pong.procnum) {
     *self = &chk->pong;
     *dst = &chk->ping;
   } 
 }
 
-void ipc_echo_send(shuso_t *ctx) {
-  ipc_check_t   *chk = ctx->data;
+void ipc_echo_send(shuso_t *S) {
+  ipc_check_t   *chk = S->data;
   
   ipc_check_oneway_t *self = NULL, *dst = NULL;
-  ipc_echo_srcdst(ctx, &self, &dst);
+  ipc_echo_srcdst(S, &self, &dst);
   
   float sleeptime = 0;
   if(self->sleep > 0 && self->slept < self->sleep) {
@@ -127,7 +127,7 @@ void ipc_echo_send(shuso_t *ctx) {
   
   self->barrage_received = 0;
   
-  shuso_process_t *processes = ctx->common->process.worker;
+  shuso_process_t *processes = S->common->process.worker;
   shuso_process_t *dst_process = &processes[dst->procnum];
   
   for(int i=0; i<dst->barrage; i++) {
@@ -137,30 +137,30 @@ void ipc_echo_send(shuso_t *ctx) {
     }
     dst->seq++;
     chk->sent++;
-    bool sent_ok = shuso_ipc_send(ctx, dst_process, IPC_ECHO, (void *)(intptr_t )dst->seq);
-    check_ipc(sent_ok, ctx, chk, "failed to send ipc message to procnum %d", dst->procnum);
+    bool sent_ok = shuso_ipc_send(S, dst_process, IPC_ECHO, (void *)(intptr_t )dst->seq);
+    check_ipc(sent_ok, S, chk, "failed to send ipc message to procnum %d", dst->procnum);
   }
   if(dst->init_sleep_flag) {
     dst->init_sleep_flag = 0;
   }
 }
 
-void ipc_echo_receive(shuso_t *ctx, const uint8_t code, void *ptr) {
+void ipc_echo_receive(shuso_t *S, const uint8_t code, void *ptr) {
   ipc_check_oneway_t *self = NULL, *dst = NULL;
-  ipc_echo_srcdst(ctx, &self, &dst);
+  ipc_echo_srcdst(S, &self, &dst);
   
-  ipc_check_t   *chk = ctx->data;
+  ipc_check_t   *chk = S->data;
   intptr_t       seq = (intptr_t )ptr;
   chk->received++;
   self->seq_received++;
-  //shuso_log(ctx, "received %d", self->seq_received);
-  check_ipc(chk->received <= chk->sent, ctx, chk, "sent - received mismatch for procnum %d: send %d > received %d", self->procnum, chk->sent, chk->received);
-  check_ipc(seq == self->seq_received, ctx, chk, "seq mismatch for procnum %d: expected %d, got %ld", self->procnum, self->seq, seq);
+  //shuso_log(S, "received %d", self->seq_received);
+  check_ipc(chk->received <= chk->sent, S, chk, "sent - received mismatch for procnum %d: send %d > received %d", self->procnum, chk->sent, chk->received);
+  check_ipc(seq == self->seq_received, S, chk, "seq mismatch for procnum %d: expected %d, got %ld", self->procnum, self->seq, seq);
   
   if(chk->received >= chk->received_stop_at) {
     //we're done;
-    //shuso_log(ctx, "it's time to stop");
-    shuso_stop(ctx, SHUSO_STOP_INSIST); \
+    //shuso_log(S, "it's time to stop");
+    shuso_stop(S, SHUSO_STOP_INSIST); \
     return;
   }
   
@@ -171,14 +171,14 @@ void ipc_echo_receive(shuso_t *ctx, const uint8_t code, void *ptr) {
   }
   self->barrage_received = 0;
   
-  ipc_echo_send(ctx);
+  ipc_echo_send(S);
 }
 
 static void ipc_load_test(EV_P_ shuso_ev_timer *w, int rev) {
-  shuso_t *ctx = ev_userdata(EV_A);
-  ipc_check_t   *chk = ctx->data;
+  shuso_t *S = ev_userdata(EV_A);
+  ipc_check_t   *chk = S->data;
   ipc_check_oneway_t *self = NULL, *dst = NULL;
-  ipc_echo_srcdst(ctx, &self, &dst);
+  ipc_echo_srcdst(S, &self, &dst);
   
   while(self->init_sleep_flag) {
     ev_sleep(0.05);
@@ -190,19 +190,19 @@ static void ipc_load_test(EV_P_ shuso_ev_timer *w, int rev) {
     self->slept -= sleeptime;
   }
   if(sleeptime > 0) {
-    shuso_log_notice(ctx, "sleep %f", sleeptime);
+    shuso_log_notice(S, "sleep %f", sleeptime);
     ev_sleep(sleeptime);
   }
   
-  if(!shuso_is_master(ctx)) {
+  if(!shuso_is_master(S)) {
     return;
   }
   assert(chk->ping.procnum == SHUTTLESOCK_MANAGER);
-  ipc_echo_send(ctx);
+  ipc_echo_send(S);
 }
 #undef check_ipc
 
-void ipc_echo_cancel(shuso_t *ctx, const uint8_t code, void *ptr) { }
+void ipc_echo_cancel(shuso_t *S, const uint8_t code, void *ptr) { }
 
 describe(ipc) {
   static shuso_t *ss = NULL;
@@ -386,7 +386,7 @@ describe(stack_allocator) {
   }*/
 }
 
-void resolve_check_ok(shuso_t *ctx, shuso_resolver_result_t result, struct hostent *hostent, void *pd) {
+void resolve_check_ok(shuso_t *S, shuso_resolver_result_t result, struct hostent *hostent, void *pd) {
   assert(result == SHUSO_RESOLVER_SUCCESS);
   //printf("Found address name %s\n", hostent->h_name);
   char ip[INET6_ADDRSTRLEN];
@@ -395,15 +395,15 @@ void resolve_check_ok(shuso_t *ctx, shuso_resolver_result_t result, struct hoste
     inet_ntop(hostent->h_addrtype, hostent->h_addr_list[i], ip, sizeof(ip));
     //printf("%s\n", ip);
   }
-  shuso_stop(ctx, SHUSO_STOP_INSIST);
+  shuso_stop(S, SHUSO_STOP_INSIST);
 }
 
 void resolve_check_start(EV_P_ shuso_ev_timer *w, int revent) {
-  shuso_t *ctx = ev_userdata(EV_A);
-  if(ctx->procnum != SHUTTLESOCK_MANAGER) {
+  shuso_t *S = ev_userdata(EV_A);
+  if(S->procnum != SHUTTLESOCK_MANAGER) {
     return;
   }
-  shuso_resolve_hostname(&ctx->resolver, "google.com", AF_INET, resolve_check_ok, ctx);
+  shuso_resolve_hostname(&S->resolver, "google.com", AF_INET, resolve_check_ok, S);
 }
 
 describe(resolver) {
@@ -489,7 +489,7 @@ typedef struct {
   uint16_t         num_ports;
 } listener_port_test_t;
 
-void listener_port_test_runner_callback(shuso_t *ctx, shuso_status_t status, shuso_hostinfo_t *hostinfo, int *sockets, int socket_count, void *pd) {
+void listener_port_test_runner_callback(shuso_t *S, shuso_status_t status, shuso_hostinfo_t *hostinfo, int *sockets, int socket_count, void *pd) {
   listener_port_test_t *t = pd;
   if(status == SHUSO_OK) {
     t->err = NULL;
@@ -517,14 +517,14 @@ void listener_port_test_runner_callback(shuso_t *ctx, shuso_status_t status, shu
     }
     sockets[i]=-1;
   }
-  //shuso_log_notice(ctx, "wrapping it up");
-  shuso_stop(ctx, SHUSO_STOP_INSIST);
+  //shuso_log_notice(S, "wrapping it up");
+  shuso_stop(S, SHUSO_STOP_INSIST);
 }
 
 void listener_port_test_runner(EV_P_ shuso_ev_timer *w, int revent) {
-  shuso_t *ctx = ev_userdata(EV_A);
+  shuso_t *S = ev_userdata(EV_A);
   listener_port_test_t *pt = w->ev.data;
-  if(ctx->procnum != SHUTTLESOCK_MANAGER) {
+  if(S->procnum != SHUTTLESOCK_MANAGER) {
     return;
   }
   shuso_hostinfo_t host = {
@@ -545,7 +545,7 @@ void listener_port_test_runner(EV_P_ shuso_ev_timer *w, int revent) {
     .count = 1,
     .array = sopt
   };
-  bool rc = shuso_ipc_command_open_listener_sockets(ctx, &host, 5, &opts, listener_port_test_runner_callback, pt);
+  bool rc = shuso_ipc_command_open_listener_sockets(S, &host, 5, &opts, listener_port_test_runner_callback, pt);
   assert(rc);
 }
 

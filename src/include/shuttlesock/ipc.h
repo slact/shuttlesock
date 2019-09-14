@@ -40,7 +40,7 @@ typedef struct shuso_ipc_outbuf_s {
   struct shuso_ipc_outbuf_s *next;
 } shuso_ipc_outbuf_t;
 
-typedef void shuso_ipc_receive_fd_fn(shuso_t *ctx, bool ok, uintptr_t ref, int fd, void *received_pd, void *pd);
+typedef void shuso_ipc_receive_fd_fn(shuso_t *S, bool ok, uintptr_t ref, int fd, void *received_pd, void *pd);
 typedef struct {
   int      fd;
   void    *pd;
@@ -99,8 +99,8 @@ bool shuso_ipc_add_handler(shuso_t *,  const char *name, const uint8_t code, shu
 bool shuso_ipc_send_fd(shuso_t *, shuso_process_t *, int fd, uintptr_t ref, void *pd);
 
 //TODO: change to shuso_ipc_receive_fd_start with cleanup callback
-bool shuso_ipc_receive_fd_start(shuso_t *ctx, const char *description,  float timeout_sec, shuso_ipc_receive_fd_fn *callback, uintptr_t ref, void *pd);
-bool shuso_ipc_receive_fd_finish(shuso_t *ctx, uintptr_t ref);
+bool shuso_ipc_receive_fd_start(shuso_t *S, const char *description,  float timeout_sec, shuso_ipc_receive_fd_fn *callback, uintptr_t ref, void *pd);
+bool shuso_ipc_receive_fd_finish(shuso_t *S, uintptr_t ref);
 
 //some built-in IPC commands
 

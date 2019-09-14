@@ -1,5 +1,6 @@
 #include <shuttlesock/stalloc.h>
 #include <shuttlesock/sysutil.h>
+#include <shuttlesock/build_config.h>
 #include <assert.h>
 #include <unistd.h>
 #include <stdio.h>

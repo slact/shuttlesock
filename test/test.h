@@ -63,19 +63,19 @@ int dev_null;
 #define shmalloc_sz(ptr, sz) mmap(NULL, sz, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_SHARED,-1, 0)
 #define shmfree_sz(ptr, sz) munmap(ptr, sz)
 
-#define assert_shuso(ctx) \
+#define assert_shuso(S) \
 do { \
   snow_fail_update(); \
-  if(shuso_is_forked_manager(ctx)) { \
+  if(shuso_is_forked_manager(S)) { \
     snow_bail(); \
   } \
   else { \
-    test_runcheck_t *___chk = ctx->common->phase_handlers.privdata; \
-    if(ctx->common->process.master.pid != ___chk->master_pid) { \
-      snow_fail("expected ctx->common->process.master.pid to be %d, got %d", ___chk->master_pid, ctx->common->process.master.pid); \
+    test_runcheck_t *___chk = S->common->phase_handlers.privdata; \
+    if(S->common->process.master.pid != ___chk->master_pid) { \
+      snow_fail("expected S->common->process.master.pid to be %d, got %d", ___chk->master_pid, S->common->process.master.pid); \
     } \
-    if(ctx->common->process.manager.pid != ___chk->manager_pid) { \
-      snow_fail("expected ctx->common->process.manager.pid to be %d, got %d", ___chk->manager_pid, ctx->common->process.manager.pid); \
+    if(S->common->process.manager.pid != ___chk->manager_pid) { \
+      snow_fail("expected S->common->process.manager.pid to be %d, got %d", ___chk->manager_pid, S->common->process.manager.pid); \
     } \
     if(___chk->count.start_master != 1) { \
       snow_fail("expected count.start_master to be 1, got %d", ___chk->count.start_master); \
@@ -89,9 +89,9 @@ do { \
     if(___chk->count.stop_manager != 1) { \
       snow_fail("expected count.stop_master to be 1, got %d", ___chk->count.stop_manager); \
     } \
-    if(ctx->common->config.workers != 0) { \
-      asserteq(ctx->common->config.workers, ___chk->count.start_worker, "wrong worker start count"); \
-      asserteq(ctx->common->config.workers, ___chk->count.stop_worker, "wrong worker stop count"); \
+    if(S->common->config.workers != 0) { \
+      asserteq(S->common->config.workers, ___chk->count.start_worker, "wrong worker start count"); \
+      asserteq(S->common->config.workers, ___chk->count.stop_worker, "wrong worker stop count"); \
     } \
     else { \
       asserteq(shuso_system_cores_online(), ___chk->count.start_worker, "wrong worker start count"); \
@@ -100,16 +100,16 @@ do { \
   } \
 } while(0)
 
-#define assert_shuttlesock_ok(ctx) \
+#define assert_shuttlesock_ok(S) \
 do { \
   int ___status = 0, ___exit_status; \
-  if(shuso_is_forked_manager(ctx)) { \
+  if(shuso_is_forked_manager(S)) { \
     snow_bail(); \
   } \
   else { \
-    if(waitpid(ctx->common->process.manager.pid, &___status, 0) == -1) { \
+    if(waitpid(S->common->process.manager.pid, &___status, 0) == -1) { \
       if(errno == ECHILD) { \
-        asserteq(ctx->common->process.manager.pid, child_result->pid, "weird child pid found, don't know what to make of it"); \
+        asserteq(S->common->process.manager.pid, child_result->pid, "weird child pid found, don't know what to make of it"); \
         ___exit_status = child_result->status; \
         asserteq(0, ___exit_status, "manager exited with error"); \
       } \

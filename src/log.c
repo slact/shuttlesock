@@ -6,10 +6,10 @@
 
 #define NONNULL(...) __attribute__((nonnull(__VA_ARGS__)))
 
-static NONNULL(1,3) void shuso_log_level_vararg(shuso_t *ctx, shuso_loglevel_t level, const char *fmt, va_list args)   {
-  char *log = ctx->logbuf;
+static NONNULL(1,3) void shuso_log_level_vararg(shuso_t *S, shuso_loglevel_t level, const char *fmt, va_list args)   {
+  char *log = S->logbuf;
   char *cur = log;
-  int procnum = ctx->procnum;
+  int procnum = S->procnum;
   const char *procname;
   const char *lvl;
   if(procnum == SHUTTLESOCK_NOPROCESS) {
@@ -65,61 +65,61 @@ static NONNULL(1,3) void shuso_log_level_vararg(shuso_t *ctx, shuso_loglevel_t l
   cur += vsprintf(cur, fmt, args);
 
   cur += sprintf(cur, "\n");
-  write((ctx)->common->log.fd, log, cur - log);
+  write((S)->common->log.fd, log, cur - log);
 }
 
-void shuso_log(shuso_t *ctx, const char *fmt, ...) {
+void shuso_log(shuso_t *S, const char *fmt, ...) {
   va_list args;
   va_start(args, fmt);
-  shuso_log_level_vararg(ctx, SHUTTLESOCK_DEFAULT_LOGLEVEL, fmt, args);
+  shuso_log_level_vararg(S, SHUTTLESOCK_DEFAULT_LOGLEVEL, fmt, args);
   va_end (args);
 }
 
-void shuso_log_fatal(shuso_t *ctx, const char *fmt, ...) {
+void shuso_log_fatal(shuso_t *S, const char *fmt, ...) {
   va_list args;
   va_start(args, fmt);
-  shuso_log_level_vararg(ctx, SHUSO_LOG_FATAL, fmt, args);
+  shuso_log_level_vararg(S, SHUSO_LOG_FATAL, fmt, args);
   va_end (args);
 }
 
-void shuso_log_critical(shuso_t *ctx, const char *fmt, ...) {
+void shuso_log_critical(shuso_t *S, const char *fmt, ...) {
   va_list args;
   va_start(args, fmt);
-  shuso_log_level_vararg(ctx, SHUSO_LOG_CRITICAL, fmt, args);
+  shuso_log_level_vararg(S, SHUSO_LOG_CRITICAL, fmt, args);
   va_end (args);
 }
 
-void shuso_log_error(shuso_t *ctx, const char *fmt, ...) {
+void shuso_log_error(shuso_t *S, const char *fmt, ...) {
   va_list args;
   va_start(args, fmt);
-  shuso_log_level_vararg(ctx, SHUSO_LOG_ERROR, fmt, args);
+  shuso_log_level_vararg(S, SHUSO_LOG_ERROR, fmt, args);
   va_end (args);
 }
 
-void shuso_log_warning(shuso_t *ctx, const char *fmt, ...) {
+void shuso_log_warning(shuso_t *S, const char *fmt, ...) {
   va_list args;
   va_start(args, fmt);
-  shuso_log_level_vararg(ctx, SHUSO_LOG_WARNING, fmt, args);
+  shuso_log_level_vararg(S, SHUSO_LOG_WARNING, fmt, args);
   va_end (args);
 }
 
-void shuso_log_notice(shuso_t *ctx, const char *fmt, ...) {
+void shuso_log_notice(shuso_t *S, const char *fmt, ...) {
   va_list args;
   va_start(args, fmt);
-  shuso_log_level_vararg(ctx, SHUSO_LOG_NOTICE, fmt, args);
+  shuso_log_level_vararg(S, SHUSO_LOG_NOTICE, fmt, args);
   va_end (args);
 }
 
-void shuso_log_info(shuso_t *ctx, const char *fmt, ...) {
+void shuso_log_info(shuso_t *S, const char *fmt, ...) {
   va_list args;
   va_start(args, fmt);
-  shuso_log_level_vararg(ctx, SHUSO_LOG_INFO, fmt, args);
+  shuso_log_level_vararg(S, SHUSO_LOG_INFO, fmt, args);
   va_end (args);
 }
 
-void shuso_log_debug(shuso_t *ctx, const char *fmt, ...) {
+void shuso_log_debug(shuso_t *S, const char *fmt, ...) {
   va_list args;
   va_start(args, fmt);
-  shuso_log_level_vararg(ctx, SHUSO_LOG_DEBUG, fmt, args);
+  shuso_log_level_vararg(S, SHUSO_LOG_DEBUG, fmt, args);
   va_end (args);
 }

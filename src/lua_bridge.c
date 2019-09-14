@@ -38,10 +38,10 @@ static char *lua_dbgval(lua_State *L, int n) {
 }
 void lua_printstack(lua_State *L) {
   int        top = lua_gettop(L);
-  shuso_t   *ctx = shuso_lua_ctx(L);
-  shuso_log_warning(ctx, "lua stack:");
+  shuso_t   *S = shuso_state(L);
+  shuso_log_warning(S, "lua stack:");
   for(int n=top; n>0; n--) {
-    shuso_log_warning(ctx, "  [%i]: %s", n, lua_dbgval(L, n));
+    shuso_log_warning(S, "  [%i]: %s", n, lua_dbgval(L, n));
   }
 }
 
@@ -82,14 +82,14 @@ static int shuso_Lua_glob(lua_State *L) {
   }
 }
 
-bool shuso_lua_create(shuso_t *ctx) {
-  if(ctx->procnum == SHUTTLESOCK_MASTER) {
-    assert(ctx->lua.state == NULL);
+bool shuso_lua_create(shuso_t *S) {
+  if(S->procnum == SHUTTLESOCK_MASTER) {
+    assert(S->lua.state == NULL);
   }
-  if((ctx->lua.state = luaL_newstate()) == NULL) {
+  if((S->lua.state = luaL_newstate()) == NULL) {
     return false;
   }
-  luaL_openlibs(ctx->lua.state);
+  luaL_openlibs(S->lua.state);
   //initialize shuttlesocky lua env
   
   return true;
@@ -114,9 +114,9 @@ static int shuso_Lua_do_embedded_script(lua_State *L) {
 }
 
 
-bool shuso_lua_initialize(shuso_t *ctx) {
-  shuso_lua_set_ctx(ctx);
-  lua_State *L = ctx->lua.state;
+bool shuso_lua_initialize(shuso_t *S) {
+  shuso_lua_set_ctx(S);
+  lua_State *L = S->lua.state;
   
   luaL_requiref(L, "shuttlesock.core", shuso_Lua_shuttlesock_core_module, 0);
   
@@ -135,16 +135,16 @@ bool shuso_lua_initialize(shuso_t *ctx) {
   lua_setfield(L, -2, "glob");
   lua_pop(L, 1);
 
-  ctx->config.index = luaL_ref(L, LUA_REGISTRYINDEX);
+  S->config.index = luaL_ref(L, LUA_REGISTRYINDEX);
   
   return true;
 }
 
-bool shuso_lua_destroy(shuso_t *ctx) {
-  assert(!ctx->lua.external);
-  assert(ctx->lua.state != NULL);
-  lua_close(ctx->lua.state);
-  ctx->lua.state = NULL;
+bool shuso_lua_destroy(shuso_t *S) {
+  assert(!S->lua.external);
+  assert(S->lua.state != NULL);
+  lua_close(S->lua.state);
+  S->lua.state = NULL;
   return true;
 }
 

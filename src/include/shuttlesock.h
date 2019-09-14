@@ -196,41 +196,77 @@ struct shuso_s {
 shuso_t *shuso_create(const char **err);
 shuso_t *shuso_create_with_lua(lua_State *lua, const char **err);
 
-bool shuso_configure_file(shuso_t *ctx, const char *path);
-bool shuso_configure_string(shuso_t *ctx, const char *str_title, const char *str);
-bool shuso_configure_handlers(shuso_t *ctx, const shuso_runtime_handlers_t *handlers);
-bool shuso_configure_finish(shuso_t *ctx);
+bool shuso_configure_file(shuso_t *S, const char *path);
+bool shuso_configure_string(shuso_t *S, const char *str_title, const char *str);
+bool shuso_configure_handlers(shuso_t *S, const shuso_runtime_handlers_t *handlers);
+bool shuso_configure_finish(shuso_t *S);
 
 
-bool shuso_destroy(shuso_t *ctx);
-bool shuso_run(shuso_t *ctx);
-bool shuso_stop(shuso_t *ctx, shuso_stop_t forcefulness);
-bool shuso_spawn_manager(shuso_t *ctx);
-bool shuso_stop_manager(shuso_t *ctx, shuso_stop_t forcefulness);
-bool shuso_spawn_worker(shuso_t *ctx, shuso_process_t *proc);
-bool shuso_stop_worker(shuso_t *ctx, shuso_process_t *proc, shuso_stop_t
+bool shuso_destroy(shuso_t *S);
+bool shuso_run(shuso_t *S);
+bool shuso_stop(shuso_t *S, shuso_stop_t forcefulness);
+bool shuso_spawn_manager(shuso_t *S);
+bool shuso_stop_manager(shuso_t *S, shuso_stop_t forcefulness);
+bool shuso_spawn_worker(shuso_t *S, shuso_process_t *proc);
+bool shuso_stop_worker(shuso_t *S, shuso_process_t *proc, shuso_stop_t
  forcefulness);
-bool shuso_stop_manager(shuso_t *ctx, shuso_stop_t forcefulness);
+bool shuso_stop_manager(shuso_t *S, shuso_stop_t forcefulness);
 
-bool shuso_is_master(shuso_t *ctx);
-bool shuso_is_forked_manager(shuso_t *ctx);
+bool shuso_is_master(shuso_t *S);
+bool shuso_is_forked_manager(shuso_t *S);
 
-bool shuso_set_log_fd(shuso_t *ctx, int fd);
+bool shuso_set_log_fd(shuso_t *S, int fd);
 
-bool shuso_set_error(shuso_t *ctx, const char *fmt, ...);
-bool shuso_set_error_errno(shuso_t *ctx, const char *fmt, ...);
-shuso_process_t *shuso_procnum_to_process(shuso_t *ctx, int procnum);
-int shuso_process_to_procnum(shuso_t *ctx, shuso_process_t *proc);
-const char *shuso_process_as_string(shuso_t *ctx);
+bool shuso_set_error(shuso_t *S, const char *fmt, ...);
+bool shuso_set_error_errno(shuso_t *S, const char *fmt, ...);
+shuso_process_t *shuso_procnum_to_process(shuso_t *S, int procnum);
+int shuso_process_to_procnum(shuso_t *S, shuso_process_t *proc);
+const char *shuso_process_as_string(shuso_t *S);
 
 
-#define SHUSO_EACH_WORKER(ctx, cur) \
-  for(shuso_process_t *cur = &ctx->common->process.worker[ctx->common->process.workers_start], *___worker_end = &ctx->common->process.worker[ctx->common->process.workers_end]; cur < ___worker_end; cur++)
+#define SHUSO_EACH_WORKER(S, cur) \
+  for(shuso_process_t *cur = &S->common->process.worker[S->common->process.workers_start], *___worker_end = &S->common->process.worker[S->common->process.workers_end]; cur < ___worker_end; cur++)
 #define shuso_set_nonblocking(fd) fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_NONBLOCK)
 
+/*
+shuso_t *shuso_state(...) -- get shuso state for a variety of inputs, depending on the input types
+*/
+/* macro wizardry to have type-overloaded variadic super-convenient shuso_state() call */
+#define ___SHUSO_STATE_VARARG(_1,_2,NAME,...) NAME
+#define shuso_state(...) ___SHUSO_STATE_VARARG(__VA_ARGS__, SHUSO_STATE_2, SHUSO_STATE_1, ___END__VARARG__LIST__)(__VA_ARGS__)
 
-void shuso_listen(shuso_t *ctx, shuso_hostinfo_t *bind, shuso_handler_fn handler, shuso_handler_fn cleanup, void *pd);
+#define ___shuso_state_from_raw_ev_watcher(loop, ev) shuso_state_from_raw_ev_watcher(loop, (ev_watcher *)ev)
+
+#define SHUSO_STATE_1(src) \
+  _Generic((src), \
+    lua_State *         : shuso_state_from_lua, \
+    shuso_ev_io *       : shuso_state_from_ev_io, \
+    shuso_ev_timer *    : shuso_state_from_ev_timer, \
+    shuso_ev_child *    : shuso_state_from_ev_child, \
+    shuso_ev_signal *   : shuso_state_from_ev_signal, \
+    ev_watcher *        : shuso_state_from_raw_ev_watcher, \
+    ev_timer *          : shuso_state_from_raw_ev_timer, \
+    ev_child *          : shuso_state_from_raw_ev_child, \
+    ev_signal *         : shuso_state_from_raw_ev_signal \
+  )(src)
+
+#define SHUSO_STATE_2(loop, ev) _Generic((ev), \
+    shuso_ev_io *       : shuso_state_from_ev_io, \
+    shuso_ev_timer *    : shuso_state_from_ev_timer, \
+    shuso_ev_child *    : shuso_state_from_ev_child, \
+    shuso_ev_signal *   : shuso_state_from_ev_signal, \
+    ev_watcher *        : shuso_state_from_raw_ev_watcher, \
+    ev_io *             : shuso_state_from_raw_ev_io, \
+    ev_timer *          : shuso_state_from_raw_ev_timer, \
+    ev_child *          : shuso_state_from_raw_ev_child, \
+    ev_signal *         : shuso_state_from_raw_ev_signal, \
+    default             : shuso_state_from_raw_ev_dangerously_any \
+  )(loop, ev)
+/* here endeth the magic. it's not actually wizardry, it's just really ugly */
+
+void shuso_listen(shuso_t *S, shuso_hostinfo_t *bind, shuso_handler_fn handler, shuso_handler_fn cleanup, void *pd);
+
   
 //network utilities
-bool shuso_setsockopt(shuso_t *ctx, int fd, shuso_sockopt_t *opt);
+bool shuso_setsockopt(shuso_t *S, int fd, shuso_sockopt_t *opt);
 #endif //SHUTTLESOCK_H

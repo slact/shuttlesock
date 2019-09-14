@@ -1,6 +1,7 @@
 #ifndef SHUTTLESOCK_COMMON_H
 #define SHUTTLESOCK_COMMON_H
 #include <stdbool.h>
+#include <stdint.h>
 
 typedef struct ev_loop shuso_loop; //don't want to write struct ev_loop everywhere or use EV_A and EV_P_ macros, they're ugly.
 
@@ -50,7 +51,8 @@ typedef struct shuso_ev_timer_s shuso_ev_timer;
 typedef struct shuso_ev_child_s shuso_ev_child;
 typedef struct shuso_ev_signal_s shuso_ev_signal;
 typedef union shuso_ev_any_u shuso_ev_any;
-
+typedef struct shuso_mevent_s shuso_mevent_t;
+typedef struct shuso_mevent_registry_s shuso_mevent_registry_t;
 typedef int lua_reference_t;
 
 typedef struct shuso_s shuso_t;
@@ -65,12 +67,15 @@ typedef struct shuso_sockopts_s shuso_sockopts_t;
 typedef struct shuso_sockopt_s shuso_sockopt_t;
 typedef struct shuso_socket_s shuso_socket_t;
 
-typedef void shuso_socket_fn(shuso_t *ctx, shuso_socket_t *socket);
-typedef void shuso_socket_listener_fn(shuso_t *ctx, shuso_socket_t *socket, void *pd);
+typedef void shuso_socket_fn(shuso_t *S, shuso_socket_t *socket);
+typedef void shuso_socket_listener_fn(shuso_t *S, shuso_socket_t *socket, void *pd);
 
-typedef void shuso_handler_fn(shuso_t *ctx, void *pd);
-typedef bool shuso_config_set_fn(shuso_t *ctx, void *config, shuso_config_setting_t *cf);
-typedef void *shuso_config_init_fn(shuso_t *ctx, void *parent);
+typedef void shuso_handler_fn(shuso_t *S, void *pd);
+typedef bool shuso_config_set_fn(shuso_t *S, void *config, shuso_config_setting_t *cf);
+
+typedef void *shuso_config_init_fn(shuso_t *S, void *parent);
 typedef struct shuso_runtime_handlers_s shuso_runtime_handlers_t;
 typedef struct shuso_config_handlers_s shuso_config_handlers_t;
+
+typedef void shuso_mevent_fn(shuso_t *S, intptr_t code, void *data, void *pd);
 #endif /*SHUTTLESOCK_COMMON_H*/
