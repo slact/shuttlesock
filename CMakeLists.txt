@@ -39,6 +39,13 @@ target_include_directories(shuttlesock PRIVATE src)
 include(TestTypeofKeyword)
 test_typeof_keyword(SHUTTLESOCK_HAVE_TYPEOF)
 
+# _Generic macro check
+include(TestTypeGenericMacros)
+test_type_generic_macros(SHUTTLESOCK_HAVE_TYPE_GENERIC_MACROS)
+if(NOT SHUTTLESOCK_HAVE_TYPE_GENERIC_MACROS)
+  message(FATAL_ERROR "Shuttlesock requires the compiler to support the _Generic macro. Yours doesn't.")
+endif()
+
 #pthreads
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
