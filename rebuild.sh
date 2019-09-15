@@ -301,7 +301,7 @@ if [[ $build_type == "DebugCoverage" ]]; then
     print -n  "\n${GREEN}>> Preparing coverage results...${ALL_OFF}"
     if [[ $compiler == "gcc" ]]; then
       mkdir coverage-report 2>/dev/null
-      gcovr --root ../src --html-details -o coverage-report/index.html ./
+      gcovr --root ../src --html-details -o coverage-report/index.html --gcov-ignore-parse-errors  ./
     elif [[ $compiler == "clang" ]]; then
       llvm-profdata merge -sparse *.profraw -o .profdata
       llvm-cov show -format="html" -output-dir="coverage-report" -instr-profile=".profdata"  -ignore-filename-regex="test/.*" -ignore-filename-regex="lib/.*" "libshuttlesock.so" -object "shuso_test"
