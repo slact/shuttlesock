@@ -150,6 +150,20 @@ static int lua_ref_handler_function_or_coroutine(lua_State *L, int nargs, lua_St
   return LUA_NOREF;
 }
 
+static int lua_push_nil_error(lua_State *L) {
+  shuso_t *S = shuso_state(L);
+  lua_pushnil(L);
+  const char *errmsg = shuso_last_error(S);
+  lua_pushstring(L, errmsg == NULL ? "no error" : errmsg);
+  return 2;
+}
+
+static int lua_shuso_error(lua_State *L) {
+  shuso_t *S = shuso_state(L);
+  const char *errmsg = shuso_last_error(S);
+  return luaL_error(L, "%s", errmsg == NULL ? "(unknown error)" : errmsg);
+}
+
 bool shuso_lua_set_ctx(shuso_t *S) {
   lua_State *L = S->lua.state;
   lua_pushlightuserdata(L, S);
@@ -185,9 +199,7 @@ int Lua_shuso_configure_file(lua_State *L) {
   const char *path = luaL_checkstring(L, 1);
   shuso_t    *S = shuso_state(L);
   if(!shuso_configure_file(S, path)) {
-    lua_pushnil(L);
-    lua_pushstring(L, S->error.msg);
-    return 2;
+    return lua_push_nil_error(L);
   }
   lua_pushboolean(L, 1);
   return 1;
@@ -197,9 +209,7 @@ int Lua_shuso_configure_string(lua_State *L) {
   const char *string = luaL_checkstring(L, 2);
   shuso_t    *S = shuso_state(L);
   if(!shuso_configure_string(S, name, string)) {
-    lua_pushnil(L);
-    lua_pushstring(L, S->error.msg);
-    return 2;
+    return lua_push_nil_error(L);
   }
   lua_pushboolean(L, 1);
   return 1;
@@ -354,7 +364,7 @@ static int Lua_shuso_configure_handlers(lua_State *L) {
   
   if(!shuso_configure_handlers(S, &runtime_handlers)) {
     free_handlers_data(L, hdata);
-    return luaL_error(L, S->error.msg);
+    return lua_shuso_error(L);
   }
   
   lua_pushboolean(L, 1);
@@ -363,7 +373,7 @@ static int Lua_shuso_configure_handlers(lua_State *L) {
 static int Lua_shuso_configure_finish(lua_State *L) {
   shuso_t *S = shuso_state(L);
   if(!shuso_configure_finish(S)) {
-    return luaL_error(L, S->error.msg);
+    return lua_shuso_error(L);
   }
   lua_pushboolean(L, 1);
   return 1;
@@ -372,7 +382,7 @@ static int Lua_shuso_configure_finish(lua_State *L) {
 static int Lua_shuso_destroy(lua_State *L) {
   shuso_t *S = shuso_state(L);
   if(!shuso_destroy(S)) {
-    return luaL_error(L, S->error.msg);
+    return lua_shuso_error(L);
   }
   lua_pushboolean(L, 1);
   return 1;
@@ -381,7 +391,7 @@ static int Lua_shuso_destroy(lua_State *L) {
 static int Lua_shuso_run(lua_State *L) {
   shuso_t *S = shuso_state(L);
   if(!shuso_run(S)) {
-    return luaL_error(L, S->error.msg);
+    return lua_shuso_error(L);
   }
   lua_pushboolean(L, 1);
   return 1;
@@ -413,7 +423,7 @@ static int Lua_shuso_stop(lua_State *L) {
   shuso_t       *S = shuso_state(L);
   shuso_stop_t   lvl = stop_level_string_arg_to_enum(L, "ask", 1);
   if(!shuso_stop(S, lvl)) {
-    return luaL_error(L, S->error.msg);
+    return lua_shuso_error(L);
   }
   lua_pushboolean(L, 1);
   return 1;
@@ -422,7 +432,7 @@ static int Lua_shuso_stop(lua_State *L) {
 static int Lua_shuso_spawn_manager(lua_State *L) {
   shuso_t *S = shuso_state(L);
   if(!shuso_spawn_manager(S)) {
-    return luaL_error(L, S->error.msg);
+    return lua_shuso_error(L);
   }
   lua_pushboolean(L, 1);
   return 1;
@@ -431,7 +441,7 @@ static int Lua_shuso_stop_manager(lua_State *L) {
   shuso_t      *S = shuso_state(L);
   shuso_stop_t  lvl = stop_level_string_arg_to_enum(L, "ask", 1);
   if(!shuso_stop_manager(S, lvl)) {
-    return luaL_error(L, S->error.msg);
+    return lua_shuso_error(L);
   }
   lua_pushboolean(L, 1);
   return 1;
@@ -441,7 +451,7 @@ static int Lua_shuso_spawn_worker(lua_State *L) {
   int         workernum = S->common->process.workers_end;
   shuso_process_t   *proc = &S->common->process.worker[workernum];
   if(!shuso_spawn_worker(S, proc)) {
-    return luaL_error(L, S->error.msg);
+    return lua_shuso_error(L);
   }
   lua_pushboolean(L, 1);
   return 1;
@@ -455,7 +465,7 @@ static int Lua_shuso_stop_worker(lua_State *L) {
   shuso_process_t   *proc = &S->common->process.worker[workernum];
   shuso_stop_t       lvl = stop_level_string_arg_to_enum(L, "ask", 2);
   if(!shuso_stop_worker(S, proc, lvl)) {
-    return luaL_error(L, S->error.msg);
+    return lua_shuso_error(L);
   }
   S->common->process.workers_end++;
   lua_pushboolean(L, 1);
@@ -474,7 +484,7 @@ static int Lua_shuso_set_log_fd(lua_State *L) {
     return luaL_error(L, "couldn't dup file");
   }
   if(!shuso_set_log_fd(S, fd2)) {
-    return luaL_error(L, S->error.msg);
+    return lua_shuso_error(L);
   }
   lua_pushboolean(L, 1);
   return 1;
@@ -1270,7 +1280,7 @@ static int Lua_shuso_ipc_send_fd(lua_State *L) {
   shuso_t *S = shuso_state(L);
   bool ok = shuso_ipc_send_fd(S, proc, fd, ref, NULL);
   if(!ok) {
-    return luaL_error(L, "%s", S->error.msg);
+    return lua_shuso_error(L);
   }
   lua_pushboolean(L, 1);
   return 1;
@@ -1317,7 +1327,6 @@ int Lua_shuso_ipc_receive_fd_start(lua_State *L) {
   uintptr_t     fd_receiver_ref = luaL_checkinteger(L, 1);
   const char   *description = luaL_checkstring(L, 2);
   double        timeout_sec = luaL_checknumber(L, 3);
-  shuso_t      *S = shuso_state(L);
   
   lua_get_registry_table(L, "shuttlesock.ipc.fd_receiver");
   lua_pushvalue(L, 1);
@@ -1337,7 +1346,7 @@ int Lua_shuso_ipc_receive_fd_start(lua_State *L) {
     lua_pushvalue(L, 1);
     lua_pushnil(L);
     lua_rawset(L, -3);
-    return luaL_error(L, S->error.msg);
+    return lua_shuso_error(L);
   }
   
   lua_pushboolean(L, 1);
@@ -1349,7 +1358,6 @@ static void lua_receive_fd_callback(shuso_t *S, bool ok, uintptr_t ref, int fd, 
 }
 
 int Lua_shuso_ipc_receive_fd_finish(lua_State *L) {
-  shuso_t      *S = shuso_state(L);
   uintptr_t     fd_receiver_ref = luaL_checkinteger(L, 1);
   lua_get_registry_table(L, "shuttlesock.ipc.fd_receiver");
   lua_pushvalue(L, 1);
@@ -1364,9 +1372,7 @@ int Lua_shuso_ipc_receive_fd_finish(lua_State *L) {
   lua_rawset(L, -3);
   
   if(!shuso_ipc_receive_fd_finish(shuso_state(L), fd_receiver_ref)) {
-    lua_pushnil(L);
-    lua_pushstring(L, S->error.msg);
-    return 2;
+    return lua_push_nil_error(L);
   }
   lua_pushboolean(L, 1);
   return 1;

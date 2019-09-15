@@ -611,6 +611,13 @@ bool shuso_set_error_errno(shuso_t *S, const char *fmt, ...) {
   return false;
 }
 
+const char *shuso_last_error(shuso_t *S) {
+  return S->error.msg;
+}
+int shuso_last_errno(shuso_t *S) {
+  return S->error.error_number;
+}
+
 
 shuso_process_t *shuso_procnum_to_process(shuso_t *S, int procnum) {
  if(procnum < SHUTTLESOCK_MASTER || procnum > SHUTTLESOCK_MAX_WORKERS) {
