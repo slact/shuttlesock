@@ -1,5 +1,4 @@
 #!/usr/bin/env ruby
-require "pry"
 
 ANALYZE_FLAGS=['--use-cc=clang', '-maxloop', '100']
 ANALYZE_ALPHA_CHECKERS=[:core, :deadcode, :security, :unix]
