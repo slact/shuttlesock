@@ -101,19 +101,19 @@ shuso_t *shuso_state_from_raw_ev_watcher(struct ev_loop *loop, ev_watcher *w) {
 }
 #else
 shuso_t *shuso_state_from_ev_io(struct ev_loop *loop, shuso_ev_io *w) {
-  return shuso_ev_data(w);
+  return ev_userdata(loop);
 }
 shuso_t *shuso_state_from_ev_timer(struct ev_loop *loop, shuso_ev_timer *w) {
-  return shuso_ev_data(w);
+  return ev_userdata(loop);
 }
 shuso_t *shuso_state_from_ev_signal(struct ev_loop *loop, shuso_ev_signal *w) {
-  return shuso_ev_data(w);
+  return ev_userdata(loop);
 }
 shuso_t *shuso_state_from_ev_child(struct ev_loop *loop, shuso_ev_child *w) {
-  return shuso_ev_data(w);
+  return ev_userdata(loop);
 }
 shuso_t *shuso_state_from_raw_ev_watcher(struct ev_loop *loop, ev_watcher *w) {
-  return w->data;
+  return ev_userdata(loop);
 }
 #endif
 shuso_t *shuso_state_from_raw_ev_io(struct ev_loop *loop, ev_io *w) {
@@ -132,6 +132,7 @@ shuso_t *shuso_state_from_raw_ev_dangerously_any(struct ev_loop *loop, void *w){
   //this will work on shuso_ev_* events, and may crash and burn for anything else
   return shuso_state_from_raw_ev_watcher(loop, (ev_watcher *)w);
 }
+
 shuso_ev_timer *shuso_add_timer_watcher(shuso_t *S, ev_tstamp after, ev_tstamp repeat, shuso_ev_timer_fn *cb, void *pd) {
   shuso_ev_timer_link_t  *wl = malloc(sizeof(*wl));
   shuso_ev_timer         *w;
