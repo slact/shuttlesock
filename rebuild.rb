@@ -28,6 +28,16 @@ class Opts
       end
     end
   end
+  
+  class OptsDSL
+    def initialize(opts)
+      @opts = opts
+    end
+    def method_missing(*arg)
+      @opts.define_option(*arg)
+    end
+  end
+  
   def initialize(&block)
     @arg_processed={}
     @opts = {}
@@ -38,25 +48,25 @@ class Opts
     @vars={}
     @exports={}
     @build_type = "Debug"
-    instance_eval &block
+    OptsDSL.new(self).instance_eval &block
     
-    __process && __generate_configure_script && __configure && __make && __run
+    process && generate_configure_script && configure && make && run
     if @vars[:clean_after]
       system "rm -Rf ./build"
     end
   end
   def method_missing(name, type, opts)
-    __define_option name, type, opts
+    define_option name, type, opts
   end
-  def __define_option(name, type, opt={})
+  def define_option(name, type, opt={})
     @opts[name]=Opt.new(name, type, opt)
   end
   
-  def __generate_configure_script
-    puts "nope"
+  def generate_configure_script
+    self
   end
   
-  def __opthelp
+  def opthelp
     h = []
     @opts.values.each do |opt|
       h << "  " + (([opt.display_as || opt.name] + (opt.alt || [])).join " ")
@@ -65,7 +75,7 @@ class Opts
     return h.join "\n"
   end
   
-  def __process_arg(arg)
+  def process_arg(arg)
     #arg.gsub!("_", "-")
     return self if @arg_processed[arg.to_sym]
     @arg_processed[arg.to_sym] = true
@@ -82,7 +92,7 @@ class Opts
         @exports.merge!(opt.export || {})
         @build_type = opt.build || @build_type
         (opt.imply || []).each do |implied_opt|
-          __process_arg implied_opt
+          process_arg implied_opt
         end
       end
     end
@@ -92,10 +102,10 @@ class Opts
     return found
   end
   
-  def __process
+  def process
     ARGV.each do |arg|
-      if not __process_arg arg
-        $stderr.puts "invalid arg #{arg}. valid args are: \n #{__opthelp}"
+      if not process_arg arg
+        $stderr.puts "invalid arg #{arg}. valid args are: \n #{opthelp}"
         return false
       end
     end
@@ -103,10 +113,9 @@ class Opts
     if @vars[:help]
       puts "usage: ./rebuild.rb [args]"
       puts "possible arguments are:"
-      puts __opthelp
+      puts opthelp
       return false
     end
-      
     @exports.each do |n, v|
       ENV[n.to_s]= v==true ? "1" : (v == "false" ? "" : v.to_s)
     end
@@ -123,15 +132,14 @@ class Opts
     exp={}
     @exports.each{|k,v| exp[k.to_s]=v}
     @exports=exp
-    
     self
   end
   
-  def __env
+  def env
     @exports.collect{|k,v| "#{k}=#{v}"}.join(" ")
   end
   
-  def __configure
+  def configure
     # we need this stupid hack because cmake the idiot forgets its command-line defines if
     #  CMAKE_C_COMPILER is changed on a pre-existing build
     @last_used_compiler_file="./build/.last_used_compiler.because_cmake_is_terrible"
@@ -169,9 +177,9 @@ class Opts
     if @vars[:clang_analyze]
       @scan_build=["scan-build"] + @analyze_flags
       @scan_build_view=@scan_build + ["--view"]
-      puts yellow(">> #{__env} ") + blue(@scan_build.join " ") + yellow(" cmake \\")
+      puts yellow(">> #{env} ") + blue(@scan_build.join " ") + yellow(" cmake \\")
     else
-      puts yellow(">> #{__env} cmake \\")
+      puts yellow(">> #{env} cmake \\")
     end
     
     
@@ -190,7 +198,7 @@ class Opts
     self
   end
   
-  def __make
+  def make
     build_opts=[]
     if @vars[:verbose_build]
       if (`cmake --build 2>&1`).match("--verbose")
@@ -223,7 +231,7 @@ class Opts
     @make_result && self
   end
   
-  def __run
+  def run
     return self unless @vars[:run_test]
     Dir.chdir "./build"
     puts green "Running tests..."
@@ -325,7 +333,7 @@ Opts.new do
   release_debug :debug_flag,
     build: "RelWithDebInfo"
   
-  __define_option :test, :debug_flag,
+  self.test :debug_flag,
     set: {run_test: true}
   
   nothread :debug_flag,
@@ -344,10 +352,10 @@ Opts.new do
   include_what_you_use :debug_flag,
     cmake_define: {CMAKE_C_INCLUDE_WHAT_YOU_USE: "/usr/bin/include-what-you-use;-Xiwyu;--verbose=1"}
   
-  __define_option :"passthrough", :debug_flag,
+  passthrough :debug_flag,
     display_as: "-...",
     info: "passthrough configure option directly to cmake",
-    match: /(\-.+)/,
+    match: /^(\-.+)/,
     repeatable: true,
     run: (Proc.new do |opt, arg|
       opt.cmake_opts=[arg]
