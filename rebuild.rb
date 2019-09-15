@@ -310,6 +310,16 @@ Opts.new do
     cmake_define: {SHUTTLESOCK_STALLOC_TRACK_SPACE: true}
   
   sanitize :debug_flag,
+    alt: ['clang-sanitize', 'sanitize-memory'],
+    info: 'build with the clang memory sanitizer',
+    build: 'DebugMSan',
+    imply: [:clang],
+    cmake_define: {SHUTTLESOCK_SANITIZE: true}
+  
+  sanitize_address :debug_flag,
+    info: 'build with the clang address sanitizer',
+    build: 'DebugASan',
+    imply: [:clang],
     cmake_define: {SHUTTLESOCK_SANITIZE: true}
   
   verbose :flag, alt: [:v],

@@ -6,6 +6,10 @@
 
 #include <glob.h>
 
+#if defined(SHUTTLESOCK_SANITIZE) || defined(SHUTTLESOCK_VALGRIND) || defined(__clang_analyzer__)
+#define INIT_LUA_ALLOCS 1
+#endif
+
 static char *lua_dbgval(lua_State *L, int n) {
   static char buf[255];
   int         type = lua_type(L, n);
@@ -82,13 +86,40 @@ static int shuso_Lua_glob(lua_State *L) {
   }
 }
 
+#ifdef INIT_LUA_ALLOCS
+static void *initializing_allocator(void *ud, void *ptr, size_t osize, size_t nsize) {
+  //printf("ptr: %p, osz: %d, nsz: %d\n", ptr, (int)osize, (int)nsize);
+  (void)ud;
+  if (nsize == 0) {
+  free(ptr);
+    return NULL;
+  }
+  else {
+    void *nptr = realloc(ptr, nsize);
+    if(!ptr) {
+      memset(nptr, '0', nsize);
+    }
+    else if(nsize > osize) {
+      memset((char *)nptr+(nsize - osize), '0', nsize - (nsize - osize));
+    }
+    return nptr;
+  }
+}
+#endif
+
 bool shuso_lua_create(shuso_t *S) {
   if(S->procnum == SHUTTLESOCK_MASTER) {
     assert(S->lua.state == NULL);
   }
+#ifndef INIT_LUA_ALLOCS
   if((S->lua.state = luaL_newstate()) == NULL) {
     return false;
   }
+#else
+  if((S->lua.state = lua_newstate(initializing_allocator, NULL)) == NULL) {
+    return false;
+  }
+#endif
   luaL_openlibs(S->lua.state);
   //initialize shuttlesocky lua env
   

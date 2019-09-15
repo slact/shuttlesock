@@ -4,12 +4,59 @@
 #include <errno.h>
 #include <sys/uio.h>
 
+typedef struct {
+  size_t sz;
+  char   data[];
+} aalloc_t;
+
+#if defined(SHUTTLESOCK_SANITIZE) || defined(SHUTTLESOCK_VALGRIND) || defined(__clang_analyzer__)
+#define INIT_ARES_ALLOCS 1
+#endif
+
+#ifdef INIT_ARES_ALLOCS
+static void *init_malloc(size_t sz) {
+  aalloc_t *a = calloc(1, sizeof(*a) + sz);
+  if(a == NULL) {
+    return NULL;
+  }
+  a->sz = sz;
+  return (void *)&a->data;
+}
+static void init_free(void *ptr) {
+  aalloc_t *a = container_of(ptr, aalloc_t, data);
+  free(a);
+}
+static void *init_realloc(void *ptr, size_t sz) {
+  if(ptr) {
+    aalloc_t *a = container_of(ptr, aalloc_t, data);
+    a = realloc(a, sz);
+    if(a == NULL) {
+      return NULL;
+    }
+    if(a->sz < sz) {
+      memset(&a->data[a->sz], '0', sz - a->sz);
+    }
+    return (void *)&a->data;
+  }
+  else {
+    return init_malloc(sz);
+  }
+}
+#endif
+
 bool shuso_resolver_global_init(const char **err) {
   int rc;
+#ifndef INIT_ARES_ALLOCS
   if((rc = ares_library_init(ARES_LIB_INIT_NONE)) != 0) {
     *err = ares_strerror(rc);
     return false;
   }
+#else
+  if((rc = ares_library_init_mem(ARES_LIB_INIT_NONE, init_malloc, init_free, init_realloc)) != 0) {
+    *err = ares_strerror(rc);
+    return false;
+  }
+#endif
   return true;
 }
 

@@ -3,6 +3,10 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#ifndef container_of
+#define container_of(ptr, type, member) ((type *)(void *)((char *)(1 ? (ptr) : &((type *)0)->member) - offsetof(type, member)))
+#endif
+
 typedef struct ev_loop shuso_loop; //don't want to write struct ev_loop everywhere or use EV_A and EV_P_ macros, they're ugly.
 
 typedef enum {
