@@ -48,7 +48,7 @@ local config_directives = {
     internal_handler = function(directive, default, config, shuttlesock_ctx)
       local path = directive.values[1].raw
       
-      local include_path = config:getDirective("include_path", directive.parent)
+      local include_path = config:get_directive("include_path", directive.parent)
       local paths
       if path:match("[%[%]%?%*]") then
         paths = Config.glob(include_path, directive.values[1])
@@ -90,8 +90,8 @@ local config_directives = {
         end
       end
       
-      assert(config:replaceToken(directive, table.unpack(tokens)))
-      assert(config:replaceDirective(directive, table.unpack(directives)))
+      assert(config:replace_token(directive, table.unpack(tokens)))
+      assert(config:replace_directive(directive, table.unpack(directives)))
       
       config.config_include_stack = nil
       
@@ -112,11 +112,11 @@ function Parser.new(name, string, root_directive)
   }
   setmetatable(self, parser_mt)
   if not root_directive then
-    self:pushDirective("root", "config", true)
+    self:push_directive("root", "config", true)
   else
-    self:pushDirective(root_directive, nil, true)
+    self:push_directive(root_directive, nil, true)
   end
-  self:pushBlock("ROOT")
+  self:push_block("ROOT")
   self.root = self.stack[1]
   return self
 end
@@ -148,11 +148,11 @@ do --parser
       return self.errmsg
     end
   end
-  function parser:lastError()
+  function parser:last_error()
     return self.errmsg
   end
   
-  function parser:inChunkType(chunk_type, stack_position)
+  function parser:in_chunk_type(chunk_type, stack_position)
     assert(type(chunk_type) == "string")
     stack_position = stack_position or 0
     assert(type(stack_position) == "number" and stack_position <= 0)
@@ -160,20 +160,20 @@ do --parser
     return chunk.type == chunk_type and chunk
   end
   
-  function parser:inDirective(stack_position)
-    return self:inChunkType("directive", stack_position)
+  function parser:in_directive(stack_position)
+    return self:in_chunk_type("directive", stack_position)
   end
-  function parser:inBlock(stack_position)
-    return self:inChunkType("block", stack_position)
+  function parser:in_block(stack_position)
+    return self:in_chunk_type("block", stack_position)
   end
   
-  function parser:pushDirective(directive_name, module_name, is_root)
+  function parser:push_directive(directive_name, module_name, is_root)
     if is_root then
       assert(self.top == nil)
       assert(#self.stack == 0)
     else
-      assert(self:inBlock())
-      assert(self:inDirective(-1))
+      assert(self:in_block())
+      assert(self:in_directive(-1))
     end
     
     local directive
@@ -210,8 +210,8 @@ do --parser
     return true
   end
   
-  function parser:popDirective()
-    local directive = assert(self:inDirective())
+  function parser:pop_directive()
+    local directive = assert(self:in_directive())
     directive.position.last = self.cur
     
     table.remove(self.stack)
@@ -219,19 +219,19 @@ do --parser
     if self.top == nil then
       assert(directive == self.root)
     else
-      local block = assert(self:inBlock())
+      local block = assert(self:in_block())
       table.insert(block.directives, directive)
       table.insert(block.tokens, directive)
     end
     return true
   end
   
-  function parser:addNewline(pos)
+  function parser:add_newline(pos)
     table.insert(self.top.tokens, {type="newline", position = pos, value = ""})
     return self.top
   end
   
-  function parser:addComment(comment, pos)
+  function parser:add_comment(comment, pos)
     assert(type(comment) == "string")
     assert(type(pos) == "number")
     local chunk = self.top
@@ -241,14 +241,14 @@ do --parser
     return chunk
   end
   
-  function parser:addSemicolon(pos)
-    local directive = assert(self:inDirective())
+  function parser:add_semicolon(pos)
+    local directive = assert(self:in_directive())
     local semi = {type="semicolon", position = pos}
     table.insert(directive.tokens, semi)
     return directive
   end
   
-  function parser:addValueToDirective(value_type, val)
+  function parser:add_value_to_directive(value_type, val)
     if val == nil then
       val = self:match() --last match
     end
@@ -262,7 +262,7 @@ do --parser
       raw = val
     }
     
-    local directive = assert(self:inDirective())
+    local directive = assert(self:in_directive())
     if not directive.position.values_first then
       directive.position.values_first = value.position.first
     end
@@ -272,7 +272,7 @@ do --parser
     return true
   end
   
-  function parser:pushBlock(block_name)
+  function parser:push_block(block_name)
     local block = {
       type = "block",
       name = block_name,
@@ -285,37 +285,37 @@ do --parser
       directives = {},
       comments = {},
       tokens = {},
-      source_directive = assert(self:inDirective())
+      source_directive = assert(self:in_directive())
     }
     table.insert(self.stack, block)
     self.top = block
     return true
   end
   
-  function parser:popBlock()
+  function parser:pop_block()
     local block = self.top
     table.remove(self.stack)
     self.top = self.stack[#self.stack]
-    local directive = assert(self:inDirective())
+    local directive = assert(self:in_directive())
     assert(not directive.block)
     directive.block = block
     --finishing a block means we are also finishing the directive it belongs to
-    self:popDirective()
+    self:pop_directive()
     return true
   end
 
   function parser:parse()
     local token_count = 0
-    for _ in self:eachToken() do
+    for _ in self:each_token() do
       token_count = token_count + 1
     end
     
-    if self:inDirective() == "directive" then
+    if self:in_directive() == "directive" then
       return nil, self:error("unexpected end of file, expected \";\"")
-    elseif self:inBlock() == "block" and self.top.source_directive ~= self.root then
+    elseif self:in_block() == "block" and self.top.source_directive ~= self.root then
       return nil, self:error("unexpected end of file, expected \"}\"")
     else
-      self:popBlock()
+      self:pop_block()
     end
       
     return self.root
@@ -347,24 +347,24 @@ do --parser
     return self.str:find(pattern, self.cur + (offset or 0), simple)
   end
   
-  function parser:eachToken()
+  function parser:each_token()
     --for loop iterator
     return function()
-      repeat until not (self:skipSpace() or self:skipComment())
-      local token = self:nextToken()
+      repeat until not (self:skip_space() or self:skip_comment())
+      local token = self:next_token()
       return token
     end
   end
   
-  function parser:skipSpace(spacechars)
+  function parser:skip_space(spacechars)
     spacechars = spacechars or " \t\r\n"
     local m = self:match("^["..spacechars.."]+", "last_space")
-    if m and self:inDirective() then
+    if m and self:in_directive() then
       local nl = nil
       repeat
         nl = m:find("\n", nl)
         if nl then
-          self:addNewline(self.cur - #m + nl - 1)
+          self:add_newline(self.cur - #m + nl - 1)
           nl = nl+1
         end
       until not nl
@@ -372,15 +372,15 @@ do --parser
     return m
   end
   
-  function parser:skipComment()
+  function parser:skip_comment()
     local m = self:match("^#[^\n]+", "last_comment")
     if m then
-      self:addComment(m, self.cur - #m)
+      self:add_comment(m, self.cur - #m)
     end
     return m
   end
   
-  function parser:matchString()
+  function parser:match_string()
     local quote_char = self.str:sub(self.cur, self.cur)
     local unquote
     local offset = 1
@@ -392,17 +392,17 @@ do --parser
           --string end found
           self.last_match = self.str:sub(self.cur, unquote)
           self.cur = unquote + 1
-          return self:addValueToDirective("string")
+          return self:add_value_to_directive("string")
         end
       end
     until not unquote
     return nil, "unterminated string"
   end
   
-  function parser:matchVariable()
+  function parser:match_variable()
     local var = self:match("^%$([%w%.%_]+)")
     if var then
-      return self:addValueToDirective("variable")
+      return self:add_value_to_directive("variable")
     end
     
     if self:match("^%$[^%s;]+") then
@@ -414,14 +414,14 @@ do --parser
     end
   end
   
-  function parser:matchValue()
+  function parser:match_value()
     if not self:match("^[^%s;]+") then
       return nil, self:error("invalid value")
     end
-    return self:addValueToDirective("value")
+    return self:add_value_to_directive("value")
   end
   
-  function parser:matchDirectiveName()
+  function parser:match_directive_name()
     if not self:match("^[^%s]+") then
       if self:match("^;") then
         self:error("unexpected \";\"")
@@ -432,7 +432,7 @@ do --parser
       else
         self:error("expected config directive")
       end
-      return nil, self:lastError()
+      return nil, self:last_error()
     end
     local module_name, name = nil, self:match()
     if name:match("%.") then
@@ -441,34 +441,34 @@ do --parser
         return nil, self:error("invalid config directive name \""..self:match().."\"")
       end
     end
-    self:pushDirective(name, module_name)
+    self:push_directive(name, module_name)
     return true
   end
   
-  function parser:matchSemicolon()
+  function parser:match_semicolon()
     assert(self:match("^;"))
-    self:addSemicolon(self.cur - 1)
-    self:skipSpace(" \t")
-    self:skipComment()
-    return self:popDirective()
+    self:add_semicolon(self.cur - 1)
+    self:skip_space(" \t")
+    self:skip_comment()
+    return self:pop_directive()
   end
   
-  function parser:printStack()
+  function parser:print_stack()
     for _, v in ipairs(self.stack) do
       print("  ", v.name, v.type)
     end
   end
   
-  function parser:nextToken()
+  function parser:next_token()
     if self.cur >= #self.str then
       return nil --we're done
     end
     
-    if self:inBlock() then
+    if self:in_block() then
       if self:match("^}") then
-        return self:popBlock()
+        return self:pop_block()
       else
-        local ok, err = self:matchDirectiveName()
+        local ok, err = self:match_directive_name()
         if not ok then
           return nil, self:error(err)
         end
@@ -477,22 +477,22 @@ do --parser
     end
     
     
-    assert(self:inDirective())
+    assert(self:in_directive())
     local char = self.str:sub(self.cur, self.cur)
     local ok, err
     if char == "\"" or char == "'" then
-      ok, err = self:matchString()
+      ok, err = self:match_string()
     elseif char == "$" then
-      ok, err = self:matchVariable()
+      ok, err = self:match_variable()
     elseif char == "{" then
       self.cur = self.cur + 1
-      ok, err = self:pushBlock()
+      ok, err = self:push_block()
     elseif char == "}" then
       err = "unexpected \"}\""
     elseif char == ";" then
-      ok, err = self:matchSemicolon()
+      ok, err = self:match_semicolon()
     else
-      ok, err = self:matchValue()
+      ok, err = self:match_value()
     end
     
     if not ok then
@@ -511,7 +511,6 @@ do --parser
     while true do
       local nl = self.str:find("\n", cur, true)
       if not nl then --no more newlines
-        print "no more newlines"
         break
       elseif nl < pos then --newline in-range
         line = line + 1
@@ -631,7 +630,7 @@ do --config
     return true
   end
   
-  function config:getDirective(name, context)
+  function config:get_directive(name, context)
     if not context then context = self.root end
     local module
     if not name:match("%.") then
@@ -655,7 +654,7 @@ do --config
     return nil, "directive not found"
   end
   
-  function config:findHandlerForDirective(directive)
+  function config:find_handler_for_directive(directive)
     if directive.full_name then
       local handler = self.handlers[directive.full_name]
       if handler then
@@ -669,7 +668,7 @@ do --config
       if not possible_handlers then
         return nil, "unknown directive " .. directive.name
       end
-      self:getDirectivePath(directive)
+      self:get_directive_path(directive)
       local matches = {}
       for _, handler in ipairs(possible_handlers) do
         if match_path(directive, handler) then
@@ -690,7 +689,7 @@ do --config
     end
   end
   
-  function config:getDirectivePath(directive)
+  function config:get_directive_path(directive)
     if directive.path then
       return directive.path
     end
@@ -733,7 +732,7 @@ do --config
     self.root = parser.root
     
     table.insert(self.parsers, parser)
-    for directive in self:eachDirective() do
+    for directive in self:each_directive() do
       directive.parser_index = #self.parsers
     end
     
@@ -745,9 +744,9 @@ do --config
   end
 
   function config:handle(handlers, shuttlesock_ctx)
-    for directive in self:eachDirective() do
+    for directive in self:each_directive() do
       local ok, handler, err
-      handler, err = self:findHandlerForDirective(directive)
+      handler, err = self:find_handler_for_directive(directive)
       if handler then
         if handler.handler then
           ok, err = handler.handler(directive.values, handler.default, shuttlesock_ctx)
@@ -770,21 +769,21 @@ do --config
     return true
   end
   
-  function config:eachDirective(start, filters) --for loop iterator
-    local walk_directive = filters and filters.directive_block or function(directive)
+  function config:each_directive(start, filters) --for loop iterator
+    local should_walk_directive = filters and filters.directive_block or function(directive)
       return directive.block
     end
-    local function walkDirective(block, parent_directive)
+    local function walk_directive(block, parent_directive)
       for _, directive in ipairs(block.directives) do
         coroutine.yield(directive, parent_directive)
-        if walk_directive(directive) then
-          walkDirective(directive.block, directive)
+        if should_walk_directive(directive) then
+          walk_directive(directive.block, directive)
         end
       end
     end
     assert(self.root)
     return coroutine.wrap(function()
-      return walkDirective(self.root.block or start, nil)
+      return walk_directive(self.root.block or start, nil)
     end)
   end
   
@@ -801,10 +800,10 @@ do --config
     return nil, element_name .. " to replace not found"
   end
   
-  function config:replaceDirective(directive, ...)
+  function config:replace_directive(directive, ...)
     return replace_in_table("directive", directive.parent.block.directives, directive, {...})
   end
-  function config:replaceToken(directive, ...)
+  function config:replace_token(directive, ...)
     return replace_in_table("token", directive.parent.block.tokens, directive, {...})
   end
   
@@ -817,7 +816,7 @@ do --config
     local block
     local default
     
-    assert(type(module_name) == "string", "module name must be a string." .. mock("mild"))
+    assert(type(module_name) == "string", "module name must be a string. " .. mock("mild"))
     assert(type(directive) == "table", "drective must be a table")
     
     assert(type(directive.name) == "string", "directive.name must be a string")
@@ -851,16 +850,22 @@ do --config
       args_min, args_max = directive.nargs, directive.nargs
     elseif type(directive.nargs == "string") then
       args_min, args_max = directive.nargs:match("^(%d+)%s*%-%s*(%d+)$")
-      if not args_min then
-        args_min = tonumber(directive.nargs)
-        assert(args_min and math.floor(args_min) ~= args_min, "directive.nargs is invalid")
+      if not args_min or not args_max then
+        args_min, args_max = directive.nargs:match("^(%d+)%s*%.%.%s*(%d+)$")
+      end
+      if not args_min or not args_max then
+        args_min = directive.nargs:match("^%d$")
         args_max = args_min
       end
+      if not args_min then
+        assert(args_min and math.floor(args_min) ~= args_min, "directive.nargs is invalid")
+      end
+      args_min, args_max = tonumber(args_min), tonumber(args_max)
     else
       error("directive.nargs must be a number or string")
     end
     assert(args_min <= args_max, "directive.nargs minimum must be smaller or equal to maximum")
-    assert(args_min >= 0, "directive.nargs minimum must be non-negative." .. mock("moderate"))
+    assert(args_min >= 0, "directive.nargs minimum must be non-negative. " .. mock("moderate"))
     assert(args_max >= 0, "directive.nargs maximum must be non-negative." .. mock("moderate"))
     
     if directive.block then
@@ -874,8 +879,8 @@ do --config
     
     if directive.default then
       if type(directive.default) == "table" then
-        for k, v in pairs(table) do
-          assert(type(k) == "number", "directive.default key must be numeric." .. mock("strong"))
+        for k, v in pairs(directive.default) do
+          assert(type(k) == "number", "directive.default key must be numeric. " .. mock("strong"))
           assert(type(v) == "number" or type(v) == "string" or type(v) == "boolean", "directive.default table values must be strings, numbers, or booleans")
         end
       else
@@ -917,7 +922,7 @@ do --config
     return true
   end
   
-  function config:configString(cur, lvl)
+  function config:config_string(cur, lvl)
     local function indent(level)
       return ("  "):rep(level)
     end
@@ -926,7 +931,7 @@ do --config
     local buf = {}
     if cur.type == "block" then
       for _, v in ipairs(cur.tokens) do
-        table.insert(buf, self:configString(v, lvl))
+        table.insert(buf, self:config_string(v, lvl))
       end
       if cur == self.root.block then
         return table.concat(buf, "\n")
@@ -955,7 +960,7 @@ do --config
       end
       
       if cur.block then
-        str = str .. " " .. self:configString(cur.block, lvl + 1)
+        str = str .. " " .. self:config_string(cur.block, lvl + 1)
         return str
       else
         return str
