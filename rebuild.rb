@@ -8,6 +8,9 @@ def green(str) "\e[1;32m#{str}\e[1;0m" end
 def yellow(str) "\e[1;33m#{str}\e[1;0m" end
 def blue(str) "\e[1;34m#{str}\e[1;0m" end
 
+BASE_DIR=Dir.pwd
+BUILD_DIR= "build"
+raise "just a single-level build dir, please" if BUILD_DIR.match("/")
 class Opts
   class Opt
     attr_accessor :name, :type, :opt, :matches
@@ -51,7 +54,7 @@ class Opts
     
     process && generate_configure_script && configure && make && run
     if @vars[:clean_after]
-      system "rm -Rf ./build"
+      system "rm -Rf #{BUILD_DIR}"
     end
   end
   def method_missing(name, type, opts)
@@ -135,13 +138,15 @@ class Opts
   end
   
   def env
-    @exports.collect{|k,v| "#{k}=#{v}"}.join(" ")
+    str=@exports.collect{|k,v| "#{k}=#{v}"}.join(" ")
+    str+=" " if str.length > 0
+    str
   end
   
   def configure
     # we need this stupid hack because cmake the idiot forgets its command-line defines if
     #  CMAKE_C_COMPILER is changed on a pre-existing build
-    @last_used_compiler_file="./build/.last_used_compiler.because_cmake_is_terrible"
+    @last_used_compiler_file="#{BUILD_DIR}/.last_used_compiler.because_cmake_is_terrible"
     if File.exists?(@last_used_compiler_file) && @vars[:compiler] != File.read(@last_used_compiler_file)
       puts yellow ">> cmake build must be reset because a different compiler than"
       puts yellow "initially configured This is because cmake is utterly terrible."
@@ -150,13 +155,14 @@ class Opts
     end
     
     if @vars[:clean]
-      puts yellow ">> rm -Rf ./build"
-      system "rm", "-R", "-f", "./build"
+      puts yellow ">> rm -Rf .#{BUILD_DIR}"
+      system "rm", "-R", "-f", "#{BUILD_DIR}"
     end
     
-    if !File.exists? "build"
-      puts yellow ">> mkdir build"
-      system "mkdir", "-p", "build"
+    if !Dir.exists? BUILD_DIR
+      system "rm", "-Rf", BUILD_DIR if File.exists? BUILD_DIR
+      puts yellow ">> mkdir -p #{BUILD_DIR}"
+      system "mkdir", "-p", BUILD_DIR
     end
     File.write(@last_used_compiler_file, @vars[:compiler])
     
@@ -165,33 +171,29 @@ class Opts
     puts ""
     if `cmake --help`.match(/ -B /)
       ##build-path option exists
-      @cmake_opts << "-B./build"
+      @cmake_opts << "-B#{BUILD_DIR}"
     else
       shitty_cmake=true
-      puts yellow ">> cd ./build"
-      Dir.chdir "build"
       @cmake_opts << "../"
     end
     
-    if @vars[:clang_analyze]
-      @scan_build=["scan-build"] + @analyze_flags
-      @scan_build_view=@scan_build + ["--view"]
-      puts yellow(">> #{env} ") + blue(@scan_build.join " ") + yellow(" cmake \\")
-    else
-      puts yellow(">> #{env} cmake \\")
-    end
-    
-    
-    @def_opts.each { |d| puts green " #{d} \\" }
-    puts @cmake_opts.map{ |o| " #{yellow(o)}"}.join(" \\\n")
-    configure_command= (@scan_build || []) + ["cmake"] +  @def_opts + @cmake_opts
-    @configure_result = system @exports, *configure_command
-    if shitty_cmake
-      puts yellow">> cd ${base_dir}"
-      Dir.chdir $base_dir
+    in_dir(shitty_cmake ? :build : :base) do
+      if @vars[:clang_analyze]
+        @scan_build=["scan-build"] + @analyze_flags
+        @scan_build_view=@scan_build + ["--view"]
+        puts yellow(">> #{env}") + blue(@scan_build.join " ") + yellow(" cmake \\")
+      else
+        puts yellow(">> #{env}cmake \\")
+      end
+      
+      
+      @def_opts.each { |d| puts green " #{d} \\" }
+      puts @cmake_opts.map{ |o| " #{yellow(o)}"}.join(" \\\n")
+      configure_command= (@scan_build || []) + ["cmake"] +  @def_opts + @cmake_opts
+      @configure_result = system @exports, *configure_command
     end
     if !@configure_result
-      $stderr.puts  red("cmake configuration step failed")
+      $stderr.puts  red "cmake configuration step failed"
       return false
     end
     self
@@ -208,55 +210,77 @@ class Opts
       end
     end
     
-    if @makefile_build
-      puts yellow ">> cd ./build"
-      Dir.chdir "build"
-      make_command = ["make"] + build_opts
-    else
-      make_command = ["cmake", "--build", "./build"] + build_opts
-    end
-
-    if @vars[:clang_analyze]
-      puts yellow(">> ") + blue(@scan_build.join " ") + " " + yellow(make_command.join " ")
-      begin
-        @make_result= system @exports, *(@scan_build_view + make_command)
-      rescue SignalException => e
-        #it's ok
+    make_command = (@makefile_build ? ['make'] : ['cmake', '--build', BUILD_DIR]) + build_opts
+    in_dir(@makefile_build ? :build : :base) do
+      if @vars[:clang_analyze]
+        puts yellow(">> ") + blue(@scan_build.join " ") + " " + yellow(make_command.join " ")
+        begin
+          @make_result= system @exports, *(@scan_build_view + make_command)
+        rescue SignalException => e
+          #it's ok
+        end
+      else
+        puts yellow ">> #{make_command.join " "}"
+        @make_result= system @exports, *(make_command)
       end
-    else
-      puts yellow ">> #{make_command.join " "}"
-      @make_result= system @exports, *(make_command)
     end
     @make_result && self
   end
   
+  def system_echo(*args)
+    echo = args.dup
+    if Hash === echo[0]
+      
+    end
+  end
+  
+  def in_dir(what, &block)
+    if what == :build
+      @in_build_dir = true
+      puts yellow ">> cd #{BUILD_DIR}"
+      Dir.chdir BUILD_DIR
+      yield
+      puts yellow ">> cd .."
+      Dir.chdir BASE_DIR
+    elsif what == :base
+      prev = Dir.pwd
+      Dir.chdir BASE_DIR
+      yield
+      Dir.chdir prev
+    end
+  end
+  
   def run
     return self unless @vars[:run_test]
-    Dir.chdir "./build"
     puts green "Running tests..."
-    if !system './shuso_test'
+    in_dir :build do
+      @run_ok = system './shuso_test'
+    end
+    if @run_ok
+      puts green "Tests passed"
+    else
       $stderr.puts red "...tests faled"
       return false
     end
-    Dir.chdir ".."
-    
+
     if @build_type == "DebugCoverage" && !@vars[:no_display_coverage]
       puts green "Preparing coverage results..."
-      Dir.chdir "./build" 
-      if @vars[:compiler] == "gcc"
-        system 'mkdir coverage-report 2>/dev/null'
-        system 'gcovr --root ../src --html-details -o coverage-report/index.html --gcov-ignore-parse-errors ./'
-        puts green "done"
-      elsif @vars[:compiler] == "clang"
-        system 'llvm-profdata merge -sparse *.profraw -o .profdata'
-        system 'llvm-cov show -format="html" -output-dir="coverage-report" -instr-profile=".profdata"  -ignore-filename-regex="test/.*" -ignore-filename-regex="lib/.*" "libshuttlesock.so" -object "shuso_test"'
-        puts green "done"
-      else
-        $stderr.puts red "don't know how to generate coverage reports for this compiler"
+      in_dir :build do
+        if @vars[:compiler] == "gcc"
+          system 'mkdir coverage-report 2>/dev/null'
+          system 'gcovr --root ../src --html-details -o coverage-report/index.html --gcov-ignore-parse-errors ./'
+          puts green "done"
+        elsif @vars[:compiler] == "clang"
+          system 'llvm-profdata merge -sparse *.profraw -o .profdata'
+          system 'llvm-cov show -format="html" -output-dir="coverage-report" -instr-profile=".profdata"  -ignore-filename-regex="test/.*" -ignore-filename-regex="lib/.*" "libshuttlesock.so" -object "shuso_test"'
+          puts green "done"
+        else
+          $stderr.puts red "don't know how to generate coverage reports for this compiler"
+        end
+        system 'xdg-open', './coverage-report/index.html'
       end
-      system 'xdg-open', './coverage-report/index.html'
-      Dir.chdir ".."
     end
+    self
   end
 end
 
