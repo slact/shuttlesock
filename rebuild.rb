@@ -57,9 +57,6 @@ class Opts
       system "rm -Rf #{BUILD_DIR}"
     end
   end
-  def method_missing(name, type, opts)
-    define_option name, type, opts
-  end
   def define_option(name, type, opt={})
     @opts[name]=Opt.new(name, type, opt)
   end
@@ -147,7 +144,7 @@ class Opts
     # we need this stupid hack because cmake the idiot forgets its command-line defines if
     #  CMAKE_C_COMPILER is changed on a pre-existing build
     @last_used_compiler_file="#{BUILD_DIR}/.last_used_compiler.because_cmake_is_terrible"
-    if File.exists?(@last_used_compiler_file) && @vars[:compiler] != File.read(@last_used_compiler_file)
+    if File.exists?(@last_used_compiler_file) && (@vars[:compiler] || "") != File.read(@last_used_compiler_file)
       puts yellow ">> cmake build must be reset because a different compiler than"
       puts yellow "initially configured This is because cmake is utterly terrible."
       puts ""
