@@ -126,7 +126,7 @@ bool shuso_lua_create(shuso_t *S) {
   return true;
 }
 
-static int shuso_Lua_do_embedded_script(lua_State *L) {
+int shuso_Lua_do_embedded_script(lua_State *L) {
   const char *name = luaL_checkstring(L, -1);
   shuso_lua_embedded_scripts_t *script;
   for(script = &shuttlesock_lua_embedded_scripts[0]; script->name != NULL; script++) {

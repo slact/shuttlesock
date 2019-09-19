@@ -18,5 +18,6 @@ bool shuso_lua_set_ctx(shuso_t *S);
 //lua functions here
 int shuso_Lua_shuttlesock_core_module(lua_State *L);
 
+int shuso_Lua_do_embedded_script(lua_State *L);
 
 #endif //SHUTTLESOCK_LUA_BRIDGE_H

@@ -23,6 +23,7 @@
 #include <shuttlesock/sysutil.h>
 #include <shuttlesock/log.h>
 #include <shuttlesock/config_file.h>
+#include <shuttlesock/module.h>
 
 
 struct shuso_process_s {
@@ -85,16 +86,6 @@ struct shuso_config_handlers_s {
   shuso_config_init_fn *initialize;
   shuso_config_set_fn  *set;
 }; //shuso_config_handlers_t
-
-struct shuso_module_s {
-  const char        *name;
-  struct {
-    shuso_runtime_handlers_t  runtime;
-    shuso_config_handlers_t   config;
-  }                  handlers;
-  void              *config;
-  //who knows what else
-};
 
 //the shuso_config struct is designed to be zeroed on initialization
 struct shuso_config_s {
@@ -163,7 +154,7 @@ struct shuso_s {
     shuso_loop                 *loop;
     unsigned int                flags;
   }                           ev;
-  
+  shuso_module_event_frame_t module_event_stack;
   shuso_common_t             *common;
   struct {                  //base_watchers
     shuso_ev_signal              signal[8];
