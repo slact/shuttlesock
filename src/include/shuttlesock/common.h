@@ -70,6 +70,7 @@ typedef struct shuso_config_setting_s shuso_config_setting_t;
 typedef struct shuso_module_s shuso_module_t;
 typedef struct shuso_module_event_s shuso_module_event_t;
 typedef struct shuso_module_event_frame_s shuso_module_event_frame_t;
+typedef struct shuso_module_event_stack_s shuso_module_event_stack_t;
 
 typedef struct shuso_hostinfo_s shuso_hostinfo_t;
 typedef struct shuso_sockopts_s shuso_sockopts_t;

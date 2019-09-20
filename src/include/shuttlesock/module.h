@@ -9,13 +9,19 @@ struct shuso_module_s {
   shuso_module_init_fn   *initialize;
   const char             *subscribe; //space-separated list of modname:event_name events this module may subscribe to
   const char             *publish; //space-separated list of event_names this module may publish
+  const char             *parent_modules;
+  
   int                     context_count;
+  struct {
+    int                     count;
+    shuso_module_t        **array;
+    void                  **context;
+  }                       submodules;
 }; //shuso_module_t
 
 typedef struct {
   shuso_module_t  *module;
   shuso_module_event_fn *fn;
-  uint16_t         context_index;
   void            *pd;
 } shuso_module_event_listener_t;
 
@@ -28,12 +34,6 @@ struct shuso_module_event_s {
   shuso_module_event_listener_t *listeners;
 }; //shuso_module_event_t
 
-struct shuso_module_event_frame_s {
-  shuso_module_t       *module;
-  shuso_module_event_t *event;
-}; //shuso_module_event_frame_t
-
-
 struct shuso_module_context_list_s {
   void **context;
 }; //shuso_module_context_list_t
@@ -43,10 +43,17 @@ struct shuso_module_state_s {
   void           *state;
 }; //shuso_module_state_t
 
+
+struct shuso_module_context_s {
+  shuso_stalloc_t   *stalloc;
+  void             **context;
+};
+
 bool shuso_add_module(shuso_t *S, shuso_module_t *module);
 bool shuso_load_module(shuso_t *S, const char *filename);
 
-shuso_module_t *shuso_current_module(shuso_t *S);
+shuso_module_t *shuso_current_module(const shuso_t *S);
+shuso_module_t *shuso_current_event(const shuso_t *S);
 
 //for module developers:
 #define shuso_get_mctx(...) shuso_module_get_context(__VA_ARGS__)
@@ -59,7 +66,7 @@ void *shuso_module_context(shuso_t *S);
 void *shuso_module_parent_context(shuso_t *S);
 
 //event stuff
-bool shuso_module_event_initialize(shuso_t *S, const char *name, shuso_module_event_t *mev); //current event name
+bool shuso_module_event_initialize(shuso_t *S, const char *name, shuso_module_t *mod, shuso_module_event_t *mev);
 bool shuso_module_event_listen(shuso_t *S, const char *name, shuso_module_event_fn *callback, void *pd);
 
 const char *shuso_module_event_name(shuso_t *S); //current event name

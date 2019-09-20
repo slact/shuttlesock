@@ -9,7 +9,7 @@ Event.MODULE_EVENT_LIST_NAME_PATTERN = "([%w%_]*):([%w%_%.])"
 Event.MODULE_EVENT_NAME_PATTERN = "^"..Event.MODULE_EVENT_LIST_NAME_PATTERN.."$"
 
 local event_mt
-function Event.get(module_name, event_name)
+function Event.find(module_name, event_name)
   if type(module_name)=="string" and not event_name then
     module_name, event_name = module_name:match(Event.MODULE_EVENT_NAME_PATTERN)
   end
@@ -17,6 +17,14 @@ function Event.get(module_name, event_name)
   assert(type(event_name) == "string")
   
   local event = Event.by_name[module_name..":"..event_name]
+  if not event then
+    return nil, "event "..mdule_name..":"..event_name.." not found"
+  end
+  return event
+end
+
+function Event.get(module_name, event_name)
+  local event = Event.find(module_name, event_name)
   if event then
     return event
   end
@@ -79,6 +87,7 @@ do
     if self.initialized then
       return nil, "module "..self.module_name.." has already registered event "..self.name.." with a different event struct"
     end
+    self.module = assert(Module.find(self.module_name))
     self.initialized = true
     self.ptr = init_ptr
     return self
@@ -90,8 +99,39 @@ local module_mt
 
 
 do
+  local currently_initializing_module_name = nil
   local deps_indexed = {}
   local deps = {}
+  
+  function Module.start_initialization(module_name)
+    if currently_initializing_module_name then
+      return nil, "another module ("..currently_initializing_module_name..") is already initializing"
+    end
+    local ok, err = Module.find(module_name)
+    if not ok then
+      return ok, err
+    end
+    currently_initializing_module_name = module_name
+    return true
+  end
+  function Module.finish_initialization(module_name)
+    if not currently_initializing_module_name then
+      return nil, "not initializing module "..module_name..", can't finish initialization"
+    end
+    if currently_initializing_module_name ~= module_name then
+      return nil, "currently initializing module "..currently_initializing_module_name..", not "..module_name
+    end
+    currently_initializing_module_name = module_name
+    return true
+  end
+  function Module.currently_initializing_module()
+    if currently_initializing_module_name then
+      return currently_initializing_module_name
+    else
+      return nil, "not currently intializing a module"
+    end
+  end
+  
   function Module.add_dependency(provider, dependent)
     assert(type(provider) == "string")
     assert(type(dependent) == "string")
@@ -136,6 +176,8 @@ do
   end
 end
 
+function Module.find_event = Event.find
+
 function Module.find(id)
   if type(id)=="userdata" then
     if not Module.by_ptr[id] then
@@ -152,7 +194,7 @@ function Module.find(id)
   end
 end
 
-function Module.new(name, ptr, version, subscribe_string, publish_string)
+function Module.new(name, ptr, version, subscribe_string, publish_string, parent_module_names_string)
   assert(type(name) == "string")
   assert(type(ptr) == "userdata")
   assert(type(version) == "string")
@@ -172,13 +214,26 @@ function Module.new(name, ptr, version, subscribe_string, publish_string)
     name = name,
     ptr = ptr,
     version = ("%s.%s.%s"):format(major, minor, patch),
-    
+    parent_module_names = {},
     events = {
       publish = {},
       subscribe = {}
     }
   }
   setmetatable(self, module_mt)
+  
+  if parent_module_names_string:match("[^%s%w%_]") then
+    return nil, "module "..name.." has an invalid parent_modules string. It must contain a whitespace or comma-separated list of parent module names"
+  end
+  
+  local parent_modules = {}
+  for modname in parent_module_names_string:gmatch("[%w%_]") do
+    if parent_modules[modname] then
+      return nil, "module "..name.." has a duplicate module name \"" .. modname ,, "\" in the parent_module string"
+    end
+    parent_modules[modname]=true
+    table.insert(self.parent_module_names, modname)
+  end
   
   if subscribe_string:match("[^%s%w%_%.%:]") then
     return nil, "module "..name.." has an invalid subscribe string. It must contain a whitespace or comma-separated list of event names of the form \"module_name:event_name"
@@ -219,12 +274,6 @@ function Module.initialize_event(module_id, event_name, event_ptr)
   return event:initialize(event_ptr)
 end
 
-function Module.add_event_listener(module_event_name, dst_module_ptr, listener_ptr, privdata_ptr)
-  assert(type(module_event_name) == "string")
-  local event = Event.get(module_event_name)
-  return event:add_listener(dst_module_ptr, listener_ptr, privdata_ptr)
-end
-
 do
   local module = {}
   module_mt = {__index = module}
@@ -233,6 +282,15 @@ do
     if self.finalized then
       return nil, "module "..self.name.." has already been finalized"
     end
+    self.parent_modules = {}
+    for i, modname in ipairs(self.parent_module_names) do
+      local parent = Module.find(modname)
+      if not parent then
+        return nil, "module "..self.name.." requires parent module "..modname..", which was not found"
+      end
+      self.parent_modules[i]=parent
+    end
+    
     module.finalized = true;
     return true
   end
@@ -244,16 +302,6 @@ do
       return nil, "unknown event "..name.." in module " .. self.name
     end
     return event
-  end
-  
-  function module:each_event()
-    local evs = self.events.publish
-    coroutine.wrap(function()
-      for _, ev in pairs(evs) do
-        coroutine.yield(ev)
-      end
-      return nil
-    end)
   end
   
   function module:dependent_modules_count()

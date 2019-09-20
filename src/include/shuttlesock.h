@@ -154,7 +154,6 @@ struct shuso_s {
     shuso_loop                 *loop;
     unsigned int                flags;
   }                           ev;
-  shuso_module_event_frame_t module_event_stack;
   shuso_common_t             *common;
   struct {                  //base_watchers
     shuso_ev_signal              signal[8];
