@@ -41,15 +41,15 @@ osx_task:
     - ./rebuild.sh O3
     - ./test.sh
   test_sanitized_script:
-    - ./rebuild.sh O2 sanitize-address
+    - ./rebuild.sh O2 sanitize-memory
     - ./test.sh
 freebsd_task:
   freebsd_instance:
     image: freebsd-12-0-release-amd64
   setup_script: pkg install -y gmake cmake ccache libev valgrind zsh ruby lua53
   test_basic_script:
-    - zsh ./rebuild.sh
+    - ruby ./rebuild.rb
     - zsh ./test.sh
   test_optimized_script:
-    - zsh ./rebuild.sh O3
+    - ruby ./rebuild.rb O3
     - zsh ./test.sh
