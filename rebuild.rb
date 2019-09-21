@@ -77,7 +77,7 @@ class Opts
   end
   
   def process_arg(arg)
-    #arg.gsub!("_", "-")
+    arg.gsub!("_", "-")
     return self if @arg_processed[arg.to_sym]
     @arg_processed[arg.to_sym] = true
     found= nil
