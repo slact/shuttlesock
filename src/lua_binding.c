@@ -1017,7 +1017,7 @@ static int Lua_shuso_resolve_hostname(lua_State *L) {
     addr_family = AF_INET;
   }
   else if(strcasecmp(addr_family_str, "IPv6") == 0 || strcasecmp(addr_family_str, "INET6") == 0) {
-#ifdef	AF_INET6
+#ifdef AF_INET6
     addr_family = AF_INET6;
 #else
     return luaL_error(L, "shuttlesock.resolve cannot handle IPv6 because it's not enabled on this system");
@@ -1028,7 +1028,7 @@ static int Lua_shuso_resolve_hostname(lua_State *L) {
   }
   
   shuso_t    *S = shuso_state(L);
-  lua_State  *coro;
+  lua_State  *coro = NULL;
   int         handler_ref = lua_ref_handler_function_or_coroutine(L, nargs, &coro, true, false);;
   assert(handler_ref != LUA_NOREF);
   
@@ -1121,7 +1121,7 @@ static void resolve_hostname_callback(shuso_t *S, shuso_resolver_result_t result
     case AF_INET:
       lua_pushliteral(L, "IPv4");
       break;
-#ifdef	AF_INET6
+#ifdef AF_INET6
     case AF_INET6:
       lua_pushliteral(L, "IPv6");
       break;
@@ -1377,24 +1377,36 @@ int Lua_shuso_ipc_receive_fd_finish(lua_State *L) {
 }
 
 
-static int hostinfo_set_addr(lua_State *L, int tbl_index, const char *field_name, void *dst, int addr_family) {
+static int hostinfo_set_addr(lua_State *L, int tbl_index, const char *field_name, shuso_hostinfo_t *host, int addr_family) {
   lua_getfield(L, tbl_index, field_name);
   const char *addr = lua_tostring(L, -1);
   if(!addr) {
     return luaL_error(L, "missing %s", field_name);
   }
   if(addr_family == AF_UNIX) {
-    dst = (char *)addr;
+    host->path = (char *)addr;
   }
   else {
-    int rc = inet_pton(addr_family, addr, dst);
+    int rc;
+    if(addr_family == AF_INET) {
+      rc = inet_pton(addr_family, addr, &host->addr);
+    }
+#ifdef SHUTTLESOCK_HAVE_IPV6
+    else if(addr_family == AF_INET6) {
+      rc = inet_pton(addr_family, addr, &host->addr);
+    }
+#endif
+    else {
+      return luaL_error(L, "invalid address family code %d", addr_family);
+    }
     if(rc == 0) {
-      return luaL_error(L, "invalid %s", field_name);
+      return luaL_error(L, "invalid address %s", addr);
     }
     else if(rc == -1) {
-      return luaL_error(L, "failed to parse %s: %s", strerror(errno));
+      return luaL_error(L, "failed to parse address %s: %s", addr, strerror(errno));
     }
   }
+  host->addr_family = addr_family;
   return 1;
 }
 
@@ -1500,20 +1512,17 @@ static int Lua_shuso_ipc_open_listener_sockets(lua_State *L) {
   const char *fam = luaL_checkstring(L, -1);
   
   if(strcasecmp(fam, "AF_INET") == 0 || strcasecmp(fam, "INET") == 0 || strcasecmp(fam, "ipv4") == 0) {
-    hostinfo_set_addr(L, 1, "address", &host.addr, AF_INET);
-    host.addr_family = AF_INET;
+    hostinfo_set_addr(L, 1, "address", &host, AF_INET);
   }
   else if(strcasecmp(fam, "AF_INET6") == 0 || strcasecmp(fam, "INET6") == 0 || strcasecmp(fam, "ipv6") == 0) {
-#ifndef AF_INET6
+#ifndef SHUTTLESOCK_HAVE_IPV6
     return luaL_argerror(L, 1, "can't use IPv6 address, this system isn't built with IPv6 support");
 #else
-    hostinfo_set_addr(L, 1, "address", &host.addr6, AF_INET6);
-    host.addr_family = AF_INET6;
+    hostinfo_set_addr(L, 1, "address", &host, AF_INET6);
 #endif
   }
   else if(strcasecmp(fam, "AF_UNIX") == 0 || strcasecmp(fam, "UNIX")) {
-    hostinfo_set_addr(L, 1, "path", &host.path, AF_UNIX);
-    host.addr_family = AF_UNIX;
+    hostinfo_set_addr(L, 1, "path", &host, AF_UNIX);
   }
   else {
     return luaL_argerror(L, 1, "invalid address family");

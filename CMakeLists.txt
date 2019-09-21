@@ -97,6 +97,11 @@ else()
   set(SHUTTLESOCK_HAVE_SO_REUSEPORT "TRUE" CACHE INTERNAL "Have SO_REUSEPORT on this system" FORCE)
 endif()
 
+#IPv6
+include(TestIPv6)
+test_ipv6(SHUTTLESOCK_HAVE_IPV6)
+set(SHUTTLESOCK_HAVE_IPV6 ${SHUTTLESOCK_HAVE_IPV6} CACHE INTERNAL "system supports IPv6")
+
 #lua (we want 5.3)
 set(Lua_FIND_VERSION 5.3)
 include(FindLua)

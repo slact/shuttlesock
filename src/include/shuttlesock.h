@@ -54,7 +54,9 @@ struct shuso_sockopts_s {
 struct shuso_hostinfo_s {
   const char        *name;
   union {
+#ifdef SHUTTLESOCK_HAVE_IPV6
     struct in6_addr addr6;
+#endif
     struct in_addr  addr;
     const char     *path;
   };
