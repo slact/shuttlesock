@@ -247,10 +247,13 @@ bool shuso_destroy(shuso_t *S) {
   }
   shuso_stalloc_empty(&S->stalloc);
   shuso_shared_slab_destroy(S, &S->common->shm);
+  if(S->common->modules.array) {
+    free(S->common->modules.array);
+  }
   if(S->procnum <= SHUTTLESOCK_MANAGER) {
     free(S->common);
   }
-  if(S->error.allocd) {
+  if(!S->error.static_memory) {
     free(S->error.msg);
   }
   if(S->error.combined_errors) {
@@ -647,9 +650,9 @@ bool shuso_stop_worker(shuso_t *S, shuso_process_t *proc, shuso_stop_t forcefuln
 }
 
 static void shuso_set_error_vararg(shuso_t *S, const char *fmt, va_list args) {
-  const char *oldmsg = NULL;
-  if(S->error.msg && S->error.allocd) {
-    oldmsg = S->error.msg;
+  const char *free_oldmsg = NULL;
+  if(S->error.msg && !S->error.static_memory) {
+    free_oldmsg = S->error.msg;
     //don't free oldmsg yet, so that it could be used as part of the new message
   }
   va_list args_again;
@@ -659,7 +662,7 @@ static void shuso_set_error_vararg(shuso_t *S, const char *fmt, va_list args) {
   S->error.msg = malloc(errlen+1);
   if(!S->error.msg) {
     S->error.msg = "failed to set error: out of memory";
-    S->error.allocd = false;
+    S->error.static_memory = true;
   }
   vsnprintf(S->error.msg, errlen+1, fmt, args_again);
   va_end(args_again);
@@ -672,9 +675,6 @@ static void shuso_set_error_vararg(shuso_t *S, const char *fmt, va_list args) {
     }
     sprintf(&config_errors[config_errors_len], "\n  %s", last_err);
     S->error.combined_errors = config_errors;
-    if(oldmsg) {
-      free((void *)oldmsg);
-    }
   }
   if(!S->error.do_not_log) {
     shuso_log_error(S, "%s", S->error.msg);
@@ -686,6 +686,9 @@ static void shuso_set_error_vararg(shuso_t *S, const char *fmt, va_list args) {
     shuso_set_error(S, "%s%s", shuso_last_error(S), combined);
     S->error.do_not_log = false;
     free(combined);
+  }
+  if(free_oldmsg) {
+    free((void *)free_oldmsg);
   }
 }
 

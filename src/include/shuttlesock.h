@@ -183,7 +183,7 @@ struct shuso_s {
     char                       *msg;
     int                         error_number; //errno
     char                       *combined_errors;
-    bool                        allocd;
+    bool                        static_memory;
     bool                        do_not_log;
   }                           error;
   char                        logbuf[1024];

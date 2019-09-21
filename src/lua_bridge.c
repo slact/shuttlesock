@@ -140,17 +140,12 @@ static void *initializing_allocator(void *ud, void *ptr, size_t osize,
   //printf("ptr: %p, osz: %d, nsz: %d\n", ptr, (int)osize, (int)nsize);
   (void)ud;
   if (nsize == 0) {
-
-  free(ptr);
-
+    free(ptr);
     return NULL;
-
   }
 
-  else
- {
-    void *nptr = realloc(ptr, nsize);
-
+  else {
+  void *nptr = realloc(ptr, nsize);
     if(!ptr) {
       memset(nptr, '0', nsize);
     }
