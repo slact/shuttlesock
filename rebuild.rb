@@ -40,6 +40,8 @@ class Opts
     end
   end
   
+  attr_accessor :ok
+  
   def initialize(&block)
     @arg_processed={}
     @opts = {}
@@ -52,7 +54,7 @@ class Opts
     @build_type = "Debug"
     OptsDSL.new(self).instance_eval &block
     
-    process && generate_configure_script && configure && make && run
+    @ok = process && generate_configure_script && configure && make && run
     if @vars[:clean_after]
       system "rm -Rf #{BUILD_DIR}"
     end
@@ -122,6 +124,7 @@ class Opts
     @cmake_defines = {
       CMAKE_BUILD_TYPE: @build_type,
       SHUTTLESOCK_DEBUG_NO_WORKER_THREADS: false,
+      SHUTTLESOCK_DEBUG_MODULE_SYSTEM: false,
       SHUTTLESOCK_STALLOC_TRACK_SPACE: false,
       SHUTTLESOCK_VALGRIND: false,
       SHUTTLESOCK_SANITIZE: false,
@@ -221,6 +224,10 @@ class Opts
         @make_result= system @exports, *(make_command)
       end
     end
+    if !@make_result
+      $stderr.puts  red "cmake build step failed"
+      return false
+    end
     @make_result && self
   end
   
@@ -281,7 +288,7 @@ class Opts
   end
 end
 
-Opts.new do
+rebuild = Opts.new do
   clang :debug_flag,
     export: { CC:"clang"},
     set: {compiler: "clang"}
@@ -370,6 +377,9 @@ Opts.new do
     alt: ["nothreads", "no-threads"],
     cmake_define: {SHUTTLESOCK_DEBUG_NO_WORKER_THREADS: true}
   
+  debug_modules :debug_flag,
+    cmake_define: {SHUTTLESOCK_DEBUG_MODULE_SYSTEM: true}
+  
   no_eventfd :debug_flag,
     cmake_define: {SHUTTLESOCK_USE_EVENTFD: false}
   
@@ -396,3 +406,4 @@ Opts.new do
     
 end
 
+exit 1 if not rebuild.ok
