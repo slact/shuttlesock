@@ -1,7 +1,7 @@
 #ifndef SHUTTLESOCK_STALLOC_H
 #define SHUTTLESOCK_STALLOC_H
 
-#include <shuttlesock/build_config.h>
+#include <shuttlesock/common.h>
 #include <stdbool.h>
 #include <stdlib.h>
 #include <stdint.h>

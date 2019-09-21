@@ -59,6 +59,12 @@ shuso_t *shuso_state_from_lua(lua_State *L) {
   lua_pop(L, 1);
   return S;
 }
+bool shuso_lua_set_shuttlesock_state_pointer(shuso_t *S) {
+  lua_State *L = S->lua.state;
+  lua_pushlightuserdata(L, S);
+  lua_setfield(L, LUA_REGISTRYINDEX, "shuttlesock.userdata");
+  return true;
+}
 
 static int shuso_lua_resume(lua_State *thread, lua_State *from, int nargs) {
   int          rc;
@@ -164,13 +170,6 @@ static int lua_shuso_error(lua_State *L) {
   return luaL_error(L, "%s", errmsg == NULL ? "(unknown error)" : errmsg);
 }
 
-bool shuso_lua_set_ctx(shuso_t *S) {
-  lua_State *L = S->lua.state;
-  lua_pushlightuserdata(L, S);
-  lua_setfield(L, LUA_REGISTRYINDEX, "shuttlesock.userdata");
-  return true;
-}
-
 static void lua_getlib_field(lua_State *L, const char *lib, const char *field) {
   lua_getglobal(L, lib);
   assert(lua_istable(L, -1));
@@ -190,7 +189,6 @@ int Lua_shuso_create(lua_State *L) {
     lua_pushstring(L, err);
     return 2;
   }
-  shuso_lua_set_ctx(S);
   lua_pushboolean(L, 1);
   return 1;
 }

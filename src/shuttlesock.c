@@ -6,6 +6,7 @@
 #include <sys/types.h>
 #include <sys/mman.h>
 #include <errno.h>
+#include <string.h>
 
 static void shuso_cleanup_loop(shuso_t *S);
 static void signal_watcher_cb(shuso_loop *, shuso_ev_signal *w, int revents);
@@ -85,12 +86,24 @@ shuso_t *shuso_create_with_lua(lua_State *lua, const char **err) {
     goto fail;
   }
   
+  common_ctx->state = SHUSO_STATE_CONFIGURING;
   common_ctx->log.fd = fileno(stdout);
   
   stalloc_initialized = shuso_stalloc_init(&S->stalloc, 0);
   if(!stalloc_initialized) {
     goto fail;
   }
+  
+  if(!shuso_lua_initialize(S)) {
+    errmsg = "failed to initialize lua";
+    goto fail;
+  }
+  
+  if(!shuso_module_system_initialize(S, &shuso_core_module)) {
+    errmsg = "failed to initialize module system";
+    goto fail;
+  }
+  
   return S;
   
 fail:
@@ -107,13 +120,40 @@ fail:
 }
 
 bool shuso_configure_handlers(shuso_t *S, const shuso_runtime_handlers_t *handlers) {
+  if(!(shuso_runstate_check(S, SHUSO_STATE_CONFIGURING, "finish configuring"))) {
+    return false;
+  }
   S->common->phase_handlers = *handlers;
   return true;
 }
 
+bool shuso_runstate_check(shuso_t *S, shuso_runstate_t allowed_state, const char *whatcha_doing) {
+  if(S->common->state == allowed_state) {
+    return true;
+  }
+  switch(S->common->state) {
+    case SHUSO_STATE_STOPPED:
+      return shuso_set_error(S, "failed to %s: shuttlesock is already stopped", whatcha_doing);
+    case SHUSO_STATE_MISCONFIGURED:
+      return shuso_set_error(S, "failed to %s: shuttlesock is misconfigured", whatcha_doing);
+    case SHUSO_STATE_CONFIGURING:
+      return shuso_set_error(S, "failed to %s: shuttlesock is still being configured", whatcha_doing);
+    case SHUSO_STATE_CONFIGURED:
+      return shuso_set_error(S, "failed to %s: shuttlesock is already configured", whatcha_doing);
+    case SHUSO_STATE_RUNNING:
+      return shuso_set_error(S, "failed to %s: shuttlesock is already running", whatcha_doing);
+    case SHUSO_STATE_STOPPING:
+      return shuso_set_error(S, "failed to %s: shuttlesock is already stopping", whatcha_doing);
+  }
+  return shuso_set_error(S, "failed to %s: invalid runstate %i", whatcha_doing, (int )S->common->state);
+}
+
 bool shuso_configure_finish(shuso_t *S) {
   bool             shm_slab_created = false;
-  const char      *errmsg;
+  const char      *errmsg = NULL;
+  if(!(shuso_runstate_check(S, SHUSO_STATE_CONFIGURING, "finish configuring"))) {
+    return false;
+  }
   // create the default loop so that we can catch SIGCHLD
   // http://pod.tst.eu/http://cvs.schmorp.de/libev/ev.pod#FUNCTIONS_CONTROLLING_EVENT_LOOPS:
   // "The default loop is the only loop that can handle ev_child watchers [...]"
@@ -161,14 +201,35 @@ bool shuso_configure_finish(shuso_t *S) {
     goto fail;
   }
   
-  assert(S->lua.state);
-  if(!shuso_lua_initialize(S)) {
-    goto fail;
+  for(unsigned i=0; i<S->common->modules.count; i++) {
+    shuso_module_t *module = S->common->modules.array[i];
+    if(!module->initialize) {
+      shuso_set_error(S, "module %s is missing its initialization function", module->name);
+      goto fail;
+    }
+    if(!module->initialize(S, module)) {
+      if(shuso_last_error(S) == NULL) {
+        shuso_set_error(S, "module %s failed to initialize, but reported no error", module->name);
+      }
+      goto fail;
+    }
   }
-  S->config.ready = true;
+  
+  for(unsigned i=0; i<S->common->modules.count; i++) {
+    shuso_module_t *module = S->common->modules.array[i];
+    if(!shuso_module_finalize(S, module)) {
+      goto fail;
+    }
+  }
+  S->common->state = SHUSO_STATE_CONFIGURED;
   return true;
   
 fail:
+  if(errmsg) {
+    shuso_set_error(S, errmsg);
+  }
+  S->common->state = SHUSO_STATE_MISCONFIGURED;
+  shuso_set_error(S, "failed to configure shuttlesock");
   if(shm_slab_created) shuso_shared_slab_destroy(S, &S->common->shm);
   return false;
 }
@@ -181,12 +242,19 @@ static bool test_features(shuso_t *S, const char **errmsg) {
 }
 
 bool shuso_destroy(shuso_t *S) {
-  assert(S->ev.loop);
-  ev_loop_destroy(S->ev.loop);
+  if(S->ev.loop) {
+    ev_loop_destroy(S->ev.loop);
+  }
   shuso_stalloc_empty(&S->stalloc);
   shuso_shared_slab_destroy(S, &S->common->shm);
   if(S->procnum <= SHUTTLESOCK_MANAGER) {
     free(S->common);
+  }
+  if(S->error.allocd) {
+    free(S->error.msg);
+  }
+  if(S->error.combined_errors) {
+    free(S->error.combined_errors);
   }
   shuso_lua_destroy(S);
   free(S);
@@ -579,19 +647,46 @@ bool shuso_stop_worker(shuso_t *S, shuso_process_t *proc, shuso_stop_t forcefuln
 }
 
 static void shuso_set_error_vararg(shuso_t *S, const char *fmt, va_list args) {
+  const char *oldmsg = NULL;
   if(S->error.msg && S->error.allocd) {
-    free(S->error.msg);
-    S->error.msg = NULL;
+    oldmsg = S->error.msg;
+    //don't free oldmsg yet, so that it could be used as part of the new message
   }
+  va_list args_again;
+  va_copy(args_again, args);
   
-  int strlen = vsnprintf(NULL, 0, fmt, args);
-  S->error.msg = malloc(strlen+1);
+  int errlen = vsnprintf(NULL, 0, fmt, args);
+  S->error.msg = malloc(errlen+1);
   if(!S->error.msg) {
     S->error.msg = "failed to set error: out of memory";
     S->error.allocd = false;
   }
-  vsnprintf(S->error.msg, strlen, fmt, args);
-  shuso_log_error(S, "%s", S->error.msg);
+  vsnprintf(S->error.msg, errlen+1, fmt, args_again);
+  va_end(args_again);
+  if(S->common->state == SHUSO_STATE_CONFIGURING) {
+    const char *last_err = shuso_last_error(S);
+    char *config_errors = S->error.combined_errors;
+    int config_errors_len = config_errors == NULL ? 0 : strlen(config_errors);
+    if((config_errors = realloc(config_errors, config_errors_len + strlen(last_err) + 5)) == NULL) {
+      return;
+    }
+    sprintf(&config_errors[config_errors_len], "\n  %s", last_err);
+    S->error.combined_errors = config_errors;
+    if(oldmsg) {
+      free((void *)oldmsg);
+    }
+  }
+  if(!S->error.do_not_log) {
+    shuso_log_error(S, "%s", S->error.msg);
+  }
+  if(S->common->state == SHUSO_STATE_MISCONFIGURED && S->error.combined_errors != NULL) {
+    char *combined = S->error.combined_errors;
+    S->error.combined_errors = NULL;
+    S->error.do_not_log = true;
+    shuso_set_error(S, "%s%s", shuso_last_error(S), combined);
+    S->error.do_not_log = false;
+    free(combined);
+  }
 }
 
 bool shuso_set_error(shuso_t *S, const char *fmt, ...) {
@@ -743,7 +838,10 @@ static void child_watcher_cb(shuso_loop *loop, shuso_ev_child *w, int revents) {
 }
 
 bool shuso_set_log_fd(shuso_t *S, int fd) {
-  if(S->procnum == SHUTTLESOCK_MASTER && *S->common->process.manager.state >= SHUSO_PROCESS_STATE_RUNNING) {
+  if(S->common->state < SHUSO_STATE_RUNNING) {
+    // do nothing for now
+  }
+  else if(S->procnum == SHUTTLESOCK_MASTER && *S->common->process.manager.state >= SHUSO_PROCESS_STATE_RUNNING) {
     shuso_ipc_send(S, &S->common->process.manager, SHUTTLESOCK_IPC_CMD_SET_LOG_FD, (void *)(intptr_t)fd);
   }
   else if(*S->common->process.master.state >= SHUSO_PROCESS_STATE_RUNNING) {

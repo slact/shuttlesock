@@ -57,11 +57,24 @@ typedef struct {
 
 int dev_null;
 
+bool strmatch(const char *str, const char *pattern);
+
 #define shmalloc(ptr) mmap(NULL, sizeof(*ptr), PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_SHARED,-1, 0)
 #define shmfree(ptr) munmap(ptr, sizeof(*ptr))
 
 #define shmalloc_sz(ptr, sz) mmap(NULL, sz, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_SHARED,-1, 0)
 #define shmfree_sz(ptr, sz) munmap(ptr, sz)
+
+#define assert_shuso_error(S, errmsg) \
+  do { \
+    if(!shuso_last_error(S)) { \
+      snow_fail("expected to have error matching \"%s\", but there was no error", errmsg); \
+    } \
+    if(!strmatch(shuso_last_error(S), errmsg)) { \
+      snow_fail("shuttlesock error \"%s\" didn't match \"%s\"", shuso_last_error(S), errmsg); \
+    } \
+  } while(0)
+
 
 #define assert_shuso(S) \
 do { \

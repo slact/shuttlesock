@@ -163,6 +163,8 @@ add_executable(shuso_test
   test/util.c
 )
 target_link_libraries(shuso_test PRIVATE shuttlesock)
+target_include_directories(shuso_test PRIVATE ${LUA_INCLUDE_DIR})
+target_link_libraries(shuso_test PRIVATE ${LUA_LIBRARIES})
 target_include_directories(shuso_test PRIVATE test)
 
 #set default log level
@@ -176,6 +178,8 @@ configure_file(src/include/shuttlesock/build_config.h.tmpl src/include/shuttleso
 
 include(PackLuaScripts)
 pack_lua_scripts_start(SOURCE embedded_lua_scripts.c)
-pack_lua_scripts_add(NAME "shuttlesock.config" SCRIPT src/lua/config.lua MODULE)
 pack_lua_scripts_add(NAME "argparse" SCRIPT src/lua/modules/argparse/src/argparse.lua MODULE)
+pack_lua_scripts_add(NAME "mm" SCRIPT src/lua/mm.lua MODULE)
+pack_lua_scripts_add(NAME "shuttlesock.config" SCRIPT src/lua/config.lua MODULE)
+pack_lua_scripts_add(NAME "shuttlesock.module" SCRIPT src/lua/module.lua MODULE)
 pack_lua_scripts_finish()

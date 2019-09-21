@@ -10,9 +10,8 @@
 #include <stdatomic.h>
 #include <netinet/in.h>
 #include <sys/time.h>
-#include <shuttlesock/build_config.h>
-#include <shuttlesock/watchers.h>
 #include <shuttlesock/common.h>
+#include <shuttlesock/watchers.h>
 #include <shuttlesock/sbuf.h>
 #include <shuttlesock/llist.h>
 #include <shuttlesock/ipc.h>
@@ -125,9 +124,14 @@ struct shuso_config_file_s {
 
 
 struct shuso_common_s {
+  shuso_runstate_t    state;
   shuso_runtime_handlers_t    phase_handlers;
   shuso_ipc_handler_t ipc_handlers[256];
   shuso_config_t      config;
+  struct {
+    size_t              count;
+    shuso_module_t    **array;
+  }                   modules;
   struct {          //process
     shuso_process_t     master;
     shuso_process_t     manager;
@@ -155,6 +159,7 @@ struct shuso_s {
     unsigned int                flags;
   }                           ev;
   shuso_common_t             *common;
+  shuso_core_module_ctx_t    *core_module_context;
   struct {                  //base_watchers
     shuso_ev_signal              signal[8];
     shuso_ev_child               child;
@@ -177,7 +182,9 @@ struct shuso_s {
   struct {
     char                       *msg;
     int                         error_number; //errno
+    char                       *combined_errors;
     bool                        allocd;
+    bool                        do_not_log;
   }                           error;
   char                        logbuf[1024];
 }; //shuso_t;
@@ -186,6 +193,7 @@ struct shuso_s {
 shuso_t *shuso_create(const char **err);
 shuso_t *shuso_create_with_lua(lua_State *lua, const char **err);
 
+bool shuso_runstate_check(shuso_t *S, shuso_runstate_t allowed_state, const char *whatcha_doing);
 bool shuso_configure_file(shuso_t *S, const char *path);
 bool shuso_configure_string(shuso_t *S, const char *str_title, const char *str);
 bool shuso_configure_handlers(shuso_t *S, const shuso_runtime_handlers_t *handlers);

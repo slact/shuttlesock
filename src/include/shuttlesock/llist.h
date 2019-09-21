@@ -1,6 +1,5 @@
 #ifndef SHUTTLESOCK_LLIST_H
 #define SHUTTLESOCK_LLIST_H
-#include <shuttlesock/build_config.h>
 #include <shuttlesock/common.h>
 #include <stddef.h>
 #include <assert.h>

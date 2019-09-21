@@ -1,4 +1,7 @@
 #include "test.h"
+#include <lua.h>
+#include <lauxlib.h> 
+#include <lualib.h>
 #ifndef __clang_analyzer__
 
 static void start_master(shuso_t *S, void *pd) {
@@ -32,6 +35,19 @@ static void stop_worker(shuso_t *S, void *pd) {
   chk->count.stop_worker++;
 }
 
+bool strmatch(const char *str, const char *pattern) {
+  lua_State *L = luaL_newstate();
+  luaL_openlibs(L);
+  lua_pushstring(L, str);
+  lua_getfield(L, -1, "match");
+  lua_pushvalue(L, -2);
+  lua_pushstring(L, pattern);
+  lua_call(L, 2, 1);
+  bool ret = lua_toboolean(L, -1);
+  lua_close(L);
+  return ret;
+}
+
 shuso_t *___runcheck_shuso_create(void) {
   shuso_t             *S;
   const char          *err = NULL;
@@ -52,6 +68,10 @@ shuso_t *___runcheck_shuso_create(void) {
   chk->master_pid = -1;
   chk->manager_pid = -1;
   S = shuso_create(&err);
+  if(S == NULL || err) {
+    snow_fail("failed to create shuttlesock state: %s", err ? err : "unknown error");
+    return NULL;
+  }
   assert(shuso_configure_handlers(S, &runcheck_handlers));
   assert(shuso_configure_finish(S));
   
@@ -66,10 +86,7 @@ shuso_t *___runcheck_shuso_create(void) {
     "count.stop_worker: %d\n",
     (void *)chk, chk->master_pid, chk->manager_pid, chk->count.start_master, chk->count.stop_master, chk->count.start_manager, chk->count.stop_manager, chk->count.start_worker, chk->count.stop_worker
   );*/
-  if(S == NULL || err) {
-    snow_fail("failed to create shuttlesock state: %s", err ? err : "unknown error");
-    return NULL;
-  }
+  
   if(!test_config.verbose) {
     shuso_set_log_fd(S, dev_null);
   }

@@ -10,7 +10,46 @@
 #define INIT_LUA_ALLOCS 1
 #endif
 
-static char *lua_dbgval(lua_State *L, int n) {
+
+static int luaS_traceback(lua_State *L) {
+  if (!lua_isstring(L, -1)) { /* 'message' not a string? */
+    return 1;  /* keep it intact */
+  }
+
+  lua_getglobal(L, "debug");
+  lua_getfield(L, -1, "traceback");
+  lua_remove(L, -2);
+
+  lua_pushvalue(L, 1);  /* pass error message */
+  lua_pushinteger(L, 2);  /* skip this function and traceback */
+  lua_call(L, 2, 1);  /* call debug.traceback */
+  return 1;
+}
+
+void luaS_call(lua_State *L, int nargs, int nresults) {
+  int rc;
+  if(!lua_isfunction(L, -(nargs+1))) {
+    lua_printstack(L);
+    shuso_log_error(shuso_state(L), "nargs: %i", nargs);
+    assert(lua_isfunction(L, -(nargs+1)));
+  }
+  
+  lua_pushcfunction(L, luaS_traceback);
+  lua_insert(L, 1);
+  
+  rc = lua_pcall(L, nargs, nresults, 1);
+  if (rc != 0) {
+    shuso_log_error(shuso_state(L), "Lua error: %s", lua_tostring(L, -1));
+    lua_pop(L, 1);
+    lua_gc(L, LUA_GCCOLLECT, 0);
+//#ifdef SHUTTLESOCK_CRASH_ON_LUA_ERROR
+    raise(SIGABRT);
+//#endif
+  }
+  lua_remove(L, 1);
+}
+
+char *lua_dbgval(lua_State *L, int n) {
   static char buf[255];
   int         type = lua_type(L, n);
   const char *typename = lua_typename(L, type);
@@ -49,6 +88,14 @@ void lua_printstack(lua_State *L) {
   }
 }
 
+void lua_mm(lua_State *L, int stack_index) {
+  int absindex = lua_absindex(L, stack_index);
+  lua_getglobal(L, "require");
+  lua_pushliteral(L, "mm");
+  lua_call(L, 1, 1);
+  lua_pushvalue(L, absindex);
+  lua_call(L, 1, 0);
+}
 
 static int shuso_Lua_glob(lua_State *L) {
   const char *pattern = luaL_checkstring(L, 1);
@@ -87,15 +134,23 @@ static int shuso_Lua_glob(lua_State *L) {
 }
 
 #ifdef INIT_LUA_ALLOCS
-static void *initializing_allocator(void *ud, void *ptr, size_t osize, size_t nsize) {
+static void *initializing_allocator(void *ud, void *ptr, size_t osize,
+ size_t nsize) {
+
   //printf("ptr: %p, osz: %d, nsz: %d\n", ptr, (int)osize, (int)nsize);
   (void)ud;
-  if (nsize == 0) {
-  free(ptr);
-    return NULL;
-  }
-  else {
-    void *nptr = realloc(ptr, nsize);
+  if (nsize == 0) {
+
+  free(ptr);
+
+    return NULL;
+
+  }
+
+  else
+ {
+    void *nptr = realloc(ptr, nsize);
+
     if(!ptr) {
       memset(nptr, '0', nsize);
     }
@@ -146,10 +201,11 @@ int shuso_Lua_do_embedded_script(lua_State *L) {
 
 
 bool shuso_lua_initialize(shuso_t *S) {
-  shuso_lua_set_ctx(S);
+  shuso_lua_set_shuttlesock_state_pointer(S);
   lua_State *L = S->lua.state;
   
   luaL_requiref(L, "shuttlesock.core", shuso_Lua_shuttlesock_core_module, 0);
+  lua_pop(L, 1);
   
   for(shuso_lua_embedded_scripts_t *script = &shuttlesock_lua_embedded_scripts[0]; script->name != NULL; script++) {
     if(script->module) {
@@ -162,10 +218,10 @@ bool shuso_lua_initialize(shuso_t *S) {
   lua_getglobal(L, "require");
   lua_pushliteral(L, "shuttlesock.config");
   lua_call(L, 1, 1);
+  
   lua_pushcfunction(L, shuso_Lua_glob);
   lua_setfield(L, -2, "glob");
-  lua_pop(L, 1);
-
+  
   S->config.index = luaL_ref(L, LUA_REGISTRYINDEX);
   
   return true;

@@ -2,6 +2,7 @@
 #define SHUTTLESOCK_COMMON_H
 #include <stdbool.h>
 #include <stdint.h>
+#include <shuttlesock/build_config.h>
 
 #ifndef container_of
 #define container_of(ptr, type, member) ((type *)(void *)((char *)(1 ? (ptr) : &((type *)0)->member) - offsetof(type, member)))
@@ -38,6 +39,15 @@ typedef enum {
 #define SHUTTLESOCK_LAST_PRIORITY -127
 
 typedef enum {
+  SHUSO_STATE_STOPPED = -2,
+  SHUSO_STATE_MISCONFIGURED = -1,
+  SHUSO_STATE_CONFIGURING = 0,
+  SHUSO_STATE_CONFIGURED = 1,
+  SHUSO_STATE_RUNNING  = 2,
+  SHUSO_STATE_STOPPING = 3
+} shuso_runstate_t;
+
+typedef enum {
   //non-positive states MUST be kinds of non-running states
   SHUSO_PROCESS_STATE_DEAD = -1,
   SHUSO_PROCESS_STATE_NIL = 0,
@@ -69,8 +79,9 @@ typedef struct shuso_config_setting_s shuso_config_setting_t;
 
 typedef struct shuso_module_s shuso_module_t;
 typedef struct shuso_module_event_s shuso_module_event_t;
-typedef struct shuso_module_event_frame_s shuso_module_event_frame_t;
-typedef struct shuso_module_event_stack_s shuso_module_event_stack_t;
+typedef struct shuso_module_context_list_s shuso_module_context_list_t;
+typedef struct shuso_event_state_s shuso_event_state_t;
+typedef struct shuso_core_module_ctx_s shuso_core_module_ctx_t;
 
 typedef struct shuso_hostinfo_s shuso_hostinfo_t;
 typedef struct shuso_sockopts_s shuso_sockopts_t;
@@ -87,6 +98,6 @@ typedef void *shuso_config_init_fn(shuso_t *S, void *parent);
 typedef struct shuso_runtime_handlers_s shuso_runtime_handlers_t;
 typedef struct shuso_config_handlers_s shuso_config_handlers_t;
 
-typedef bool shuso_module_init_fn(shuso_t *S, shuso_module_t *, void **module_ctx);
-typedef void shuso_module_event_fn(shuso_t *S, intptr_t code, void *data, void **context, void *pd);
+typedef bool shuso_module_init_fn(shuso_t *S, shuso_module_t *);
+typedef void shuso_module_event_fn(shuso_t *S, shuso_event_state_t *, intptr_t code, void *data, void *pd);
 #endif /*SHUTTLESOCK_COMMON_H*/

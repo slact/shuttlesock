@@ -3,19 +3,24 @@
 #include <shuttlesock/common.h>
 //core-facing stuff
 
+extern shuso_module_t shuso_core_module;
+
 struct shuso_module_s {
   const char             *name;
   const char             *version;
+  const char             *parent_modules;
   shuso_module_init_fn   *initialize;
   const char             *subscribe; //space-separated list of modname:event_name events this module may subscribe to
   const char             *publish; //space-separated list of event_names this module may publish
-  const char             *parent_modules;
   
-  int                     context_count;
+  uint8_t                *parent_modules_index_map;
+  int                     index;
   struct {
     int                     count;
     shuso_module_t        **array;
-    void                  **context;
+#ifdef SHUTTLESOCK_DEBUG_MODULE_SYSTEM
+    uint8_t                *submodule_presence_map;
+#endif
   }                       submodules;
 }; //shuso_module_t
 
@@ -25,8 +30,15 @@ typedef struct {
   void            *pd;
 } shuso_module_event_listener_t;
 
+struct shuso_module_context_list_s {
+#ifdef SHUTTLESOCK_DEBUG_MODULE_SYSTEM
+  shuso_module_t *parent;
+#endif
+  void          **context;
+}; //shuso_module_context_list_t
+
 struct shuso_module_event_s {
-#ifdef SHUTTLESOCK_MEVENT_DEBUG
+#ifdef SHUTTLESOCK_DEBUG_MODULE_SYSTEM
   size_t             count;
   _Atomic uint64_t   fired_count;
 #endif
@@ -34,45 +46,58 @@ struct shuso_module_event_s {
   shuso_module_event_listener_t *listeners;
 }; //shuso_module_event_t
 
-struct shuso_module_context_list_s {
-  void **context;
-}; //shuso_module_context_list_t
+struct shuso_event_state_s {
+  const shuso_module_t *publisher;
+  const char           *name;
+}; //shuso_event_state_t
 
-struct shuso_module_state_s {
-  shuso_module_t *module;
-  void           *state;
-}; //shuso_module_state_t
+struct shuso_core_module_ctx_s {
+  struct {
+    shuso_module_event_t configure;
+    shuso_module_event_t configure_after;
+    
+    shuso_module_event_t start_master_before;
+    shuso_module_event_t start_master;
+    shuso_module_event_t start_master_after;
+    shuso_module_event_t start_manager_before;
+    shuso_module_event_t start_manager;
+    shuso_module_event_t start_manager_after;
+    shuso_module_event_t start_worker_before;
+    shuso_module_event_t start_worker;
+    shuso_module_event_t start_worker_after;
+    
+    shuso_module_event_t stop_master_before;
+    shuso_module_event_t stop_master;
+    shuso_module_event_t stop_master_after;
+    shuso_module_event_t stop_manager_before;
+    shuso_module_event_t stop_manager;
+    shuso_module_event_t stop_manager_after;
+    shuso_module_event_t stop_worker_before;
+    shuso_module_event_t stop_worker;
+    shuso_module_event_t stop_worker_after;
+  }               event;
+  shuso_module_context_list_t context_list;
+}; //shuso_core_module_ctx_t
 
-
-struct shuso_module_context_s {
-  shuso_stalloc_t   *stalloc;
-  void             **context;
-};
-
+bool shuso_set_core_module(shuso_t *S, shuso_module_t *module);
 bool shuso_add_module(shuso_t *S, shuso_module_t *module);
 bool shuso_load_module(shuso_t *S, const char *filename);
+bool shuso_module_finalize(shuso_t *S, shuso_module_t *module);
 
 shuso_module_t *shuso_current_module(const shuso_t *S);
 shuso_module_t *shuso_current_event(const shuso_t *S);
 
 //for module developers:
-#define shuso_get_mctx(...) shuso_module_get_context(__VA_ARGS__)
-void *shuso_module_get_context(shuso_t *S, const char *modname);
+shuso_module_t *shuso_get_module(shuso_t *S, const char *name);
 
-#define shuso_mctx(...) shuso_module_context(__VA_ARGS__)
-void *shuso_module_context(shuso_t *S);
-
-#define shuso_parent_mctx(...) shuso_module_parent_get_context(__VA_ARGS__)
-void *shuso_module_parent_context(shuso_t *S);
+void *shuso_context(shuso_t *S, shuso_module_t *parent, shuso_module_t *module, shuso_module_context_list_t *context_list);
 
 //event stuff
-bool shuso_module_event_initialize(shuso_t *S, const char *name, shuso_module_t *mod, shuso_module_event_t *mev);
-bool shuso_module_event_listen(shuso_t *S, const char *name, shuso_module_event_fn *callback, void *pd);
-
-const char *shuso_module_event_name(shuso_t *S); //current event name
-const char *shuso_module_event_origin(shuso_t *S); //name of module that published current event
+bool shuso_event_initialize(shuso_t *S, shuso_module_t *mod, const char *name, shuso_module_event_t *mev);
+bool shuso_event_listen(shuso_t *S, const char *name, shuso_module_event_fn *callback, void *pd);
+bool shuso_event_publish(shuso_t *S, shuso_module_t *publisher_module, shuso_module_event_t *event, intptr_t code, void *data);
 
 // internal stuff
-bool shuso_module_system_initialize(shuso_t *S);
+bool shuso_module_system_initialize(shuso_t *S, shuso_module_t *core_module);
 
 #endif //SHUTTLESOCK_MODULE_H

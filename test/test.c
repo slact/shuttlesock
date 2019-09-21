@@ -15,35 +15,97 @@ bool set_test_options(int *argc, char **argv) {
   return true;
 }
 
+static bool tm_init(shuso_t *S, shuso_module_t *self) {
+  return true;
+}
 
+describe(modules) {
+  static shuso_t *S = NULL;
+  shuso_module_t test_module;
+  
+  subdesc(bad_modules) {
+  
+    before_each() {
+      test_module = (shuso_module_t ){
+        .name = "tm",
+        .version="0.0.0",
+        .initialize = tm_init
+      };
+      assert(test_module.publish == NULL);
+      assert(test_module.subscribe == NULL);
+      S = shuso_create(NULL);
+      shuso_set_log_fd(S, dev_null);
+    }
+    after_each() {
+      if(S) shuso_destroy(S);
+    }
+    
+    test("bad subscribe string") {
+      test_module.subscribe = "!@#@#$$%#";
+      shuso_add_module(S, &test_module);
+      shuso_configure_finish(S);
+      assert_shuso_error(S, "invalid character .+ in subscribe string");
+    }
+    test("subscribe to nonexistent module's event") {
+      test_module.subscribe = "fakemodule:start_banana";
+      shuso_add_module(S, &test_module);
+      shuso_configure_finish(S);
+      assert_shuso_error(S, "module %w+ was not found");
+    }
+    test("subscribe to malformed event") {
+      test_module.subscribe = "fakemodule:what:nothing another:malformed:event";
+      shuso_add_module(S, &test_module);
+      shuso_configure_finish(S);
+      assert_shuso_error(S, "invalid value \".+\" in subscribe string");
+    }
+    test("publish malformed event name") {
+      test_module.publish = "no:this_is_wrong";
+      shuso_add_module(S, &test_module);
+      shuso_configure_finish(S);
+      assert_shuso_error(S, "invalid event name .+ in publish string");
+    }
+    test("depend on nonexistent module") {
+      test_module.parent_modules = "foobar baz";
+      shuso_add_module(S, &test_module);
+      shuso_configure_finish(S);
+      assert_shuso_error(S, "module .+ was not found");
+    }
+    test("leave published events uninitialized") {
+      test_module.publish = "foobar bar baz";
+      shuso_add_module(S, &test_module);
+      shuso_configure_finish(S);
+      assert_shuso_error(S, "module .+ has %d+ uninitialized events");
+    }
+  }
+}
 
 describe(shuttlesock_init_and_shutdown) {
-  static shuso_t *ss = NULL;
+  static shuso_t *S = NULL;
   before_each() {
-    ss = NULL;
+    S = NULL;
   }
   after_each() {
-    if(ss) {
-      test_runcheck_t *runcheck = ss->common->phase_handlers.privdata;
-      shuso_destroy(ss);
+    if(S) {
+      test_runcheck_t *runcheck = S->common->phase_handlers.privdata;
+      shuso_destroy(S);
       if(runcheck) {
         shmfree(runcheck);
       }
-      ss = NULL;
+      S = NULL;
     }
   }
   test("run loop") {
-    ss = runcheck_shuso_create();
-    shuso_add_timer_watcher(ss, 0.5, 0.0, stop_timer, (void *)(intptr_t)SHUTTLESOCK_MASTER);
-    shuso_run(ss);
-    assert_shuso(ss);
+    S = runcheck_shuso_create();
+    shuso_add_timer_watcher(S, 0.5, 0.0, stop_timer, (void *)(intptr_t)SHUTTLESOCK_MASTER);
+    shuso_run(S);
+    assert_shuso(S);
   }
   
   test("stop from manager") {
-    ss = runcheck_shuso_create();
-    shuso_add_timer_watcher(ss, 0.5, 0.0, stop_timer, (void *)(intptr_t)SHUTTLESOCK_MANAGER);
-    shuso_run(ss);
-    assert_shuso(ss);
+    S = runcheck_shuso_create();
+    shuso_add_timer_watcher(S, 0.5, 0.0, stop_timer, (void *)(intptr_t)SHUTTLESOCK_MANAGER);
+    shuso_run(S);
+    assert_shuso(S);
   }
 }
 
@@ -205,23 +267,23 @@ static void ipc_load_test(EV_P_ shuso_ev_timer *w, int rev) {
 void ipc_echo_cancel(shuso_t *S, const uint8_t code, void *ptr) { }
 
 describe(ipc) {
-  static shuso_t *ss = NULL;
+  static shuso_t *S = NULL;
   subdesc(one_to_one) {
   static ipc_check_t *ipc_check = NULL;
     before_each() {
-      ss = NULL;
+      S = NULL;
       ipc_check = shmalloc(ipc_check);
-      ss = runcheck_shuso_create();
-      ss->data = ipc_check;
+      S = runcheck_shuso_create();
+      S->data = ipc_check;
     }
     after_each() {
-      if(ss) {
-        test_runcheck_t *runcheck = ss->common->phase_handlers.privdata;
-        shuso_destroy(ss);
+      if(S) {
+        test_runcheck_t *runcheck = S->common->phase_handlers.privdata;
+        shuso_destroy(S);
         if(runcheck) {
           shmfree(runcheck);
         }
-        ss = NULL;
+        S = NULL;
       }
       if(ipc_check) {
         shmfree(ipc_check);
@@ -234,10 +296,10 @@ describe(ipc) {
       ipc_check->ping.barrage = 1;
       ipc_check->pong.barrage = 1;
 
-      shuso_add_timer_watcher(ss, 0.1, 0.0, ipc_load_test, NULL);
-      shuso_ipc_add_handler(ss, "echo", IPC_ECHO, ipc_echo_receive, ipc_echo_cancel);
-      shuso_run(ss);
-      assert_shuso(ss);
+      shuso_add_timer_watcher(S, 0.1, 0.0, ipc_load_test, NULL);
+      shuso_ipc_add_handler(S, "echo", IPC_ECHO, ipc_echo_receive, ipc_echo_cancel);
+      shuso_run(S);
+      assert_shuso(S);
     }
     
     test("one-sided round-trip (250:1)") {
@@ -247,10 +309,10 @@ describe(ipc) {
       ipc_check->ping.barrage = 250;
       ipc_check->pong.barrage = 1;
 
-      shuso_add_timer_watcher(ss, 0.1, 0.0, ipc_load_test, NULL);
-      shuso_ipc_add_handler(ss, "echo", IPC_ECHO, ipc_echo_receive, ipc_echo_cancel);
-      shuso_run(ss);
-      assert_shuso(ss);
+      shuso_add_timer_watcher(S, 0.1, 0.0, ipc_load_test, NULL);
+      shuso_ipc_add_handler(S, "echo", IPC_ECHO, ipc_echo_receive, ipc_echo_cancel);
+      shuso_run(S);
+      assert_shuso(S);
     }
     
     test("buffer fill (500:1)") {
@@ -261,29 +323,29 @@ describe(ipc) {
       ipc_check->pong.barrage = 1;
       ipc_check->ping.init_sleep_flag = 1;
 
-      shuso_add_timer_watcher(ss, 0.1, 0.0, ipc_load_test, NULL);
-      shuso_ipc_add_handler(ss, "echo", IPC_ECHO, ipc_echo_receive, ipc_echo_cancel);
-      shuso_run(ss);
-      assert_shuso(ss);
+      shuso_add_timer_watcher(S, 0.1, 0.0, ipc_load_test, NULL);
+      shuso_ipc_add_handler(S, "echo", IPC_ECHO, ipc_echo_receive, ipc_echo_cancel);
+      shuso_run(S);
+      assert_shuso(S);
     }
   }
   
   subdesc(many_to_one) {
     static ipc_one_to_many_check_t *ipc_check = NULL;
     before_each() {
-      ss = NULL;
+      S = NULL;
       ipc_check = shmalloc(ipc_check);
-      ss = runcheck_shuso_create();
-      ss->data = ipc_check;
+      S = runcheck_shuso_create();
+      S->data = ipc_check;
     }
     after_each() {
-      if(ss) {
-        test_runcheck_t *runcheck = ss->common->phase_handlers.privdata;
-        shuso_destroy(ss);
+      if(S) {
+        test_runcheck_t *runcheck = S->common->phase_handlers.privdata;
+        shuso_destroy(S);
         if(runcheck) {
           shmfree(runcheck);
         }
-        ss = NULL;
+        S = NULL;
       }
       if(ipc_check) {
         shmfree(ipc_check);
@@ -407,23 +469,23 @@ void resolve_check_start(EV_P_ shuso_ev_timer *w, int revent) {
 }
 
 describe(resolver) {
-   static shuso_t *ss = NULL;
+   static shuso_t *S = NULL;
   before_each() {
-    ss = NULL;
+    S = NULL;
   }
   after_each() {
-    if(ss) {
-      shuso_destroy(ss);
-      ss = NULL;
+    if(S) {
+      shuso_destroy(S);
+      S = NULL;
     }
   }
   test("resolve using system") {
-    ss = runcheck_shuso_create();
+    S = runcheck_shuso_create();
     
-    shuso_add_timer_watcher(ss, 0.01, 0.0, resolve_check_start, 0);
+    shuso_add_timer_watcher(S, 0.01, 0.0, resolve_check_start, 0);
     
-    shuso_run(ss);
-    assert_shuso(ss);
+    shuso_run(S);
+    assert_shuso(S);
   }
 }
 
@@ -434,15 +496,15 @@ typedef struct {
 } allocd_t;
 
 describe(shared_memory_allocator) {
-  static shuso_t *ss = NULL;
+  static shuso_t *S = NULL;
   static shuso_shared_slab_t shm;
   before_each() {
     shuso_system_initialize();
-    ss = runcheck_shuso_create();
+    S = runcheck_shuso_create();
   }
   after_each() {
-    shuso_destroy(ss);
-    ss = NULL;
+    shuso_destroy(S);
+    S = NULL;
   }
   test("single-threaded alloc/free") {
     size_t shm_sz = 10*1024*1024;
@@ -453,7 +515,7 @@ describe(shared_memory_allocator) {
     for(int rep =0; rep < 10; rep++) {
       allocd_t *allocd = calloc(sizeof(allocd_t), total_allocs);
       assert(allocd);
-      assert(shuso_shared_slab_create(ss, &shm, shm_sz, "single-threaded alloc/free test"));
+      assert(shuso_shared_slab_create(S, &shm, shm_sz, "single-threaded alloc/free test"));
       for(i = 0; i < total_allocs; i++) {
         size_t sz = rand() % max_size + 1;
         allocd[i].free = 0;
@@ -550,25 +612,25 @@ void listener_port_test_runner(EV_P_ shuso_ev_timer *w, int revent) {
 }
 
 describe(listener_sockets) {
-    static shuso_t *ss = NULL;
+    static shuso_t *S = NULL;
     static listener_port_test_t *pt = NULL;
   before_each() {
     shuso_system_initialize();
-    ss = runcheck_shuso_create();
+    S = runcheck_shuso_create();
     pt = shmalloc(pt);
     pt->err = NULL;
   }
   after_each() {
-    shuso_destroy(ss);
+    shuso_destroy(S);
     shmfree(pt);
-    ss = NULL;
+    S = NULL;
   }
   test("listen on port 34241") {
     pt->port = 34241;
-    shuso_add_timer_watcher(ss,  0.1, 0.0, listener_port_test_runner, pt);
-    shuso_run(ss);
+    shuso_add_timer_watcher(S,  0.1, 0.0, listener_port_test_runner, pt);
+    shuso_run(S);
     printf("heyo\n");
-    assert_shuso(ss);
+    assert_shuso(S);
     if(pt->err != NULL) {
       snow_fail("%s", pt->err);
     }

@@ -8,8 +8,6 @@
 #endif
 
 #include <unistd.h>
-#include <stdint.h>
-#include <stdbool.h>
 
 #ifndef _SC_NPROCESSORS_ONLN
 #include <sys/param.h>
