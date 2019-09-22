@@ -12,6 +12,8 @@ struct shuso_module_s {
   shuso_module_init_fn   *initialize;
   const char             *subscribe; //space-separated list of modname:event_name events this module may subscribe to
   const char             *publish; //space-separated list of event_names this module may publish
+  void                   *privdata;
+  
   
   uint8_t                *parent_modules_index_map;
   int                     index;
@@ -56,25 +58,18 @@ struct shuso_core_module_ctx_s {
     shuso_module_event_t configure;
     shuso_module_event_t configure_after;
     
-    shuso_module_event_t start_master_before;
     shuso_module_event_t start_master;
-    shuso_module_event_t start_master_after;
-    shuso_module_event_t start_manager_before;
     shuso_module_event_t start_manager;
-    shuso_module_event_t start_manager_after;
-    shuso_module_event_t start_worker_before;
     shuso_module_event_t start_worker;
-    shuso_module_event_t start_worker_after;
     
-    shuso_module_event_t stop_master_before;
     shuso_module_event_t stop_master;
-    shuso_module_event_t stop_master_after;
-    shuso_module_event_t stop_manager_before;
     shuso_module_event_t stop_manager;
-    shuso_module_event_t stop_manager_after;
-    shuso_module_event_t stop_worker_before;
     shuso_module_event_t stop_worker;
-    shuso_module_event_t stop_worker_after;
+    
+    shuso_module_event_t all_workers_started;
+    shuso_module_event_t worker_exited;
+    shuso_module_event_t manager_exited;
+    
   }               event;
   shuso_module_context_list_t context_list;
 }; //shuso_core_module_ctx_t
@@ -96,6 +91,8 @@ void *shuso_context(shuso_t *S, shuso_module_t *parent, shuso_module_t *module, 
 bool shuso_event_initialize(shuso_t *S, shuso_module_t *mod, const char *name, shuso_module_event_t *mev);
 bool shuso_event_listen(shuso_t *S, const char *name, shuso_module_event_fn *callback, void *pd);
 bool shuso_event_publish(shuso_t *S, shuso_module_t *publisher_module, shuso_module_event_t *event, intptr_t code, void *data);
+
+bool shuso_core_module_event_publish(shuso_t *S, const char *name, intptr_t code, void *data);
 
 // internal stuff
 bool shuso_module_system_initialize(shuso_t *S, shuso_module_t *core_module);

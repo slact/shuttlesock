@@ -54,6 +54,9 @@ static void set_log_fd_handle(shuso_t *S, const uint8_t code, void *ptr) {
 static void open_listener_sockets_handle(shuso_t *S, const uint8_t code, void *ptr);
 static void open_listener_sockets_response_handle(shuso_t *S, const uint8_t code, void *ptr);
 
+static void worker_started_handle(shuso_t *S, const uint8_t code, void *ptr);
+static void worker_stopped_handle(shuso_t *S, const uint8_t code, void *ptr);
+
 bool shuso_ipc_commands_init(shuso_t *S) {
   if(!shuso_ipc_add_handler(S, "signal", SHUTTLESOCK_IPC_CMD_SIGNAL, signal_handle, NULL)) {
     return false;
@@ -71,6 +74,12 @@ bool shuso_ipc_commands_init(shuso_t *S) {
     return false;
   }
   if(!shuso_ipc_add_handler(S, "open_listener_sockets_response", SHUTTLESOCK_IPC_CMD_OPEN_LISTENER_SOCKETS_RESPONSE, open_listener_sockets_response_handle, NULL)) {
+    return false;
+  }
+  if(!shuso_ipc_add_handler(S, "worker_started", SHUTTLESOCK_IPC_CMD_WORKER_STARTED, worker_started_handle, NULL)) {
+    return false;
+  }
+  if(!shuso_ipc_add_handler(S, "worker_stopped", SHUTTLESOCK_IPC_CMD_WORKER_STOPPED, worker_stopped_handle, NULL)) {
     return false;
   }
 
@@ -325,8 +334,23 @@ static void open_listener_sockets_response_handle(shuso_t *S, const uint8_t code
   shuso_ipc_receive_fd_start(S, "open listener sockets response", 1.0, listener_socket_receiver, (uintptr_t) ptr, ptr);
 }
 
-
 static bool command_open_listener_sockets_from_worker(shuso_t *S, shuso_hostinfo_t *hostinfo, int count, shuso_sockopts_t *sockopts, shuso_ipc_open_sockets_fn callback, void *pd) {
   
   return true;
+}
+
+static void worker_started_handle(shuso_t *S, const uint8_t code, void *ptr) {
+  assert(S->procnum == SHUTTLESOCK_MANAGER);
+  //int worker_procnum = (intptr_t )ptr;
+  bool all_workers_running = false;
+  for(unsigned i = S->common->process.workers_start; i <= S->common->process.workers_end; i++) {
+    all_workers_running = all_workers_running && *S->common->process.worker[i].state == SHUSO_PROCESS_STATE_STARTING;
+  }
+  if(all_workers_running) {
+    shuso_core_module_event_publish(S, "manager.all_workers_started", SHUSO_OK, NULL);
+  }
+}
+static void worker_stopped_handle(shuso_t *S, const uint8_t code, void *ptr) {
+  assert(S->procnum == SHUTTLESOCK_MANAGER);
+  
 }

@@ -222,12 +222,10 @@ bool shuso_module_finalize(shuso_t *S, shuso_module_t *mod) {
   
   lua_getfield(L, -1, "events");
   lua_getfield(L, -1, "publish");
-  n = luaL_len(L, -1);
-  for(int i=1; i<=n; i++) {
-    lua_rawgeti(L, -1, i);
-    
+  
+  lua_pushnil(L);  /* first key */
+  while (lua_next(L, -2)) {
     shuso_module_event_t *event;
-    
     lua_getfield(L, -1, "ptr");
     event = (void *)lua_topointer(L, -1);
     assert(event != NULL);
@@ -278,6 +276,7 @@ bool shuso_module_finalize(shuso_t *S, shuso_module_t *mod) {
       .fn = NULL
     };
     event->listeners = listeners;
+    lua_pop(L, 2);
   }
   lua_pop(L, 1);
   
@@ -337,6 +336,20 @@ shuso_module_t *shuso_get_module(shuso_t *S, const char *name) {
   return module;
 }
 
+bool shuso_core_module_event_publish(shuso_t *S, const char *name, intptr_t code, void *data) {
+  shuso_core_module_ctx_t *ctx = S->common->core_module_ctx;
+  shuso_module_event_t    *ev = (shuso_module_event_t *)&ctx->event;
+  shuso_module_event_t    *cur;
+  int n = sizeof(ctx->event)/sizeof(shuso_module_event_t);
+  for(int i = 0; i < n; i++) {
+    cur = &ev[i];
+    if(strcmp(cur->name, name)) {
+      return shuso_event_publish(S, &shuso_core_module, cur, code, data);
+    }
+  }
+  return shuso_set_error(S, "failed to publish core event %s: no such event", name);
+}
+
 static bool core_module_init_function(shuso_t *S, shuso_module_t *self) {
   shuso_core_module_ctx_t *ctx = shuso_stalloc(&S->stalloc, sizeof(*ctx));
   if(!ctx) {
@@ -345,31 +358,20 @@ static bool core_module_init_function(shuso_t *S, shuso_module_t *self) {
   shuso_event_initialize(S, self, "configure", &ctx->event.configure);
   shuso_event_initialize(S, self, "configure.after", &ctx->event.configure_after);
   
-  shuso_event_initialize(S, self, "start_master.before", &ctx->event.start_master_before);
-  shuso_event_initialize(S, self, "start_master", &ctx->event.start_master);
-  shuso_event_initialize(S, self, "start_master.after", &ctx->event.start_master_after);
+  shuso_event_initialize(S, self, "master.start", &ctx->event.start_master);
+  shuso_event_initialize(S, self, "manager.start", &ctx->event.start_manager);
+  shuso_event_initialize(S, self, "worker.start", &ctx->event.start_worker);
   
-  shuso_event_initialize(S, self, "start_manager.before", &ctx->event.start_manager_before);
-  shuso_event_initialize(S, self, "start_manager", &ctx->event.start_manager);
-  shuso_event_initialize(S, self, "start_manager.after", &ctx->event.start_manager_after);
+  shuso_event_initialize(S, self, "master.stop", &ctx->event.stop_master);
+  shuso_event_initialize(S, self, "manager.stop", &ctx->event.stop_manager);
+  shuso_event_initialize(S, self, "worker.stop", &ctx->event.stop_worker);
   
-  shuso_event_initialize(S, self, "start_worker.before", &ctx->event.start_worker_before);
-  shuso_event_initialize(S, self, "start_worker", &ctx->event.start_worker);
-  shuso_event_initialize(S, self, "start_worker.after", &ctx->event.start_worker_after);
-  
-  shuso_event_initialize(S, self, "stop_master.before", &ctx->event.stop_master_before);
-  shuso_event_initialize(S, self, "stop_master", &ctx->event.stop_master);
-  shuso_event_initialize(S, self, "stop_master.after", &ctx->event.stop_master_after);
-  
-  shuso_event_initialize(S, self, "stop_manager.before", &ctx->event.stop_manager_before);
-  shuso_event_initialize(S, self, "stop_manager", &ctx->event.stop_manager);
-  shuso_event_initialize(S, self, "stop_manager.after", &ctx->event.stop_manager_after);
-  
-  shuso_event_initialize(S, self, "stop_worker.before", &ctx->event.stop_worker_before);
-  shuso_event_initialize(S, self, "stop_worker", &ctx->event.stop_worker);
-  shuso_event_initialize(S, self, "stop_worker.after", &ctx->event.stop_worker_after);  
+  shuso_event_initialize(S, self, "manager.all_workers_started", &ctx->event.all_workers_started);
+  shuso_event_initialize(S, self, "manager.worker_exited", &ctx->event.worker_exited);
+  shuso_event_initialize(S, self, "master.manager_exited", &ctx->event.manager_exited);
   
   shuso_context_list_initialize(S, self, &ctx->context_list, &S->stalloc);
+  S->common->core_module_ctx = ctx;
   return true;
 }
 shuso_module_t shuso_core_module = {
@@ -379,29 +381,17 @@ shuso_module_t shuso_core_module = {
    " configure"
    " configure.after"
    
-   " start_master.before"
-   " start_master"
-   " start_master.after"
+   " master.start"
+   " manager.start"
+   " worker.start"
    
-   " start_manager.before"
-   " start_manager"
-   " start_manager.after"
+   " master.stop"
+   " manager.stop"
+   " worker.stop"
    
-   " start_worker.before"
-   " start_worker"
-   " start_worker.after"
-   
-   " stop_master.before"
-   " stop_master"
-   " stop_master.after"
-   
-   " stop_manager.before"
-   " stop_manager"
-   " stop_manager.after"
-   
-   " stop_worker.before"
-   " stop_worker"
-   " stop_worker.after"
+   " manager.all_workers_started"
+   " manager.worker_exited"
+   " master.manager_exited"
   ,
   .initialize = core_module_init_function
 };

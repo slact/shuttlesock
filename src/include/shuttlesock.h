@@ -129,6 +129,7 @@ struct shuso_common_s {
   shuso_runstate_t    state;
   shuso_runtime_handlers_t    phase_handlers;
   shuso_ipc_handler_t ipc_handlers[256];
+  shuso_core_module_ctx_t    *core_module_ctx;
   shuso_config_t      config;
   struct {
     size_t              count;
@@ -161,7 +162,6 @@ struct shuso_s {
     unsigned int                flags;
   }                           ev;
   shuso_common_t             *common;
-  shuso_core_module_ctx_t    *core_module_context;
   struct {                  //base_watchers
     shuso_ev_signal              signal[8];
     shuso_ev_child               child;

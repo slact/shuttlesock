@@ -290,6 +290,7 @@ bool shuso_spawn_manager(shuso_t *S) {
     return shuso_set_error(S, "can't spawn manager from worker");
   }
   
+  shuso_core_module_event_publish(S, "start_manager.before", SHUSO_OK, NULL);
   pid_t pid = fork();
   if(pid > 0) {
     //master
@@ -307,7 +308,6 @@ bool shuso_spawn_manager(shuso_t *S) {
   shuso_ipc_channel_shared_start(S, &S->common->process.manager);
   setpgid(0, 0); // so that the shell doesn't send signals to manager and workers
   ev_loop_fork(S->ev.loop);
-  
   S->common->phase_handlers.start_manager(S, S->common->phase_handlers.privdata);
   *S->process->state = SHUSO_PROCESS_STATE_RUNNING;
   S->common->process.workers_start = 0;
@@ -410,6 +410,7 @@ bool shuso_run(shuso_t *S) {
   shuso_ev_child_init(S, &S->base_watchers.child, 0, 0, child_watcher_cb, NULL);
   shuso_ev_child_start(S, &S->base_watchers.child);
   
+  
   *S->process->state = SHUSO_PROCESS_STATE_STARTING;
   S->common->phase_handlers.start_master(S, S->common->phase_handlers.privdata);
   *S->process->state = SHUSO_PROCESS_STATE_RUNNING;
@@ -421,6 +422,13 @@ bool shuso_run(shuso_t *S) {
   shuso_init_signal_watchers(S);
   shuso_ipc_channel_local_init(S);
   shuso_ipc_channel_local_start(S);
+  
+  if(S->procnum == SHUTTLESOCK_MASTER) {
+    shuso_core_module_event_publish(S, "master.start", SHUSO_OK, NULL);
+  }
+  else {
+    shuso_core_module_event_publish(S, "manager.start", SHUSO_OK, NULL);
+  }
   ev_run(S->ev.loop, 0);
   shuso_log_debug(S, "stopping %s...", shuso_process_as_string(S));
   
@@ -486,11 +494,14 @@ static bool shuso_worker_initialize(shuso_t *S) {
   
   S->common->phase_handlers.start_worker(S, S->common->phase_handlers.privdata);
   *S->process->state = SHUSO_PROCESS_STATE_RUNNING;
+  shuso_core_module_event_publish(S, "worker.start", SHUSO_OK, NULL);
   shuso_log_notice(S, "started worker %i", S->procnum);
+  shuso_ipc_send(S, &S->common->process.manager, SHUTTLESOCK_IPC_CMD_WORKER_STARTED, (void *)(intptr_t )S->procnum); 
   return true;
 }
 static void shuso_worker_shutdown(shuso_t *S) {
   shuso_log_debug(S, "stopping worker %i...", S->procnum);
+  shuso_core_module_event_publish(S, "worker.stop", SHUSO_OK, NULL);
   shuso_cleanup_loop(S);
   *S->process->state = SHUSO_PROCESS_STATE_DEAD;
 #ifndef SHUTTLESOCK_DEBUG_NO_WORKER_THREADS
@@ -589,7 +600,7 @@ bool shuso_spawn_worker(shuso_t *S, shuso_process_t *proc) {
     goto fail;
   }
   
-
+  
 #ifdef SHUTTLESOCK_DEBUG_NO_WORKER_THREADS
   workerctx->ev.loop = S->ev.loop;
   assert(workerctx->ev.loop == ev_default_loop(0));
@@ -834,8 +845,10 @@ static void child_watcher_cb(shuso_loop *loop, shuso_ev_child *w, int revents) {
       *S->common->process.manager.state = SHUSO_PROCESS_STATE_DEAD;
     }
     else {
+      *S->common->process.manager.state = SHUSO_PROCESS_STATE_DEAD;
       //TODO: was that the manager that just died? if so, restart it.
     }
+    shuso_core_module_event_publish(S, "master.manager_exited", w->ev.rstatus, (void *)(intptr_t)w->ev.rstatus);
   }
   shuso_log_debug(S, "child watcher: child pid %d rstatus %x", w->ev.rpid, w->ev.rstatus);
 }

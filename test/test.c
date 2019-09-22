@@ -34,7 +34,7 @@ describe(modules) {
       assert(test_module.publish == NULL);
       assert(test_module.subscribe == NULL);
       S = shuso_create(NULL);
-      shuso_set_log_fd(S, dev_null);
+      //shuso_set_log_fd(S, dev_null);
     }
     after_each() {
       if(S) shuso_destroy(S);
