@@ -868,7 +868,11 @@ static int Lua_watcher_index(lua_State *L) {
       lua_pushnumber(L, w->watcher.timer.ev.repeat);
     }
     else if(strcmp(field, "after") == 0) {
-      lua_pushnumber(L, ((ev_watcher_time *)&w->watcher.timer.ev)->at);
+      union { //stop type-punning warning from complaining
+        ev_timer *ev;
+        ev_watcher_time *watcher;
+      } ww = { .ev = &w->watcher.timer.ev }; 
+      lua_pushnumber(L, ww.watcher->at);
     }
     return 1;
   }
