@@ -141,6 +141,7 @@ struct shuso_common_s {
     shuso_process_t     worker[SHUTTLESOCK_MAX_WORKERS];
     uint16_t            workers_start;
     uint16_t            workers_end;
+    bool                all_workers_running; //only relevant on manager
   }                   process;
   struct {          //log
     int                 fd;

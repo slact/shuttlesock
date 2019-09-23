@@ -15,11 +15,6 @@ static bool test_features(shuso_t *S, const char **errmsg);
 
 int shuttlesock_watched_signals[] = SHUTTLESOCK_WATCHED_SIGNALS;
 
-static void do_nothing(void) {}
-#define init_phase_handler(S, phase) \
-  if(!S->common->phase_handlers.phase) \
-    S->common->phase_handlers.start_master = (shuso_handler_fn *)do_nothing
-
 #define set_default_config(S, conf, default_val) do {\
   if(!(bool )((S)->common->config.conf)) { \
     (S)->common->config.conf = default_val; \

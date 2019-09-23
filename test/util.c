@@ -89,9 +89,8 @@ static void runcheck_event_listener(shuso_t *S, shuso_event_state_t *evs, intptr
   const char      *evn = evs->name;
   test_runcheck_t *chk = mod->privdata;
   runtest_module_ctx_t *ctx = &chk->ctx;
-  int              procnum = (intptr_t )data;
   shuso_log_info(S, "got event %s", evn);
-  if(strcmp(evn, "core:master.start") == 0) {
+  if(strcmp(evn, "master.start") == 0) {
     assert(ctx->process.master.started == 0);
     assert(ctx->process.master.stopped == 0);
     ctx->process.master.started = 1;
@@ -100,36 +99,36 @@ static void runcheck_event_listener(shuso_t *S, shuso_event_state_t *evs, intptr
       shuso_ev_timer_start(S, &ctx->timeout_timer);
     }
   }
-  else if(strcmp(evn, "core:manager.start") == 0) {
+  else if(strcmp(evn, "manager.start") == 0) {
     assert(ctx->process.manager.started == 0);
     assert(ctx->process.manager.stopped == 0);
     ctx->process.manager.started = 1;
   }
-  else if(strcmp(evn, "core:worker.start") == 0) {
-    assert(ctx->process.worker[procnum].started == 0);
-    assert(ctx->process.worker[procnum].stopped == 0);
-    ctx->process.worker[procnum].started = 1;
+  else if(strcmp(evn, "worker.start") == 0) {
+    assert(ctx->process.worker[S->procnum].started == 0);
+    assert(ctx->process.worker[S->procnum].stopped == 0);
+    ctx->process.worker[S->procnum].started = 1;
   }
-  else if(strcmp(evn, "core:master.stop") == 0) {
+  else if(strcmp(evn, "master.stop") == 0) {
     assert(ctx->process.master.started == 1);
     assert(ctx->process.master.stopped == 0);
     ctx->process.master.stopped = 1;
   }
-  else if(strcmp(evn, "core:manager.stop") == 0) {
+  else if(strcmp(evn, "manager.stop") == 0) {
     assert(ctx->process.manager.started == 1);
     assert(ctx->process.manager.stopped == 0);
     ctx->process.manager.stopped = 1;
   }
-  else if(strcmp(evn, "core:worker.stop") == 0) {
-    assert(ctx->process.worker[procnum].started == 1);
-    assert(ctx->process.worker[procnum].stopped == 0);
-    ctx->process.worker[procnum].stopped = 1;
+  else if(strcmp(evn, "worker.stop") == 0) {
+    assert(ctx->process.worker[S->procnum].started == 1);
+    assert(ctx->process.worker[S->procnum].stopped == 0);
+    ctx->process.worker[S->procnum].stopped = 1;
   }
-  else if(strcmp(evn, "core:manager.all_workers_started") == 0) {
+  else if(strcmp(evn, "manager.all_workers_started") == 0) {
     assert(ctx->process.all_workers_started == 0);
     ctx->process.all_workers_started = 1;
   }
-  else if(strcmp(evn, "core:manager.manager_exited") == 0) {
+  else if(strcmp(evn, "manager.manager_exited") == 0) {
     assert(ctx->process.manager.started == 1);
     assert(ctx->process.manager.stopped == 1);
     //TODO: add exit code and stuff

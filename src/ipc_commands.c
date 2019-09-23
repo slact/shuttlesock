@@ -342,12 +342,15 @@ static bool command_open_listener_sockets_from_worker(shuso_t *S, shuso_hostinfo
 static void worker_started_handle(shuso_t *S, const uint8_t code, void *ptr) {
   assert(S->procnum == SHUTTLESOCK_MANAGER);
   //int worker_procnum = (intptr_t )ptr;
-  bool all_workers_running = false;
-  for(unsigned i = S->common->process.workers_start; i <= S->common->process.workers_end; i++) {
-    all_workers_running = all_workers_running && *S->common->process.worker[i].state == SHUSO_PROCESS_STATE_STARTING;
+  bool all_workers_running = true;
+  for(unsigned i = S->common->process.workers_start; i < S->common->process.workers_end; i++) {
+    all_workers_running = all_workers_running && *S->common->process.worker[i].state == SHUSO_PROCESS_STATE_RUNNING;
   }
   if(all_workers_running) {
-    shuso_core_module_event_publish(S, "manager.all_workers_started", SHUSO_OK, NULL);
+    if(!S->common->process.all_workers_running) {
+      shuso_core_module_event_publish(S, "manager.all_workers_started", SHUSO_OK, NULL);
+    }
+    S->common->process.all_workers_running = true;
   }
 }
 static void worker_stopped_handle(shuso_t *S, const uint8_t code, void *ptr) {
