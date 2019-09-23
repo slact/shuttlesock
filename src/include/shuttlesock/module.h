@@ -78,6 +78,7 @@ bool shuso_set_core_module(shuso_t *S, shuso_module_t *module);
 bool shuso_add_module(shuso_t *S, shuso_module_t *module);
 bool shuso_load_module(shuso_t *S, const char *filename);
 bool shuso_module_finalize(shuso_t *S, shuso_module_t *module);
+bool shuso_initialize_added_modules(shuso_t *S);
 
 shuso_module_t *shuso_current_module(const shuso_t *S);
 shuso_module_t *shuso_current_event(const shuso_t *S);

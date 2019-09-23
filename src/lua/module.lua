@@ -12,7 +12,10 @@ local Event = {
 local event_mt
 function Event.find(module_name, event_name)
   if type(module_name)=="string" and not event_name then
-    module_name, event_name = module_name:match(Event.MODULE_EVENT_NAME_PATTERN)
+    module_name, event_name = module_name:match("^([%w%_]+):([%w%_%.]+)$")
+    if not module_name or not event_name then
+      return nil, "invalid event name"
+    end
   end
   assert(type(module_name) == "string")
   assert(type(event_name) == "string")
@@ -72,7 +75,7 @@ do
       return nil, "module "..subscriber_module.name.." has already been finalized"
     end
     
-    if not subscriber_module:depends_on_event(self:full_name()) then
+    if not subscriber_module:subscribes_to_event(self:full_name()) then
       return nil, "module ".. subscriber_module.name.." has not declared event ".. self:full_name() .. " in its 'subscribe' list, so it cannot be used."
     end
     
@@ -161,7 +164,7 @@ local module_mt
 Module.deps_indexed = {}
 Module.deps = {}
 
-function Module.start_initialization(module_name)
+function Module.start_initializing_module(module_name)
   if Module.currently_initializing_module_name then
     return nil, "another module ("..Module.currently_initializing_module_name..") is already initializing"
   end
@@ -172,19 +175,19 @@ function Module.start_initialization(module_name)
   Module.currently_initializing_module_name = module_name
   return true
 end
-function Module.finish_initialization(module_name)
+function Module.finish_initializing_module(module_name)
   if not Module.currently_initializing_module_name then
     return nil, "not initializing module "..module_name..", can't finish initialization"
   end
   if Module.currently_initializing_module_name ~= module_name then
     return nil, "currently initializing module "..Module.currently_initializing_module_name..", not "..module_name
   end
-  Module.currently_initializing_module_name = module_name
+  Module.currently_initializing_module_name = nil
   return true
 end
 function Module.currently_initializing_module()
   if Module.currently_initializing_module_name then
-    return Module.currently_initializing_module_name
+    return Module.find(Module.currently_initializing_module_name)
   else
     return nil, "not currently intializing a module"
   end
@@ -414,6 +417,10 @@ do
       table.insert(deps, assert(Module.find(name)))
     end
     return deps
+  end
+  
+  function module:subscribes_to_event(name)
+    return self.events.subscribe[name]
   end
   
   function module:event(name)

@@ -100,12 +100,46 @@ bool shuso_event_initialize(shuso_t *S, shuso_module_t *mod, const char *name, s
   return lua_function_call_result_ok(S, L, 3, false);
 }
 
+bool shuso_initialize_added_modules(shuso_t *S) {
+  lua_State *L = S->lua.state;
+  for(unsigned i=0; i<S->common->modules.count; i++) {
+    shuso_module_t *module = S->common->modules.array[i];
+    if(!module->initialize) {
+      return shuso_set_error(S, "module %s is missing its initialization function", module->name);
+    }
+    Lua_push_module_function(L, "start_initializing_module");
+    lua_pushstring(L, module->name);
+    if(!lua_function_call_result_ok(S, L, 1, false)) {
+      return false;
+    }
+    if(!module->initialize(S, module)) {
+      if(shuso_last_error(S) == NULL) {
+        return shuso_set_error(S, "module %s failed to initialize, but reported no error", module->name);
+      }
+      return false;
+    }
+    Lua_push_module_function(L, "finish_initializing_module");
+    lua_pushstring(L, module->name);
+    if(!lua_function_call_result_ok(S, L, 1, false)) {
+      return false;
+    }
+  }
+  
+  for(unsigned i=0; i<S->common->modules.count; i++) {
+    shuso_module_t *module = S->common->modules.array[i];
+    if(!shuso_module_finalize(S, module)) {
+      return false;
+    }
+  }
+  return true;
+}
+
 bool shuso_event_listen(shuso_t *S, const char *name, shuso_module_event_fn *callback, void *pd) {
   lua_State       *L = S->lua.state;
   shuso_module_t  *module;
   
   Lua_push_module_function(L, "currently_initializing_module");
-  if(!lua_function_call_result_ok(S, L, 1, true)) {
+  if(!lua_function_call_result_ok(S, L, 0, true)) {
     return false;
   }
   lua_getfield(L, -1, "ptr");
@@ -250,7 +284,7 @@ bool shuso_module_finalize(shuso_t *S, shuso_module_t *mod) {
       lua_getfield(L, -1, "module");
       lua_getfield(L, -1, "ptr");
       cur->module = (void *)lua_topointer(L, -1);
-      lua_pop(L, 1);
+      lua_pop(L, 2);
       
       lua_getfield(L, -1, "listener");
       *(const void **)&cur->fn = lua_topointer(L, -1); //pointer type magic to get around "cast function to data pointer" warning
@@ -270,6 +304,7 @@ bool shuso_module_finalize(shuso_t *S, shuso_module_t *mod) {
       }
       lua_pop(L, 1);
     }
+    
     listeners[listeners_count] = (shuso_module_event_listener_t ) {
       //end-of-list sentinel
       .module = NULL,
@@ -322,9 +357,9 @@ void *shuso_context(shuso_t *S, shuso_module_t *parent, shuso_module_t *module, 
 shuso_module_t *shuso_get_module(shuso_t *S, const char *name) {
   lua_State         *L = S->lua.state;
   shuso_module_t    *module;
-  Lua_push_module_function(L, "dependency_index");
+  Lua_push_module_function(L, "find");
   lua_pushstring(L, name);
-  if(!lua_function_call_result_ok(S, L, 5, true)) {
+  if(!lua_function_call_result_ok(S, L, 1, true)) {
     return NULL;
   }
   lua_getfield(L, -1, "ptr");
@@ -343,7 +378,7 @@ bool shuso_core_module_event_publish(shuso_t *S, const char *name, intptr_t code
   int n = sizeof(ctx->event)/sizeof(shuso_module_event_t);
   for(int i = 0; i < n; i++) {
     cur = &ev[i];
-    if(strcmp(cur->name, name)) {
+    if(strcmp(cur->name, name) == 0) {
       return shuso_event_publish(S, &shuso_core_module, cur, code, data);
     }
   }

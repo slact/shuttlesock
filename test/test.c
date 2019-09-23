@@ -79,30 +79,28 @@ describe(modules) {
   }
 }
 
-describe(shuttlesock_init_and_shutdown) {
-  static shuso_t *S = NULL;
+describe(init_and_shutdown) {
+  static shuso_t          *S = NULL;
+  static test_runcheck_t  *chk = NULL;
   before_each() {
-    S = NULL;
+    S = shusoT_create(&chk, 0.5);
   }
   after_each() {
     if(S) {
-      test_runcheck_t *runcheck = S->common->phase_handlers.privdata;
       shuso_destroy(S);
-      if(runcheck) {
-        shmfree(runcheck);
-      }
+      if(chk)
+        shmfree(chk);
       S = NULL;
     }
   }
   test("run loop") {
-    S = runcheck_shuso_create();
-    shuso_add_timer_watcher(S, 0.5, 0.0, stop_timer, (void *)(intptr_t)SHUTTLESOCK_MASTER);
+    chk->ctx.timeout_is_ok = true;
+    shuso_configure_finish(S);
     shuso_run(S);
-    assert_shuso(S);
+    assert_shuso_ok(S);
   }
   
-  test("stop from manager") {
-    S = runcheck_shuso_create();
+  skip("stop from manager") {
     shuso_add_timer_watcher(S, 0.5, 0.0, stop_timer, (void *)(intptr_t)SHUTTLESOCK_MANAGER);
     shuso_run(S);
     assert_shuso(S);

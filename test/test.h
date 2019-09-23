@@ -43,6 +43,28 @@ typedef struct {
 test_child_result_t *child_result;
 
 typedef struct {
+  _Atomic uint8_t   started;
+  _Atomic uint8_t   stopped;
+  _Atomic int       exit_code;
+} test_process_rundata_t;
+
+typedef struct {
+  double                   timeout;
+  bool                     timeout_is_ok;
+  shuso_ev_timer           timeout_timer;
+  _Atomic uint8_t          timed_out;
+  
+  _Atomic int              workers_started;
+  _Atomic int              workers_stopped;
+  struct {
+    test_process_rundata_t master;
+    test_process_rundata_t manager;
+    test_process_rundata_t worker[SHUTTLESOCK_MAX_WORKERS];
+    _Atomic uint8_t        all_workers_started;
+  }                process;
+} runtest_module_ctx_t;
+
+typedef struct {
   _Atomic pid_t    master_pid;
   _Atomic pid_t    manager_pid;
   struct {       //count
@@ -53,11 +75,15 @@ typedef struct {
     _Atomic int      start_worker;
     _Atomic int      stop_worker;
   }                count;
+  shuso_module_t   runcheck_module;
+  runtest_module_ctx_t ctx;
 } test_runcheck_t;
 
 int dev_null;
 
+shuso_t *shusoT_create(test_runcheck_t **external_ptr, double test_timeout);
 bool strmatch(const char *str, const char *pattern);
+bool runcheck(shuso_t *S, char **err);
 
 #define shmalloc(ptr) mmap(NULL, sizeof(*ptr), PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_SHARED,-1, 0)
 #define shmfree(ptr) munmap(ptr, sizeof(*ptr))
@@ -66,16 +92,31 @@ bool strmatch(const char *str, const char *pattern);
 #define shmfree_sz(ptr, sz) munmap(ptr, sz)
 
 #define assert_shuso_error(S, errmsg) \
-  do { \
-    if(!shuso_last_error(S)) { \
-      snow_fail("expected to have error matching \"%s\", but there was no error", errmsg); \
-    } \
-    if(!strmatch(shuso_last_error(S), errmsg)) { \
-      snow_fail("shuttlesock error \"%s\" didn't match \"%s\"", shuso_last_error(S), errmsg); \
-    } \
-  } while(0)
+do { \
+  if(!shuso_last_error(S)) { \
+    snow_fail("expected to have error matching \"%s\", but there was no error", errmsg); \
+  } \
+  if(!strmatch(shuso_last_error(S), errmsg)) { \
+    snow_fail("shuttlesock error \"%s\" didn't match \"%s\"", shuso_last_error(S), errmsg); \
+  } \
+} while(0)
 
 
+#define assert_shuso_ok(S) \
+do { \
+  snow_fail_update(); \
+  if(shuso_is_forked_manager(S)) { \
+    snow_bail(); \
+  } \
+  else { \
+    char *___errmsg; \
+    if(!runcheck(S, &___errmsg)) { \
+      snow_fail("%s", ___errmsg); \
+    } \
+  } \
+} while(0)
+    
+  
 #define assert_shuso(S) \
 do { \
   snow_fail_update(); \

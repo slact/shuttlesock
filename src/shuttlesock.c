@@ -171,13 +171,6 @@ bool shuso_configure_finish(shuso_t *S) {
     goto fail;
   }
   
-  init_phase_handler(S, start_master);
-  init_phase_handler(S, stop_master);
-  init_phase_handler(S, start_manager);
-  init_phase_handler(S, stop_manager);
-  init_phase_handler(S, start_worker);
-  init_phase_handler(S, stop_worker);
-  
   ev_set_userdata(S->ev.loop, S);
    
   if(!shuso_ipc_commands_init(S)) {
@@ -201,26 +194,8 @@ bool shuso_configure_finish(shuso_t *S) {
     goto fail;
   }
   
-  for(unsigned i=0; i<S->common->modules.count; i++) {
-    shuso_module_t *module = S->common->modules.array[i];
-    if(!module->initialize) {
-      shuso_set_error(S, "module %s is missing its initialization function", module->name);
-      goto fail;
-    }
-    if(!module->initialize(S, module)) {
-      if(shuso_last_error(S) == NULL) {
-        shuso_set_error(S, "module %s failed to initialize, but reported no error", module->name);
-      }
-      goto fail;
-    }
-  }
+  shuso_initialize_added_modules(S);
   
-  for(unsigned i=0; i<S->common->modules.count; i++) {
-    shuso_module_t *module = S->common->modules.array[i];
-    if(!shuso_module_finalize(S, module)) {
-      goto fail;
-    }
-  }
   S->common->state = SHUSO_STATE_CONFIGURED;
   return true;
   
@@ -290,7 +265,6 @@ bool shuso_spawn_manager(shuso_t *S) {
     return shuso_set_error(S, "can't spawn manager from worker");
   }
   
-  shuso_core_module_event_publish(S, "start_manager.before", SHUSO_OK, NULL);
   pid_t pid = fork();
   if(pid > 0) {
     //master
@@ -299,16 +273,14 @@ bool shuso_spawn_manager(shuso_t *S) {
     return true;
   }
   if(pid == -1) return false;
-  
-  shuso_log_debug(S, "starting %s...", shuso_process_as_string(S));
   S->procnum = SHUTTLESOCK_MANAGER;
   S->process = &S->common->process.manager;
   S->process->pid = getpid();
   *S->process->state = SHUSO_PROCESS_STATE_STARTING;
+  shuso_log_debug(S, "starting %s...", shuso_process_as_string(S));
   shuso_ipc_channel_shared_start(S, &S->common->process.manager);
   setpgid(0, 0); // so that the shell doesn't send signals to manager and workers
   ev_loop_fork(S->ev.loop);
-  S->common->phase_handlers.start_manager(S, S->common->phase_handlers.privdata);
   *S->process->state = SHUSO_PROCESS_STATE_RUNNING;
   S->common->process.workers_start = 0;
   S->common->process.workers_end = S->common->process.workers_start;
@@ -387,6 +359,7 @@ bool shuso_run(shuso_t *S) {
   S->procnum = SHUTTLESOCK_MASTER;
   S->process = &S->common->process.master;
   S->process->pid = getpid();
+  *S->process->state = SHUSO_PROCESS_STATE_STARTING;
   
   const char *err = NULL;
   bool master_ipc_created = false, manager_ipc_created = false, shuso_resolver_initialized = false;
@@ -410,9 +383,6 @@ bool shuso_run(shuso_t *S) {
   shuso_ev_child_init(S, &S->base_watchers.child, 0, 0, child_watcher_cb, NULL);
   shuso_ev_child_start(S, &S->base_watchers.child);
   
-  
-  *S->process->state = SHUSO_PROCESS_STATE_STARTING;
-  S->common->phase_handlers.start_master(S, S->common->phase_handlers.privdata);
   *S->process->state = SHUSO_PROCESS_STATE_RUNNING;
   shuso_log_notice(S, "started %s", shuso_process_as_string(S));
   if(!shuso_spawn_manager(S)) {
@@ -472,7 +442,7 @@ bool shuso_stop(shuso_t *S, shuso_stop_t forcefulness) {
   }
   
   if(*S->common->process.manager.state == SHUSO_PROCESS_STATE_DEAD) {
-    S->common->phase_handlers.stop_master(S, S->common->phase_handlers.privdata);
+    //S->common->phase_handlers.stop_master(S, S->common->phase_handlers.privdata);
     //TODO: deferred stop
     ev_break(S->ev.loop, EVBREAK_ALL);
   }
@@ -492,7 +462,7 @@ static bool shuso_worker_initialize(shuso_t *S) {
     return false;
   }
   
-  S->common->phase_handlers.start_worker(S, S->common->phase_handlers.privdata);
+  //S->common->phase_handlers.start_worker(S, S->common->phase_handlers.privdata);
   *S->process->state = SHUSO_PROCESS_STATE_RUNNING;
   shuso_core_module_event_publish(S, "worker.start", SHUSO_OK, NULL);
   shuso_log_notice(S, "started worker %i", S->procnum);
@@ -640,7 +610,7 @@ bool shuso_stop_worker(shuso_t *S, shuso_process_t *proc, shuso_stop_t forcefuln
         *S->process->state = SHUSO_PROCESS_STATE_STOPPING;
         //TODO: defer worker stop maybe?
         shuso_log_debug(S, "attempting to stop worker %i", S->procnum);
-        S->common->phase_handlers.stop_worker(S, S->common->phase_handlers.privdata);
+        //S->common->phase_handlers.stop_worker(S, S->common->phase_handlers.privdata);
 #ifndef SHUTTLESOCK_DEBUG_NO_WORKER_THREADS
         ev_break(S->ev.loop, EVBREAK_ALL);
 #else
