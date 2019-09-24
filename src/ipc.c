@@ -203,6 +203,7 @@ static bool ipc_send_direct(shuso_t *S, shuso_process_t *src, shuso_process_t *d
 }
 
 static bool ipc_send_outbuf_append(shuso_t *S, shuso_process_t *src, shuso_process_t *dst, const uint8_t code, void *ptr) {
+  //shuso_log_debug(S, "ipc send append outbuf %d ptr %p", (int )code, ptr);
   shuso_ipc_channel_local_t  *ch = &S->ipc;
   shuso_ipc_outbuf_t   *buffered = malloc(sizeof(*buffered));
   if(!buffered) {
@@ -284,7 +285,7 @@ static void ipc_send_retry_cb(shuso_loop *loop, shuso_ev_timer *w, int revents) 
   shuso_process_t    *proc = shuso_ev_data(w);
   shuso_ipc_outbuf_t *cur;
   while((cur = S->ipc.buf.first) != NULL) {
-    //shuso_log_debug(S, "retry send");
+    shuso_log_debug(S, "ipc retry send %d %p", (int)cur->code, cur->ptr);
     if(!ipc_send_direct(S, proc, cur->dst, cur->code, cur->ptr)) {
       //shuso_log_debug(S, "retry send still fails");
       //send still fails. retry again later
@@ -314,6 +315,9 @@ static void ipc_receive(shuso_t *S, shuso_process_t *proc) {
       shuso_log_error(S, "ipc: [%d] has nil code -- skip it.", (int )i);
     }
     else {
+      if(S->common->ipc_handlers[code].receive == (shuso_ipc_fn *)&do_nothing) {
+        shuso_log_error(S, "ipc: [%d] isn't handled, do nothing.", (int )code);
+      }
       S->common->ipc_handlers[code].receive(S, code, ptr);
     }
   }
