@@ -405,7 +405,9 @@ static bool core_module_init_function(shuso_t *S, shuso_module_t *self) {
   shuso_event_initialize(S, self, "manager.stop", &ctx->event.stop_manager);
   shuso_event_initialize(S, self, "worker.stop", &ctx->event.stop_worker);
   
-  shuso_event_initialize(S, self, "manager.all_workers_started", &ctx->event.all_workers_started);
+  shuso_event_initialize(S, self, "manager.workers_started", &ctx->event.manager_all_workers_started);
+  shuso_event_initialize(S, self, "master.workers_started", &ctx->event.master_all_workers_started);
+  shuso_event_initialize(S, self, "worker.workers_started", &ctx->event.worker_all_workers_started);
   shuso_event_initialize(S, self, "manager.worker_exited", &ctx->event.worker_exited);
   shuso_event_initialize(S, self, "master.manager_exited", &ctx->event.manager_exited);
   
@@ -428,7 +430,9 @@ shuso_module_t shuso_core_module = {
    " manager.stop"
    " worker.stop"
    
-   " manager.all_workers_started"
+   " manager.workers_started"
+   " master.workers_started"
+   " worker.workers_started"
    " manager.worker_exited"
    " master.manager_exited"
   ,
