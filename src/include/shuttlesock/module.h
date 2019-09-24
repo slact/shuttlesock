@@ -66,7 +66,9 @@ struct shuso_core_module_ctx_s {
     shuso_module_event_t stop_manager;
     shuso_module_event_t stop_worker;
     
-    shuso_module_event_t all_workers_started;
+    shuso_module_event_t manager_all_workers_started;
+    shuso_module_event_t master_all_workers_started;
+    shuso_module_event_t worker_all_workers_started;
     shuso_module_event_t worker_exited;
     shuso_module_event_t manager_exited;
     
