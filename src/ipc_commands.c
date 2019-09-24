@@ -343,8 +343,8 @@ static void worker_started_handle(shuso_t *S, const uint8_t code, void *ptr) {
   assert(S->procnum == SHUTTLESOCK_MANAGER);
   //int worker_procnum = (intptr_t )ptr;
   bool all_workers_running = true;
-  for(unsigned i = S->common->process.workers_start; i < S->common->process.workers_end; i++) {
-    all_workers_running = all_workers_running && *S->common->process.worker[i].state == SHUSO_PROCESS_STATE_RUNNING;
+  SHUSO_EACH_WORKER(S, worker) {
+    all_workers_running = all_workers_running && *worker->state == SHUSO_STATE_RUNNING;
   }
   if(all_workers_running) {
     if(!S->common->process.all_workers_running) {

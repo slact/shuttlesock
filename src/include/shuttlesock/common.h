@@ -39,23 +39,17 @@ typedef enum {
 #define SHUTTLESOCK_LAST_PRIORITY -127
 
 typedef enum {
-  SHUSO_STATE_STOPPED = -2,
-  SHUSO_STATE_MISCONFIGURED = -1,
-  SHUSO_STATE_CONFIGURING = 0,
-  SHUSO_STATE_CONFIGURED = 1,
+  //non-positive states MUST be kinds of non-running states
+  SHUSO_STATE_DEAD = -5,
+  SHUSO_STATE_STOPPED = -4,
+  SHUSO_STATE_MISCONFIGURED = -3,
+  SHUSO_STATE_CONFIGURING = -2,
+  SHUSO_STATE_CONFIGURED = -1,
+  SHUSO_STATE_NIL = 0,
+  SHUSO_STATE_STARTING = 1,
   SHUSO_STATE_RUNNING  = 2,
   SHUSO_STATE_STOPPING = 3
 } shuso_runstate_t;
-
-typedef enum {
-  //non-positive states MUST be kinds of non-running states
-  SHUSO_PROCESS_STATE_DEAD = -1,
-  SHUSO_PROCESS_STATE_NIL = 0,
-  //positive states MUST be kinds of running states
-  SHUSO_PROCESS_STATE_STARTING = 1,
-  SHUSO_PROCESS_STATE_RUNNING  = 2,
-  SHUSO_PROCESS_STATE_STOPPING = 3
-} shuso_process_state_t;
 
 #define SHUTTLESOCK_UNKNOWN_PROCESS  -404
 #define SHUTTLESOCK_NOPROCESS  -3

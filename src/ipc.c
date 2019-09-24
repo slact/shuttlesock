@@ -230,12 +230,12 @@ static bool ipc_send_outbuf_append(shuso_t *S, shuso_process_t *src, shuso_proce
 bool shuso_ipc_send(shuso_t *S, shuso_process_t *dst, const uint8_t code, void *ptr) {
   shuso_process_t *src = S->process;
   //shuso_log_debug(S, "ipc send code %d ptr %p", (int )code, ptr);
-  shuso_process_state_t dst_state = *dst->state;
-  if(dst_state < SHUSO_PROCESS_STATE_STARTING) {
+  shuso_runstate_t dst_state = *dst->state;
+  if(dst_state < SHUSO_STATE_STARTING) {
     raise(SIGABRT);
     return shuso_set_error(S, "tried sending IPC message to dead or nonexistent process");
   }
-  if(S->ipc.buf.first || dst_state == SHUSO_PROCESS_STATE_STARTING) {
+  if(S->ipc.buf.first || dst_state == SHUSO_STATE_STARTING) {
     //shuso_log_debug(S, "inbuf appears full from the start or process isn't running");
     return ipc_send_outbuf_append(S, src, dst, code, ptr);
   }
