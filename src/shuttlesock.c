@@ -373,13 +373,14 @@ bool shuso_stop_manager(shuso_t *S, shuso_stop_t forcefulness) {
         //TODO: kill 'em!
       }
     }
-    else {
-      SHUSO_EACH_WORKER(S, worker) {
-        all_stopped &= *worker->state == SHUSO_PROCESS_STATE_DEAD;
-      }
+    
+    SHUSO_EACH_WORKER(S, worker) {
+      //shuso_log_debug(S, "worker %i state: %s", worker->procnum, shuso_runstate_as_string(*worker->state));
+      all_stopped = all_stopped && (*worker->state == SHUSO_STATE_DEAD);
     }
     if(all_stopped) {
-      S->common->phase_handlers.stop_manager(S, S->common->phase_handlers.privdata);
+      //S->common->phase_handlers.stop_manager(S, S->common->phase_handlers.privdata);
+      shuso_core_module_event_publish(S, "manager.stop", SHUSO_OK, NULL);
       //TODO: deferred stopping
       ev_break(S->ev.loop, EVBREAK_ALL);
       return true;
