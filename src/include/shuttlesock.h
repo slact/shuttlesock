@@ -125,6 +125,20 @@ struct shuso_config_file_s {
   const char *data;
 }; // shuso_config_file_t
 
+typedef struct {
+  pid_t           pid;
+  enum {
+                    SHUSO_CHILD_RUNNING = 0,
+                    SHUSO_CHILD_EXITED, //WIFEXITED(status)
+                    SHUSO_CHILD_KILLED, //WIFSIGNALED(status)
+                    SHUSO_CHILD_STOPPED, //WIFSTOPPED(status)
+  }               state;
+  union {
+    int           code; //WEXITSTATUS(status)
+    int           signal; //WTERMSIG(status), WSTOPSIG(status)
+  };
+  int             waitpid_status;
+} shuso_sigchild_info_t;
 
 struct shuso_common_s {
   shuso_runstate_t    state;
@@ -143,6 +157,10 @@ struct shuso_common_s {
     uint16_t            workers_start;
     uint16_t            workers_end;
     bool                all_workers_running; //only relevant on manager
+    struct {
+      shuso_sigchild_info_t manager;
+      shuso_sigchild_info_t last;
+    }                 sigchild;
   }                   process;
   struct {          //log
     int                 fd;

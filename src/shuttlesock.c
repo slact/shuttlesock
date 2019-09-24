@@ -4,6 +4,7 @@
 #include <assert.h>
 #include <unistd.h>
 #include <sys/types.h>
+#include <sys/wait.h>
 #include <sys/mman.h>
 #include <errno.h>
 #include <string.h>
@@ -363,7 +364,7 @@ bool shuso_stop_manager(shuso_t *S, shuso_stop_t forcefulness) {
   if(*S->process->state == SHUSO_STATE_RUNNING) {
     *S->process->state = SHUSO_STATE_STOPPING;
     shuso_ipc_send_workers(S, SHUTTLESOCK_IPC_CMD_SHUTDOWN, (void *)(intptr_t )forcefulness);
-    shuso_add_timer_watcher(S, 0.1, 0.1, stop_manager_timer_cb, S);
+    shuso_add_timer_watcher(S, 0, 0.1, stop_manager_timer_cb, S);
   }
   if(*S->process->state == SHUSO_STATE_STOPPING) {
     bool all_stopped = true;
@@ -443,7 +444,7 @@ bool shuso_run(shuso_t *S) {
   }
   shuso_cleanup_loop(S);
   shuso_resolver_cleanup(&S->resolver);
-  *S->process->state = SHUSO_STATE_DEAD;
+  *S->process->state = SHUSO_STATE_STOPPED;
   shuso_stalloc_empty(&S->stalloc);
   shuso_log_notice(S, "stopped %s", shuso_process_as_string(S->procnum));
   return true;
@@ -469,21 +470,31 @@ bool shuso_stop(shuso_t *S, shuso_stop_t forcefulness) {
   }
   
   //TODO: implement forced shutdown
-  if(*S->process->state == SHUSO_STATE_RUNNING && *S->common->process.manager.state == SHUSO_STATE_RUNNING) {
-    if(!shuso_stop_manager(S, forcefulness)) {
-      return false;
+  if(*S->process->state == SHUSO_STATE_RUNNING) {
+    if(*S->common->process.manager.state == SHUSO_STATE_RUNNING) {
+      if(!shuso_stop_manager(S, forcefulness)) {
+        return false;
+      }
     }
-    shuso_add_timer_watcher(S, 0.1, 0.1, stop_master_timer_cb, S);
+    shuso_add_timer_watcher(S, 0.1, 1, stop_master_timer_cb, (void *)(intptr_t)forcefulness);
   }
   
+  bool first_try = false;
   if(*S->process->state == SHUSO_STATE_RUNNING) {
     *S->process->state = SHUSO_STATE_STOPPING;
+    first_try = true;
   }
   
   if(*S->common->process.manager.state == SHUSO_STATE_DEAD) {
     //S->common->phase_handlers.stop_master(S, S->common->phase_handlers.privdata);
     //TODO: deferred stop
+    if(!first_try) {
+      shuso_log_info(S, "manager process %i exited", S->common->process.manager.pid);
+    }
     ev_break(S->ev.loop, EVBREAK_ALL);
+  }
+  else if(!first_try) {
+      shuso_log_info(S, "waiting for manager process %i to exit..", S->common->process.manager.pid);
   }
   return true;
 }
@@ -512,7 +523,9 @@ static bool shuso_worker_initialize(shuso_t *S) {
 static void shuso_worker_shutdown(shuso_t *S) {
   shuso_log_debug(S, "stopping worker %i...", S->procnum);
   shuso_cleanup_loop(S);
-  *S->process->state = SHUSO_STATE_DEAD;
+  _Atomic(shuso_runstate_t) *worker_state = S->process->state;
+  assert(*worker_state == SHUSO_STATE_STOPPING);
+  *worker_state = SHUSO_STATE_STOPPED;
 #ifndef SHUTTLESOCK_DEBUG_NO_WORKER_THREADS
   ev_loop_destroy(S->ev.loop);
 #endif
@@ -522,6 +535,7 @@ static void shuso_worker_shutdown(shuso_t *S) {
   shuso_resolver_cleanup(&S->resolver);
   shuso_stalloc_empty(&S->stalloc);
   free(S);
+  *worker_state = SHUSO_STATE_DEAD;
 }
 
 #ifndef SHUTTLESOCK_DEBUG_NO_WORKER_THREADS
@@ -844,20 +858,61 @@ static void signal_watcher_cb(shuso_loop *loop, shuso_ev_signal *w, int revents)
   }
 }
 
+static void shuso_handle_sigchild(shuso_t *S, pid_t pid, int status) {
+  shuso_common_t *c = S->common;
+  shuso_sigchild_info_t info = {
+    .pid = pid,
+    .waitpid_status = status
+  };
+  
+  if(WIFEXITED(status)) {
+    info.state = SHUSO_CHILD_EXITED;
+    info.code = WEXITSTATUS(status);
+    shuso_log_debug(S, "child process %i exited with status %i", info.pid, info.code);
+  }
+  else if(WIFSIGNALED(status)) {
+    info.state = SHUSO_CHILD_KILLED;
+    info.signal = WTERMSIG(status);
+    shuso_log_debug(S, "child process %i was killed with signal %s", info.pid, shuso_system_strsignal(info.signal));
+  }
+  else if(WIFSTOPPED(status)) {
+    info.state = SHUSO_CHILD_STOPPED;
+    info.signal = WSTOPSIG(status);
+    shuso_log_debug(S, "child process %i was stopped with signal %s", info.pid, shuso_system_strsignal(info.signal));
+  }
+  else if(WIFCONTINUED(status)) {
+    info.state = SHUSO_CHILD_RUNNING;
+    info.state = 0;
+    shuso_log_debug(S, "child process %i was continued", info.pid);
+  }
+  else {
+    shuso_set_error(S, "got weird waitpid status %i, don't know what it is", status);
+    return;
+  }
+  
+  c->process.sigchild.last = info;
+  if(c->process.manager.pid == info.pid) {
+    c->process.sigchild.manager = info;
+    if(info.state != SHUSO_CHILD_RUNNING && info.state != SHUSO_CHILD_STOPPED) {
+      shuso_runstate_t manager_state_before = *c->process.manager.state;
+      *c->process.manager.state = SHUSO_STATE_DEAD;
+      
+      if(S->procnum == SHUTTLESOCK_MASTER) {
+        if(manager_state_before != SHUSO_STATE_DEAD) {
+          shuso_core_module_event_publish(S, "master.manager_exited", info.pid, &info);
+          if(*S->process->state == SHUSO_STATE_STOPPING) {
+            //already trying to stop, probably waiting on manager to exit
+            shuso_stop(S, SHUSO_STOP_ASK);
+          }
+        }
+      }
+    }
+  }
+}
+
 static void child_watcher_cb(shuso_loop *loop, shuso_ev_child *w, int revents) {
   shuso_t *S = shuso_state(loop, w);
-  if(S->procnum == SHUTTLESOCK_MASTER) {
-    if(*S->common->process.manager.state == SHUSO_STATE_STOPPING) {
-      assert(w->ev.rpid == S->common->process.manager.pid);
-      *S->common->process.manager.state = SHUSO_STATE_DEAD;
-    }
-    else {
-      *S->common->process.manager.state = SHUSO_STATE_DEAD;
-      //TODO: was that the manager that just died? if so, restart it.
-    }
-    shuso_core_module_event_publish(S, "master.manager_exited", w->ev.rstatus, (void *)(intptr_t)w->ev.rstatus);
-  }
-  shuso_log_debug(S, "child watcher: child pid %d rstatus %x", w->ev.rpid, w->ev.rstatus);
+  shuso_handle_sigchild(S, w->ev.rpid, w->ev.rstatus);
 }
 
 bool shuso_set_log_fd(shuso_t *S, int fd) {
