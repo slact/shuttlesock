@@ -29,28 +29,28 @@ static NONNULL(1,3) void shuso_log_level_vararg(shuso_t *S, shuso_loglevel_t lev
   }
   switch(level) {
     case SHUSO_LOG_FATAL:
-      lvl = "FATAL";
+      lvl = "   FATAL";
       break;
     case SHUSO_LOG_CRITICAL:
       lvl = "CRITICAL";
       break;
     case SHUSO_LOG_ERROR:
-      lvl = "ERROR";
+      lvl = "   ERROR";
       break;
     case SHUSO_LOG_WARNING:
-      lvl = "WARNING";
+      lvl = " WARNING";
       break;
     case SHUSO_LOG_NOTICE:
-      lvl = "NOTICE";
+      lvl = "  NOTICE";
       break;
     case SHUSO_LOG_INFO:
-      lvl = "INFO";
+      lvl = "    INFO";
       break;
     case SHUSO_LOG_DEBUG:
-      lvl = "DEBUG";
+      lvl = "   DEBUG";
       break;
     default:
-      lvl = "???";
+      lvl = "     ???";
       raise(SIGABRT);
       break;
   }
