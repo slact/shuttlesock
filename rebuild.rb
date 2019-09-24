@@ -312,10 +312,16 @@ rebuild = Opts.new do
   
   gcc :debug_flag,
     display_as: "gcc gcc5 gcc6 ...",
-    match: (/gcc(\d?)/),
+    match: (/gcc-?(\d?)/),
     run: (Proc.new do |opt, arg|
-      opt.export= {CC: "gcc#{opt.matches[1]}"}
-      opt.set= {compiler: "gcc#{opt.matches[1]}"}
+      num = opt.matches[1]
+      if num && num.length > 0
+        gcc="gcc-#{num}"
+      else
+        gcc="gcc"
+      end
+      opt.export= {CC: gcc}
+      opt.set= {compiler: gcc}
     end)
   
   O :debug_flag, 
