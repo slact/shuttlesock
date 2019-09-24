@@ -554,6 +554,8 @@ static void _snow_print_desc_end(void) {
 
 #define snow_bail() \
 	do {\
+		/*reset exit code to success, so only the failure of this test returns a bad exit code*/ \
+		_snow.exit_code = EXIT_SUCCESS; \
 		_snow.opts[_SNOW_OPT_RERUN_FAILED].boolval = 0; \
 		_snow.opts[_SNOW_OPT_QUIET].boolval = 1; \
 		_snow.bail = 1; \
