@@ -1,6 +1,7 @@
 #ifndef SHUTTLESOCK_SYSUTIL_H
 #define SHUTTLESOCK_SYSUTIL_H
 #include <stdbool.h>
+#include <stdlib.h>
 
 typedef struct {
   size_t      page_size;
