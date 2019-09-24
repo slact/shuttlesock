@@ -34,8 +34,10 @@ describe(modules) {
       assert(test_module.publish == NULL);
       assert(test_module.subscribe == NULL);
       S = shuso_create(NULL);
-      if(!test_config.verbose) {
-        shuso_set_log_fd(S, dev_null);
+      if(!test_config.verbose) {
+
+        shuso_set_log_fd(S, dev_null);
+
       }
     }
     after_each() {
@@ -92,28 +94,25 @@ describe(init_and_shutdown) {
   static shuso_t          *S = NULL;
   static test_runcheck_t  *chk = NULL;
   before_each() {
-    S = shusoT_create(&chk, 1);
+    S = shusoT_create(&chk, 5);
   }
   after_each() {
-    if(S) {
-      shusoT_destroy(S, &chk);
-      S = NULL;
-    }
+    shusoT_destroy(S, &chk);
   }
   test("run loop, stop from manager") {
     shuso_configure_finish(S);
-    shusoT_run_test(S, SHUTTLESOCK_MANAGER, stop_shuttlesock, (void *)(intptr_t)SHUTTLESOCK_MANAGER);
+    shusoT_run_test(S, SHUTTLESOCK_MANAGER, stop_shuttlesock, NULL, (void *)(intptr_t)SHUTTLESOCK_MANAGER);
     assert_shuso_ok(S);
   }
   
   test("stop from master") {
     shuso_configure_finish(S);
-    shusoT_run_test(S, SHUTTLESOCK_MASTER, stop_shuttlesock, (void *)(intptr_t)SHUTTLESOCK_MASTER);
+    shusoT_run_test(S, SHUTTLESOCK_MASTER, stop_shuttlesock, NULL, (void *)(intptr_t)SHUTTLESOCK_MASTER);
     assert_shuso_ok(S);
   }
   test("stop from worker") {
     shuso_configure_finish(S);
-    shusoT_run_test(S, 0, stop_shuttlesock, (void *)(intptr_t)0);
+    shusoT_run_test(S, 0, stop_shuttlesock, NULL, (void *)(intptr_t)0);
     assert_shuso_ok(S);
   }
 }
@@ -246,7 +245,6 @@ static void ipc_load_test(shuso_t *S, void *pd) {
   ipc_check_t   *chk = pd;
   ipc_check_oneway_t *self = NULL, *dst = NULL;
   ipc_echo_srcdst(S, &self, &dst);
-  
   while(self->init_sleep_flag) {
     ev_sleep(0.05);
   }
@@ -264,6 +262,11 @@ static void ipc_load_test(shuso_t *S, void *pd) {
   assert(shuso_is_master(S));
   assert(chk->ping.procnum == SHUTTLESOCK_MANAGER);
   ipc_echo_send(S);
+}
+
+static void ipc_load_test_verify(shuso_t *S, void *pd) {
+  ipc_check_t   *chk = pd;
+  printf("chk->sent: %i\n", chk->sent);
 }
 #undef check_ipc
 
@@ -294,7 +297,7 @@ describe(ipc) {
       
       shuso_ipc_add_handler(S, "echo", IPC_ECHO, ipc_echo_receive, ipc_echo_cancel);
       shuso_configure_finish(S);
-      shusoT_run_test(S, SHUTTLESOCK_MASTER, ipc_load_test, ipc_check);
+      shusoT_run_test(S, SHUTTLESOCK_MASTER, ipc_load_test, ipc_load_test_verify, ipc_check);
       assert_shuso_ok(S);
     }
     
@@ -307,12 +310,12 @@ describe(ipc) {
 
       shuso_ipc_add_handler(S, "echo", IPC_ECHO, ipc_echo_receive, ipc_echo_cancel);
       shuso_configure_finish(S);
-      shusoT_run_test(S, SHUTTLESOCK_MASTER, ipc_load_test, ipc_check);
+      shusoT_run_test(S, SHUTTLESOCK_MASTER, ipc_load_test, ipc_load_test_verify, ipc_check);
       assert_shuso_ok(S);
     }
     
     test("buffer fill (500:1)") {
-      ipc_check->received_stop_at = 10000;
+      ipc_check->received_stop_at = 1000;
       ipc_check->ping.procnum = SHUTTLESOCK_MANAGER;
       ipc_check->pong.procnum = SHUTTLESOCK_MASTER;
       ipc_check->ping.barrage = 400;
@@ -321,7 +324,7 @@ describe(ipc) {
 
       shuso_ipc_add_handler(S, "echo", IPC_ECHO, ipc_echo_receive, ipc_echo_cancel);
       shuso_configure_finish(S);
-      shusoT_run_test(S, SHUTTLESOCK_MASTER, ipc_load_test, ipc_check);
+      shusoT_run_test(S, SHUTTLESOCK_MASTER, ipc_load_test, ipc_load_test_verify, ipc_check);
       assert_shuso_ok(S);
     }
   }
@@ -437,6 +440,7 @@ void resolver_test(shuso_t *S, void *pd) {
   shuso_resolve_hostname(&S->resolver, "google.com", AF_INET, resolve_check_ok, S);
 }
 
+
 describe(resolver) {
   static shuso_t *S = NULL;
   static test_runcheck_t  *chk = NULL;
@@ -449,7 +453,7 @@ describe(resolver) {
   
   test("resolve using system") {
     shuso_configure_finish(S);
-    shusoT_run_test(S, SHUTTLESOCK_MANAGER, resolver_test, NULL);
+    shusoT_run_test(S, SHUTTLESOCK_MANAGER, resolver_test, NULL, NULL);
     assert_shuso_ok(S);
   }
 }
@@ -589,7 +593,7 @@ describe(listener_sockets) {
   test("listen on port 34241") {
     pt->port = 34241;
     shuso_configure_finish(S);
-    shusoT_run_test(S, SHUTTLESOCK_MANAGER, listener_port_test, pt);
+    shusoT_run_test(S, SHUTTLESOCK_MANAGER, listener_port_test, NULL, pt);
     assert_shuso_ok(S);
     if(pt->err) {
       snow_fail("error: %s", pt->err);
@@ -606,10 +610,12 @@ int main(int argc, char **argv) {
     return 1;
   }
   int rc = snow_main_function(argc, argv);
+  //printf("%i says bye with status code %i!\n\n", getpid(), rc);
   close(dev_null);
   fclose(stdin);
   fclose(stdout);
   fclose(stderr); 
+  
   return rc;
 }
 

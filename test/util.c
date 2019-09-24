@@ -61,6 +61,16 @@ bool ___runcheck(shuso_t *S, char **err) {
       return checkfail(err, "worker %i was never started but was stopped (?)", i);
     }
   }
+  assert_util(chk->events.master_start == 1);
+  assert_util(chk->events.manager_start == 1);
+  assert_util(chk->events.worker_start >= 1);
+  assert_util(chk->events.master_stop >= 1);
+  assert_util(chk->events.manager_stop == 1);
+  assert_util(chk->events.worker_stop >= 1);
+  assert_util(chk->events.manager_workers_started == 1);
+  assert_util(chk->events.master_workers_started == 1);
+  assert_util(chk->events.worker_workers_started >= 1);
+  assert_util(chk->events.master_manager_exited == 1);
   return true;
 }
 
@@ -79,6 +89,7 @@ static void runcheck_event_listener(shuso_t *S, shuso_event_state_t *evs, intptr
       shuso_ev_timer_init(S, &chk->timeout_timer, chk->timeout, 0, runcheck_timeout_timer, mod);
       shuso_ev_timer_start(S, &chk->timeout_timer);
     }
+    chk->events.master_start++;
   }
   else if(strcmp(evn, "manager.start") == 0) {
     assert(chk->process.manager.started == 0);
@@ -86,6 +97,7 @@ static void runcheck_event_listener(shuso_t *S, shuso_event_state_t *evs, intptr
     chk->process.manager.started = 1;
     chk->process.manager.pid = S->process->pid;
     assert(chk->process.manager.pid == getpid());
+    chk->events.manager_start++;
   }
   else if(strcmp(evn, "worker.start") == 0) {
     assert(chk->process.worker[S->procnum].started == 0);
@@ -93,6 +105,7 @@ static void runcheck_event_listener(shuso_t *S, shuso_event_state_t *evs, intptr
     chk->process.worker[S->procnum].started = 1;
     chk->process.worker[S->procnum].pid = S->process->pid;
     assert(chk->process.worker[S->procnum].pid == getpid());
+    chk->events.worker_start++;
   }
   else if(strcmp(evn, "master.stop") == 0) {
     assert(chk->process.master.started == 1);
@@ -100,6 +113,7 @@ static void runcheck_event_listener(shuso_t *S, shuso_event_state_t *evs, intptr
     assert(getpid() == chk->process.master.pid);
     assert(getpid() == S->process->pid);
     chk->process.master.stopped = 1;
+    chk->events.master_stop++;
   }
   else if(strcmp(evn, "manager.stop") == 0) {
     assert(chk->process.manager.started == 1);
@@ -107,6 +121,7 @@ static void runcheck_event_listener(shuso_t *S, shuso_event_state_t *evs, intptr
     chk->process.manager.stopped = 1;
     assert(getpid() == chk->process.manager.pid);
     assert(getpid() == S->process->pid);
+    chk->events.manager_stop++;
   }
   else if(strcmp(evn, "worker.stop") == 0) {
     assert(chk->process.worker[S->procnum].started == 1);
@@ -115,27 +130,49 @@ static void runcheck_event_listener(shuso_t *S, shuso_event_state_t *evs, intptr
     chk->process.worker[S->procnum].stopped = 1;
     assert(getpid() == chk->process.worker[S->procnum].pid);
     assert(getpid() == S->process->pid);
+    chk->events.worker_stop++;
   }
   else if(strcmp(evn, "manager.workers_started") == 0) {
     assert(chk->process.all_workers_started == 0);
     chk->process.all_workers_started = 1;
-    if(chk->test.fn && chk->test.procnum == S->procnum) {
-      chk->test.fn(S, chk->test.pd);
+    if(chk->test.run && chk->test.procnum == S->procnum) {
+      chk->test.run(S, chk->test.pd);
     }
+    chk->events.manager_workers_started++;
   }
   else if(strcmp(evn, "master.workers_started") == 0) {
-    if(chk->test.fn && chk->test.procnum == S->procnum) {
-      chk->test.fn(S, chk->test.pd);
+    if(chk->test.run && chk->test.procnum == S->procnum) {
+      chk->test.run(S, chk->test.pd);
     }
+    chk->events.master_workers_started++;
   }
   else if(strcmp(evn, "worker.workers_started") == 0) {
-    if(chk->test.fn && chk->test.procnum == S->procnum) {
-      chk->test.fn(S, chk->test.pd);
+    if(chk->test.run && chk->test.procnum == S->procnum) {
+      chk->test.run(S, chk->test.pd);
     }
+    chk->events.worker_workers_started++;
   }
-  else if(strcmp(evn, "manager.manager_exited") == 0) {
+  else if(strcmp(evn, "master.manager_exited") == 0) {
+    pid_t rpid = code;
+    shuso_sigchild_info_t *info = data;
+    assert(chk->process.manager.pid == rpid);
     assert(chk->process.manager.started == 1);
     assert(chk->process.manager.stopped == 1);
+    assert(info);
+    switch(info->state) {
+      case SHUSO_CHILD_EXITED:
+        assert(info->code == 0, "manager exited with a nonzero (error) status code");
+        break;
+      case SHUSO_CHILD_KILLED:
+        snow_fail_update();
+        snow_fail("manager was killed by signal %s", shuso_system_strsignal(info->signal));
+        break;
+      case SHUSO_CHILD_RUNNING:
+      case SHUSO_CHILD_STOPPED:
+        //that's ok i think?
+        break;
+    }
+    chk->events.master_manager_exited++;
     //TODO: add exit code and stuff
   }
   
@@ -210,10 +247,11 @@ shuso_t *shusoT_create(test_runcheck_t **external_ptr, double test_timeout) {
   return S;
 }
 
-bool ___shusoT_run_test(shuso_t *S, int procnum, void (*run)(shuso_t *, void *), void *pd) {
+bool ___shusoT_run_test(shuso_t *S, int procnum, void (*run)(shuso_t *, void *), void (*verify)(shuso_t *, void *), void *pd) {
   shuso_module_t        *mod = shuso_get_module(S, "runcheck");
   test_runcheck_t       *chk = mod->privdata;
-  chk->test.fn = run;
+  chk->test.run = run;
+  chk->test.verify = verify;
   chk->test.pd = pd;
   chk->test.procnum = procnum;
   if(!shuso_run(S)) {

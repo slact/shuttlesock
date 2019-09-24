@@ -12,6 +12,9 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 
+#include <sys/types.h>
+#include <sys/wait.h>
+
 typedef struct {
   bool    verbose;
 } test_config_t;
@@ -51,9 +54,22 @@ typedef struct {
     _Atomic int      start_worker;
     _Atomic int      stop_worker;
   }                count;
-  
   struct {
-  void               (*fn)(shuso_t *S, void *pd);
+    _Atomic int    master_start;
+    _Atomic int    manager_start;
+    _Atomic int    worker_start;
+    _Atomic int    master_stop;
+    _Atomic int    manager_stop;
+    _Atomic int    worker_stop;
+    _Atomic int    manager_workers_started;
+    _Atomic int    master_workers_started;
+    _Atomic int    worker_workers_started;
+    _Atomic int    master_manager_exited;
+    
+  }                events;
+  struct {
+  void               (*run)(shuso_t *S, void *pd);
+  void               (*verify)(shuso_t *S, void *pd);
   void                *pd;
   int                procnum;
   }                  test;
@@ -83,7 +99,7 @@ shuso_t *shusoT_create(test_runcheck_t **external_ptr, double test_timeout);
   snow_fail_update(); \
   ___shusoT_run_test(__VA_ARGS__); \
 } while(0)
-bool ___shusoT_run_test(shuso_t *S, int procnum, void (*run)(shuso_t *, void *), void *pd);
+bool ___shusoT_run_test(shuso_t *S, int procnum, void (*run)(shuso_t *, void *), void (*verify)(shuso_t *, void *), void *pd);
 
 bool shusoT_destroy(shuso_t *S, test_runcheck_t **chkptr);
 bool strmatch(const char *str, const char *pattern);
@@ -119,6 +135,16 @@ do { \
     } \
   } \
 } while(0)
+
+#pragma GCC system_header
+#pragma GCC diagnostic ignored "-Wgnu-zero-variadic-macro-arguments"
+
+#define assert_util(x, expl...) \
+do { \
+  const char *explanation = "" expl; \
+  if (!(x)) \
+      _snow_fail_expl(explanation, "Assertion failed: %s", #x); \
+} while (0)
 
 
 #define skip(...) while(0)
