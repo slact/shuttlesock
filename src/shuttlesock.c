@@ -387,6 +387,9 @@ bool shuso_stop_manager(shuso_t *S, shuso_stop_t forcefulness) {
 }
 
 bool shuso_run(shuso_t *S) {
+  if(!shuso_runstate_check(S, SHUSO_STATE_CONFIGURED, "run")) {
+    return false;
+  }
   S->procnum = SHUTTLESOCK_MASTER;
   S->process = &S->common->process.master;
   S->process->pid = getpid();
