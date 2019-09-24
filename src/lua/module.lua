@@ -68,13 +68,16 @@ do
       return nil, "unknown receiver module"
     end
     
+    if not self.module then
+      return nil, "module "..subscriber_module.name.." tried to listen to nonexistent event "..self:full_name()
+    end
+    
     if self.module.finalized then
       return nil, "module "..self.module.name.." has already been finalized"
     end
     if subscriber_module.finalized then
       return nil, "module "..subscriber_module.name.." has already been finalized"
     end
-    
     if not subscriber_module:subscribes_to_event(self:full_name()) then
       return nil, "module ".. subscriber_module.name.." has not declared event ".. self:full_name() .. " in its 'subscribe' list, so it cannot be used."
     end
