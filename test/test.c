@@ -34,7 +34,9 @@ describe(modules) {
       assert(test_module.publish == NULL);
       assert(test_module.subscribe == NULL);
       S = shuso_create(NULL);
-      //shuso_set_log_fd(S, dev_null);
+      if(!test_config.verbose) {
+        shuso_set_log_fd(S, dev_null);
+      }
     }
     after_each() {
       if(S) shuso_destroy(S);
@@ -79,31 +81,40 @@ describe(modules) {
   }
 }
 
+static void stop_shuttlesock(shuso_t *S, void *pd) {
+  shuso_log_notice(S, "STOP ME PLEAEEEEASE");
+  intptr_t procnum = (intptr_t)pd;
+  assert(S->procnum == procnum);
+  shuso_stop(S, SHUSO_STOP_ASK);
+}
+
 describe(init_and_shutdown) {
   static shuso_t          *S = NULL;
   static test_runcheck_t  *chk = NULL;
   before_each() {
-    S = shusoT_create(&chk, 0.5);
+    S = shusoT_create(&chk, 1);
   }
   after_each() {
     if(S) {
-      shuso_destroy(S);
-      if(chk)
-        shmfree(chk);
+      shusoT_destroy(S, &chk);
       S = NULL;
     }
   }
-  test("run loop") {
-    chk->ctx.timeout_is_ok = true;
+  test("run loop, stop from manager") {
     shuso_configure_finish(S);
-    shuso_run(S);
+    shusoT_run_test(S, SHUTTLESOCK_MANAGER, stop_shuttlesock, (void *)(intptr_t)SHUTTLESOCK_MANAGER);
     assert_shuso_ok(S);
   }
   
-  skip("stop from manager") {
-    shuso_add_timer_watcher(S, 0.5, 0.0, stop_timer, (void *)(intptr_t)SHUTTLESOCK_MANAGER);
-    shuso_run(S);
-    assert_shuso(S);
+  test("stop from master") {
+    shuso_configure_finish(S);
+    shusoT_run_test(S, SHUTTLESOCK_MASTER, stop_shuttlesock, (void *)(intptr_t)SHUTTLESOCK_MASTER);
+    assert_shuso_ok(S);
+  }
+  test("stop from worker") {
+    shuso_configure_finish(S);
+    shusoT_run_test(S, 0, stop_shuttlesock, (void *)(intptr_t)0);
+    assert_shuso_ok(S);
   }
 }
 
@@ -172,10 +183,8 @@ void ipc_echo_srcdst(shuso_t *S, ipc_check_oneway_t **self, ipc_check_oneway_t *
 
 void ipc_echo_send(shuso_t *S) {
   ipc_check_t   *chk = S->data;
-  
   ipc_check_oneway_t *self = NULL, *dst = NULL;
   ipc_echo_srcdst(S, &self, &dst);
-  
   float sleeptime = 0;
   if(self->sleep > 0 && self->slept < self->sleep) {
     sleeptime = chk->sleep_step == 0 ? self->sleep : chk->sleep_step;
@@ -189,7 +198,6 @@ void ipc_echo_send(shuso_t *S) {
   
   shuso_process_t *processes = S->common->process.worker;
   shuso_process_t *dst_process = &processes[dst->procnum];
-  
   for(int i=0; i<dst->barrage; i++) {
     if(chk->sent >= chk->received_stop_at) {
       //we're done;
@@ -234,9 +242,8 @@ void ipc_echo_receive(shuso_t *S, const uint8_t code, void *ptr) {
   ipc_echo_send(S);
 }
 
-static void ipc_load_test(EV_P_ shuso_ev_timer *w, int rev) {
-  shuso_t *S = ev_userdata(EV_A);
-  ipc_check_t   *chk = S->data;
+static void ipc_load_test(shuso_t *S, void *pd) {
+  ipc_check_t   *chk = pd;
   ipc_check_oneway_t *self = NULL, *dst = NULL;
   ipc_echo_srcdst(S, &self, &dst);
   
@@ -254,9 +261,7 @@ static void ipc_load_test(EV_P_ shuso_ev_timer *w, int rev) {
     ev_sleep(sleeptime);
   }
   
-  if(!shuso_is_master(S)) {
-    return;
-  }
+  assert(shuso_is_master(S));
   assert(chk->ping.procnum == SHUTTLESOCK_MANAGER);
   ipc_echo_send(S);
 }
@@ -265,27 +270,20 @@ static void ipc_load_test(EV_P_ shuso_ev_timer *w, int rev) {
 void ipc_echo_cancel(shuso_t *S, const uint8_t code, void *ptr) { }
 
 describe(ipc) {
-  static shuso_t *S = NULL;
+  static shuso_t          *S = NULL;
+  static test_runcheck_t  *chk = NULL;
+  
   subdesc(one_to_one) {
-  static ipc_check_t *ipc_check = NULL;
+    static ipc_check_t *ipc_check = NULL;
+    
     before_each() {
-      S = NULL;
+      S = shusoT_create(&chk, 15.0);
       ipc_check = shmalloc(ipc_check);
-      S = runcheck_shuso_create();
       S->data = ipc_check;
     }
     after_each() {
-      if(S) {
-        test_runcheck_t *runcheck = S->common->phase_handlers.privdata;
-        shuso_destroy(S);
-        if(runcheck) {
-          shmfree(runcheck);
-        }
-        S = NULL;
-      }
-      if(ipc_check) {
-        shmfree(ipc_check);
-      }
+      shusoT_destroy(S, &chk);
+      shmfree(ipc_check);
     }
     test("simple round-trip") {
       ipc_check->received_stop_at = 1000;
@@ -293,11 +291,11 @@ describe(ipc) {
       ipc_check->pong.procnum = SHUTTLESOCK_MASTER;
       ipc_check->ping.barrage = 1;
       ipc_check->pong.barrage = 1;
-
-      shuso_add_timer_watcher(S, 0.1, 0.0, ipc_load_test, NULL);
+      
       shuso_ipc_add_handler(S, "echo", IPC_ECHO, ipc_echo_receive, ipc_echo_cancel);
-      shuso_run(S);
-      assert_shuso(S);
+      shuso_configure_finish(S);
+      shusoT_run_test(S, SHUTTLESOCK_MASTER, ipc_load_test, ipc_check);
+      assert_shuso_ok(S);
     }
     
     test("one-sided round-trip (250:1)") {
@@ -307,10 +305,10 @@ describe(ipc) {
       ipc_check->ping.barrage = 250;
       ipc_check->pong.barrage = 1;
 
-      shuso_add_timer_watcher(S, 0.1, 0.0, ipc_load_test, NULL);
       shuso_ipc_add_handler(S, "echo", IPC_ECHO, ipc_echo_receive, ipc_echo_cancel);
-      shuso_run(S);
-      assert_shuso(S);
+      shuso_configure_finish(S);
+      shusoT_run_test(S, SHUTTLESOCK_MASTER, ipc_load_test, ipc_check);
+      assert_shuso_ok(S);
     }
     
     test("buffer fill (500:1)") {
@@ -321,38 +319,11 @@ describe(ipc) {
       ipc_check->pong.barrage = 1;
       ipc_check->ping.init_sleep_flag = 1;
 
-      shuso_add_timer_watcher(S, 0.1, 0.0, ipc_load_test, NULL);
       shuso_ipc_add_handler(S, "echo", IPC_ECHO, ipc_echo_receive, ipc_echo_cancel);
-      shuso_run(S);
-      assert_shuso(S);
+      shuso_configure_finish(S);
+      shusoT_run_test(S, SHUTTLESOCK_MASTER, ipc_load_test, ipc_check);
+      assert_shuso_ok(S);
     }
-  }
-  
-  subdesc(many_to_one) {
-    static ipc_one_to_many_check_t *ipc_check = NULL;
-    before_each() {
-      S = NULL;
-      ipc_check = shmalloc(ipc_check);
-      S = runcheck_shuso_create();
-      S->data = ipc_check;
-    }
-    after_each() {
-      if(S) {
-        test_runcheck_t *runcheck = S->common->phase_handlers.privdata;
-        shuso_destroy(S);
-        if(runcheck) {
-          shmfree(runcheck);
-        }
-        S = NULL;
-      }
-      if(ipc_check) {
-        shmfree(ipc_check);
-      }
-    }
-    skip("4 workers to manager") {
-
-    }
-    
   }
 }
 #define MEM_DEFINED(addr) \
@@ -361,6 +332,7 @@ describe(ipc) {
 describe(stack_allocator) {
   static shuso_stalloc_t st;
   before_each() {
+    shuso_system_initialize();
     shuso_stalloc_init(&st, 0);
   }
   after_each() {
@@ -458,8 +430,7 @@ void resolve_check_ok(shuso_t *S, shuso_resolver_result_t result, struct hostent
   shuso_stop(S, SHUSO_STOP_INSIST);
 }
 
-void resolve_check_start(EV_P_ shuso_ev_timer *w, int revent) {
-  shuso_t *S = ev_userdata(EV_A);
+void resolver_test(shuso_t *S, void *pd) {
   if(S->procnum != SHUTTLESOCK_MANAGER) {
     return;
   }
@@ -467,23 +438,19 @@ void resolve_check_start(EV_P_ shuso_ev_timer *w, int revent) {
 }
 
 describe(resolver) {
-   static shuso_t *S = NULL;
+  static shuso_t *S = NULL;
+  static test_runcheck_t  *chk = NULL;
   before_each() {
-    S = NULL;
+    S = shusoT_create(&chk, 10.0);
   }
   after_each() {
-    if(S) {
-      shuso_destroy(S);
-      S = NULL;
-    }
+    shusoT_destroy(S, &chk);
   }
+  
   test("resolve using system") {
-    S = runcheck_shuso_create();
-    
-    shuso_add_timer_watcher(S, 0.01, 0.0, resolve_check_start, 0);
-    
-    shuso_run(S);
-    assert_shuso(S);
+    shuso_configure_finish(S);
+    shusoT_run_test(S, SHUTTLESOCK_MANAGER, resolver_test, NULL);
+    assert_shuso_ok(S);
   }
 }
 
@@ -496,13 +463,12 @@ typedef struct {
 describe(shared_memory_allocator) {
   static shuso_t *S = NULL;
   static shuso_shared_slab_t shm;
+  static test_runcheck_t  *chk = NULL;
   before_each() {
-    shuso_system_initialize();
-    S = runcheck_shuso_create();
+    S = shusoT_create(&chk, 10.0);
   }
   after_each() {
-    shuso_destroy(S);
-    S = NULL;
+    shusoT_destroy(S, &chk);
   }
   test("single-threaded alloc/free") {
     size_t shm_sz = 10*1024*1024;
@@ -581,12 +547,9 @@ void listener_port_test_runner_callback(shuso_t *S, shuso_status_t status, shuso
   shuso_stop(S, SHUSO_STOP_INSIST);
 }
 
-void listener_port_test_runner(EV_P_ shuso_ev_timer *w, int revent) {
-  shuso_t *S = ev_userdata(EV_A);
-  listener_port_test_t *pt = w->ev.data;
-  if(S->procnum != SHUTTLESOCK_MANAGER) {
-    return;
-  }
+void listener_port_test(shuso_t *S, void *pd) {;
+  listener_port_test_t *pt = S->data;
+  assert(S->procnum == SHUTTLESOCK_MANAGER);
   shuso_hostinfo_t host = {
     .name="test",
     .addr_family=AF_INET,
@@ -610,27 +573,26 @@ void listener_port_test_runner(EV_P_ shuso_ev_timer *w, int revent) {
 }
 
 describe(listener_sockets) {
-    static shuso_t *S = NULL;
-    static listener_port_test_t *pt = NULL;
+  static shuso_t *S = NULL;
+  static listener_port_test_t *pt = NULL;
+  static test_runcheck_t  *chk = NULL;
   before_each() {
-    shuso_system_initialize();
-    S = runcheck_shuso_create();
+    S = shusoT_create(&chk, 10.0);
     pt = shmalloc(pt);
     pt->err = NULL;
+    S->data = pt;
   }
   after_each() {
-    shuso_destroy(S);
+    shusoT_destroy(S, &chk);
     shmfree(pt);
-    S = NULL;
   }
   test("listen on port 34241") {
     pt->port = 34241;
-    shuso_add_timer_watcher(S,  0.1, 0.0, listener_port_test_runner, pt);
-    shuso_run(S);
-    printf("heyo\n");
-    assert_shuso(S);
-    if(pt->err != NULL) {
-      snow_fail("%s", pt->err);
+    shuso_configure_finish(S);
+    shusoT_run_test(S, SHUTTLESOCK_MANAGER, listener_port_test, pt);
+    assert_shuso_ok(S);
+    if(pt->err) {
+      snow_fail("error: %s", pt->err);
     }
   }
 }
@@ -640,23 +602,13 @@ int main(int argc, char **argv) {
   _snow.ignore_unknown_options = 1;
   memset(&test_config, 0x0, sizeof(test_config));
   dev_null = open("/dev/null", O_WRONLY);
-  child_result = shmalloc(child_result);
-  assert(child_result);
   if(!set_test_options(&argc, argv)) {
     return 1;
   }
-  pid_t pid = getpid();
   int rc = snow_main_function(argc, argv);
-  if(getpid() != pid) {
-    child_result->pid = getpid();
-    child_result->status = rc;
-  }
-  shmfree(child_result);
   close(dev_null);
   fclose(stdin);
-
   fclose(stdout);
-
   fclose(stderr); 
   return rc;
 }
