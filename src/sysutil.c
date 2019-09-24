@@ -7,6 +7,25 @@
 #undef _GNU_SOURCE
 #endif
 
+//for strsignal()
+#ifdef SHUTTLESOCK_HAVE_STRSIGNAL
+  #ifndef _GNU_SOURCE
+  #define _GNU_SOURCE
+  #define __UNDEF_GNU_SOURCE
+  #endif
+  #ifndef _POSIX_C_SOURCE
+  #define _POSIX_C_SOURCE 200809L
+  #define __UNDEF_POSIX_C_SOURCE
+  #endif
+  #include <string.h>
+  #ifdef __UNDEF_GNU_SOURCE
+  #undef _GNU_SOURCE
+  #endif
+  #ifdef __UNDEF_POSIX_C_SOURCE
+  #undef _POSIX_C_SOURCE
+  #endif
+#endif
+#include <signal.h>
 #include <unistd.h>
 
 #ifndef _SC_NPROCESSORS_ONLN
@@ -276,6 +295,107 @@ static size_t shuso_system_cacheline_size(void) {
   }
   return sz;
 }
+
+
+#ifndef SHUTTLESOCK_HAVE_STRSIGNAL
+const char *shuso_system_strsignal(int sig) {
+  return strsignal(sig);
+}
+#else
+const char *shuso_system_strsignal(int sig) {
+  if(sig == SIGABRT)
+    return "SIGABRT";
+  else if(sig == SIGALRM)
+    return "SIGALRM";
+#ifdef SIGBUS
+  else if(sig == SIGBUS)
+    return "SIGBUS";
+#endif
+  else if(sig == SIGCHLD)
+    return "SIGCHLD";
+  else if(sig == SIGCONT)
+    return "SIGCONT";
+  else if(sig == SIGFPE)
+    return "SIGFPE";
+  else if(sig == SIGHUP)
+    return "SIGHUP";
+  else if(sig == SIGILL)
+    return "SIGILL";
+#ifdef SIGINFO
+  else if(sig == SIGINFO)
+    return "SIGINFO";
+#endif
+  else if(sig == SIGINT)
+    return "SIGINT";
+  else if(sig == SIGKILL)
+    return "SIGKILL";
+  else if(sig == SIGPIPE)
+    return "SIGPIPE";
+#ifdef SIGPOLL
+  else if(sig == SIGPOLL)
+    return "SIGPOLL";
+#endif
+#ifdef SIGIO
+  else if(sig == SIGIO)
+    return "SIGIO";
+#endif
+#ifdef SIGPROF
+  else if(sig == SIGPROF)
+    return "SIGPROF";
+#endif
+#ifdef SIGPWR
+  else if(sig == SIGPWR)
+    return "SIGPWR";
+#endif
+  else if(sig == SIGQUIT)
+    return "SIGQUIT";
+  else if(sig == SIGSEGV)
+    return "SIGSEGV";
+  else if(sig == SIGSTOP)
+    return "SIGSTOP";
+#ifdef SIGSYS
+  else if(sig == SIGSYS)
+    return "SIGSYS";
+#endif
+  else if(sig == SIGTERM)
+    return "SIGTERM";
+#ifdef SIGTRAP
+  else if(sig == SIGTRAP)
+    return "SIGTRAP";
+#endif
+  else if(sig == SIGTTIN)
+    return "SIGTTIN";
+  else if(sig == SIGTTOU)
+    return "SIGTTOU";
+#ifdef SIGURG
+  else if(sig == SIGURG)
+    return "SIGURG";
+#endif
+  else if(sig == SIGUSR1)
+    return "SIGUSR1";
+  else if(sig == SIGUSR2)
+    return "SIGUSR2";
+#ifdef SIGVTALRM
+  else if(sig == SIGVTALRM)
+    return "SIGVTALRM";
+#endif
+#ifdef SIGXCPU
+  else if(sig == SIGXCPU)
+    return "SIGXCPU";
+#endif
+#ifdef SIGXFSZ
+  else if(sig == SIGXFSZ)
+    return "SIGXFSZ";
+#endif
+#ifdef SIGWINCH
+  else if(sig == SIGWINCH)
+    return "SIGWINCH";
+#endif
+  else
+    return "UNKNOWN_SIGNAL";
+}
+#endif  
+
 
 void shuso_system_initialize(void) {
   if(!shuso_system.initialized) {

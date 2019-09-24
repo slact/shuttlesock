@@ -102,6 +102,11 @@ include(TestIPv6)
 test_ipv6(SHUTTLESOCK_HAVE_IPV6)
 set(SHUTTLESOCK_HAVE_IPV6 ${SHUTTLESOCK_HAVE_IPV6} CACHE INTERNAL "system supports IPv6")
 
+#strsignal()
+include(TestStrsignal)
+test_strsignal(SHUTTLESOCK_HAVE_STRSIGNAL)
+set(SHUTTLESOCK_HAVE_STRSIGNAL ${SHUTTLESOCK_HAVE_STRSIGNAL} CACHE INTERNAL "system has strsignal()")
+
 #lua (we want 5.3)
 set(Lua_FIND_VERSION 5.3)
 include(FindLua)

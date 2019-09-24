@@ -34,4 +34,6 @@ void shuso_system_initialize(void);
 int shuso_system_cores_online(void);
 bool shuso_system_thread_setname(const char *name);
 
+const char *shuso_system_strsignal(int sig);
+
 #endif //SHUTTLESOCK_SYSUTIL_H
