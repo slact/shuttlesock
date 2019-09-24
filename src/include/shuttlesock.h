@@ -225,7 +225,9 @@ const char *shuso_last_error(shuso_t *S);
 int shuso_last_errno(shuso_t *S);
 shuso_process_t *shuso_procnum_to_process(shuso_t *S, int procnum);
 int shuso_process_to_procnum(shuso_t *S, shuso_process_t *proc);
-const char *shuso_process_as_string(shuso_t *S);
+
+const char *shuso_process_as_string(int procnum);
+const char *shuso_runstate_as_string(shuso_runstate_t state);
 
 
 #define SHUSO_EACH_WORKER(S, cur) \

@@ -232,8 +232,12 @@ bool shuso_ipc_send(shuso_t *S, shuso_process_t *dst, const uint8_t code, void *
   //shuso_log_debug(S, "ipc send code %d ptr %p", (int )code, ptr);
   shuso_runstate_t dst_state = *dst->state;
   if(dst_state < SHUSO_STATE_STARTING) {
-    raise(SIGABRT);
-    return shuso_set_error(S, "tried sending IPC message to dead or nonexistent process");
+    if(dst->procnum >= SHUTTLESOCK_WORKER) {
+      return shuso_set_error(S, "tried sending IPC message to worker %i with state %s", dst->procnum, shuso_runstate_as_string(dst_state));
+    }
+    else {
+      return shuso_set_error(S, "tried sending IPC message to %s with state %s", shuso_process_as_string(dst->procnum), shuso_runstate_as_string(dst_state));
+    }
   }
   if(S->ipc.buf.first || dst_state == SHUSO_STATE_STARTING) {
     //shuso_log_debug(S, "inbuf appears full from the start or process isn't running");

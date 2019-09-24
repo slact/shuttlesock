@@ -21,8 +21,8 @@ int shuttlesock_watched_signals[] = SHUTTLESOCK_WATCHED_SIGNALS;
   } \
 } while(0)
 
-const char *shuso_process_as_string(shuso_t *S) {
-  switch(S->procnum) {
+const char *shuso_process_as_string(int procnum) {
+  switch(procnum) {
     case SHUTTLESOCK_UNKNOWN_PROCESS:
       return "unknown";
     case SHUTTLESOCK_NOPROCESS:
@@ -32,7 +32,7 @@ const char *shuso_process_as_string(shuso_t *S) {
     case SHUTTLESOCK_MANAGER:
       return "manager";
     default:
-      if(S->procnum >= SHUTTLESOCK_WORKER) {
+      if(procnum >= SHUTTLESOCK_WORKER) {
         return "worker";
       }
       else {
@@ -306,18 +306,18 @@ bool shuso_spawn_manager(shuso_t *S) {
   S->procnum = SHUTTLESOCK_MANAGER;
   S->process = &S->common->process.manager;
   S->process->pid = getpid();
-  *S->process->state = SHUSO_PROCESS_STATE_STARTING;
-  shuso_log_debug(S, "starting %s...", shuso_process_as_string(S));
+  *S->process->state = SHUSO_STATE_STARTING;
+  shuso_log_debug(S, "starting %s...", shuso_process_as_string(S->procnum));
   shuso_ipc_channel_shared_start(S, &S->common->process.manager);
   setpgid(0, 0); // so that the shell doesn't send signals to manager and workers
   ev_loop_fork(S->ev.loop);
-  *S->process->state = SHUSO_PROCESS_STATE_RUNNING;
+  *S->process->state = SHUSO_STATE_RUNNING;
   S->common->process.workers_start = 0;
   S->common->process.workers_end = S->common->process.workers_start;
 #ifdef SHUTTLESOCK_DEBUG_NO_WORKER_THREADS
   shuso_log_notice(S, "SHUTTLESOCK_DEBUG_NO_WORKER_THREADS is enabled, workers will be started inside the manager without their own separate threads");
 #endif
-  shuso_log_notice(S, "started %s", shuso_process_as_string(S));
+  shuso_log_notice(S, "started %s", shuso_process_as_string(S->procnum));
   for(int i=0; i<S->common->config.workers; i++) {
     if(shuso_spawn_worker(S, &S->common->process.worker[i])) {
       S->common->process.workers_end++;
@@ -395,7 +395,7 @@ bool shuso_run(shuso_t *S) {
   const char *err = NULL;
   bool master_ipc_created = false, manager_ipc_created = false, shuso_resolver_initialized = false;
   
-  shuso_log_debug(S, "starting %s...", shuso_process_as_string(S));
+  shuso_log_debug(S, "starting %s...", shuso_process_as_string(S->procnum));
   
   if(!(master_ipc_created = shuso_ipc_channel_shared_create(S, &S->common->process.master))) {
     err = "failed to create shared IPC channel for master";
@@ -415,7 +415,7 @@ bool shuso_run(shuso_t *S) {
   shuso_ev_child_start(S, &S->base_watchers.child);
   
   *S->process->state = SHUSO_STATE_RUNNING;
-  shuso_log_notice(S, "started %s", shuso_process_as_string(S));
+  shuso_log_notice(S, "started %s", shuso_process_as_string(S->procnum));
   if(!shuso_spawn_manager(S)) {
     err = "failed to spawn manager process";
     goto fail;
