@@ -52,32 +52,15 @@ bool ___runcheck(shuso_t *S, char **err) {
     return checkfail(err, "manager never started");
   if(!chk->process.manager.stopped)
     return checkfail(err, "manager never stopped");
-  /*
-  int started_count = 0, stopped_count = 0;
-  printf("\n\nS->common->process.workers_start: %d, S->common->process.workers_end: %d\n\n");
-  for(unsigned i = S->common->process.workers_start; i< S->common->process.workers_end; i++) {
-    if(!chk->process.worker[i].started)
-      return checkfail(err, "worker %i never started", i);
-    if(!chk->process.worker[i].stopped)
-      return checkfail(err, "worker %i never stopped", i);
-    if(chk->process.worker[i].exit_code != 0)
-      return checkfail(err, "worker %i has a bad exit code", i);
-    started_count ++;
-    stopped_count ++;
-  }
-  
-  int total_started_count = 0, total_stopped_count = 0;
+
   for(unsigned i = 0; i<= SHUTTLESOCK_MAX_WORKERS; i++) {
-    if(chk->process.worker[i].started)
-      total_started_count++;
-    if(chk->process.worker[i].stopped)
-      total_stopped_count++;
+    if(chk->process.worker[i].started && !chk->process.worker[i].stopped) {
+      return checkfail(err, "worker %i was started but never stopped", i);
+    }
+    if(!chk->process.worker[i].started && chk->process.worker[i].stopped) {
+      return checkfail(err, "worker %i was never started but was stopped (?)", i);
+    }
   }
-  if(started_count != total_started_count)
-    return checkfail(err, "unexpected number of workers was started: expected %i, counted %i", started_count, total_started_count);
-  if(stopped_count != total_stopped_count)
-    return checkfail(err, "unexpected number of workers was stopped: expected %i, counted %i", stopped_count, total_stopped_count);
-  */
   return true;
 }
 
@@ -90,6 +73,8 @@ static void runcheck_event_listener(shuso_t *S, shuso_event_state_t *evs, intptr
     assert(chk->process.master.started == 0);
     assert(chk->process.master.stopped == 0);
     chk->process.master.started = 1;
+    chk->process.master.pid = S->process->pid;
+    assert(chk->process.master.pid == getpid());
     if(chk->timeout > 0) {
       shuso_ev_timer_init(S, &chk->timeout_timer, chk->timeout, 0, runcheck_timeout_timer, mod);
       shuso_ev_timer_start(S, &chk->timeout_timer);
@@ -99,27 +84,37 @@ static void runcheck_event_listener(shuso_t *S, shuso_event_state_t *evs, intptr
     assert(chk->process.manager.started == 0);
     assert(chk->process.manager.stopped == 0);
     chk->process.manager.started = 1;
+    chk->process.manager.pid = S->process->pid;
+    assert(chk->process.manager.pid == getpid());
   }
   else if(strcmp(evn, "worker.start") == 0) {
     assert(chk->process.worker[S->procnum].started == 0);
     assert(chk->process.worker[S->procnum].stopped == 0);
     chk->process.worker[S->procnum].started = 1;
+    chk->process.worker[S->procnum].pid = S->process->pid;
+    assert(chk->process.worker[S->procnum].pid == getpid());
   }
   else if(strcmp(evn, "master.stop") == 0) {
     assert(chk->process.master.started == 1);
     assert(chk->process.master.stopped == 0);
+    assert(getpid() == chk->process.master.pid);
+    assert(getpid() == S->process->pid);
     chk->process.master.stopped = 1;
   }
   else if(strcmp(evn, "manager.stop") == 0) {
     assert(chk->process.manager.started == 1);
     assert(chk->process.manager.stopped == 0);
     chk->process.manager.stopped = 1;
+    assert(getpid() == chk->process.manager.pid);
+    assert(getpid() == S->process->pid);
   }
   else if(strcmp(evn, "worker.stop") == 0) {
     assert(chk->process.worker[S->procnum].started == 1);
     assert(chk->process.worker[S->procnum].stopped == 0);
     
     chk->process.worker[S->procnum].stopped = 1;
+    assert(getpid() == chk->process.worker[S->procnum].pid);
+    assert(getpid() == S->process->pid);
   }
   else if(strcmp(evn, "manager.workers_started") == 0) {
     assert(chk->process.all_workers_started == 0);
