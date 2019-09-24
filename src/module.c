@@ -112,10 +112,14 @@ bool shuso_initialize_added_modules(shuso_t *S) {
     if(!lua_function_call_result_ok(S, L, 1, false)) {
       return false;
     }
+    const char *error_before_initializing_module = shuso_last_error(S);
     if(!module->initialize(S, module)) {
       if(shuso_last_error(S) == NULL) {
         return shuso_set_error(S, "module %s failed to initialize, but reported no error", module->name);
       }
+      return false;
+    }
+    if(shuso_last_error(S) != NULL && shuso_last_error(S) != error_before_initializing_module) {
       return false;
     }
     Lua_push_module_function(L, "finish_initializing_module");
