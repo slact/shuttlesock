@@ -491,6 +491,7 @@ bool shuso_stop(shuso_t *S, shuso_stop_t forcefulness) {
 static bool shuso_worker_initialize(shuso_t *S) {
   assert(S->process);
   shuso_log_debug(S, "starting worker %i...", S->procnum);
+  S->process->pid = getpid();
   *S->process->state = SHUSO_STATE_STARTING;
   
   shuso_ipc_channel_shared_start(S, S->process);
