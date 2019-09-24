@@ -224,7 +224,9 @@ bool shuso_configure_finish(shuso_t *S) {
     goto fail;
   }
   
-  shuso_initialize_added_modules(S);
+  if(!shuso_initialize_added_modules(S)) {
+    goto fail;
+  }
   
   S->common->state = SHUSO_STATE_CONFIGURED;
   return true;
