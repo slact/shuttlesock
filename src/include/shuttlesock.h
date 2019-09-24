@@ -28,6 +28,7 @@
 struct shuso_process_s {
   pid_t                             pid;
   pthread_t                         tid;
+  int                               procnum;
   _Atomic(shuso_runstate_t)        *state;
   uint16_t                          generation;
   shuso_ipc_channel_shared_t        ipc;
