@@ -35,6 +35,16 @@ typedef enum {
   SHUSO_STOP_FORCE =    5
 } shuso_stop_t;
 
+typedef enum {
+  SHUSO_VALUE_END_SENTINEL = -1,
+  SHUSO_VALUE_UNSET = 0,
+  SHUSO_VALUE_STRING,
+  SHUSO_VALUE_INTEGER,
+  SHUSO_VALUE_FLOAT,
+  SHUSO_VALUE_TIME,
+  SHUSO_VALUE_BOOL,
+} shuso_setting_value_type_t;
+
 #define SHUTTLESOCK_FIRST_PRIORITY 127
 #define SHUTTLESOCK_LAST_PRIORITY -127
 
@@ -67,6 +77,12 @@ typedef int lua_reference_t;
 typedef struct shuso_s shuso_t;
 typedef struct shuso_common_s shuso_common_t;
 typedef struct shuso_process_s shuso_process_t;
+
+
+typedef struct shuso_setting_value_s shuso_setting_value_t;
+typedef struct shuso_setting_values_s shuso_setting_values_t;
+typedef struct shuso_setting_s shuso_setting_t;
+
 typedef struct shuso_config_s shuso_config_t;
 typedef struct shuso_config_file_s shuso_config_file_t;
 typedef struct shuso_config_setting_s shuso_config_setting_t;

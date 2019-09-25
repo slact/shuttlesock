@@ -16,14 +16,15 @@ struct shuso_module_s {
   
   
   uint8_t                *parent_modules_index_map;
-  int                     index;
+  int                     index; //global module number
+  shuso_setting_t        *settings;
   struct {
     int                     count;
     shuso_module_t        **array;
 #ifdef SHUTTLESOCK_DEBUG_MODULE_SYSTEM
     uint8_t                *submodule_presence_map;
 #endif
-  }                       submodules;
+  }                       submodules;  
 }; //shuso_module_t
 
 typedef struct {
