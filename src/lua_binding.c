@@ -212,7 +212,7 @@ int Lua_shuso_configure_string(lua_State *L) {
   lua_pushboolean(L, 1);
   return 1;
 }
-
+/*
 typedef struct {
   int ref;
   struct {
@@ -259,28 +259,6 @@ static bool lua_run_dumped_handler_function(lua_State *L, void *pd, const char *
   return true;
 }
 
-static void start_master_lua_handler(shuso_t *S, void *pd) {
-  lua_run_handler_function(S->lua.state, pd, "start_master");
-}
-static void stop_master_lua_handler(shuso_t *S, void *pd) {
-  lua_run_handler_function(S->lua.state, pd, "stop_master");
-  free_handlers_data(S->lua.state, pd);
-}
-static void start_manager_lua_handler(shuso_t *S, void *pd) {
-  lua_run_handler_function(S->lua.state, pd, "start_manager");
-}
-static void stop_manager_lua_handler(shuso_t *S, void *pd) {
-  lua_run_handler_function(S->lua.state, pd, "stop_manager");
-  free_handlers_data(S->lua.state, pd);
-}
-static void start_worker_lua_handler(shuso_t *S, void *pd) {
-  lua_run_dumped_handler_function(S->lua.state, pd, "start_worker", 0);
-}
-static void stop_worker_lua_handler(shuso_t *S, void *pd) {
-  lua_run_dumped_handler_function(S->lua.state, pd, "stop_worker", 1);
-}
-
-
 static int lua_function_dump_writer (lua_State *L, const void *b, size_t size, void *B) {
   (void)L;
   luaL_addlstring((luaL_Buffer *) B, (const char *)b, size);
@@ -297,6 +275,7 @@ static int Lua_function_dump(lua_State *L) {
   luaL_pushresult(&b);
   return 1;
 }
+
 
 static int Lua_shuso_configure_handlers(lua_State *L) {
   shuso_t         *S = shuso_state(L);
@@ -348,7 +327,6 @@ static int Lua_shuso_configure_handlers(lua_State *L) {
     }
   }
   
-  
   hdata->ref = luaL_ref(L, LUA_REGISTRYINDEX);
   shuso_runtime_handlers_t runtime_handlers = {
     .start_master = start_master_lua_handler,
@@ -368,6 +346,8 @@ static int Lua_shuso_configure_handlers(lua_State *L) {
   lua_pushboolean(L, 1);
   return 1;
 }
+*/
+
 static int Lua_shuso_configure_finish(lua_State *L) {
   shuso_t *S = shuso_state(L);
   if(!shuso_configure_finish(S)) {
@@ -1610,7 +1590,7 @@ luaL_Reg shuttlesock_core_module_methods[] = {
 //configuration
   {"configureFile", Lua_shuso_configure_file},
   {"configureString", Lua_shuso_configure_string},
-  {"configureHandlers", Lua_shuso_configure_handlers},
+  /*{"configureHandlers", Lua_shuso_configure_handlers},*/
   {"configureFinish", Lua_shuso_configure_finish},
   
   {"destroy", Lua_shuso_destroy},

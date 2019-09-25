@@ -144,14 +144,6 @@ fail:
   return NULL;
 }
 
-bool shuso_configure_handlers(shuso_t *S, const shuso_runtime_handlers_t *handlers) {
-  if(!(shuso_runstate_check(S, SHUSO_STATE_CONFIGURING, "finish configuring"))) {
-    return false;
-  }
-  S->common->phase_handlers = *handlers;
-  return true;
-}
-
 bool shuso_runstate_check(shuso_t *S, shuso_runstate_t allowed_state, const char *whatcha_doing) {
   if(S->common->state == allowed_state) {
     return true;
