@@ -10,7 +10,7 @@ VG_MEMCHECK_OPT=( "--leak-check=full" "--show-leak-kinds=all" "--leak-check-heur
 VG_MEMCHECK_OPT+=("--num-callers=20")
 
 #generate suppresions
-#VG_MEMCHECK_OPT+=("--gen-suppressions=all")
+VG_MEMCHECK_OPT+=("--gen-suppressions=all")
 
 #track files
 #VG_MEMCHECK_OPT+=("--track-fds=yes")
