@@ -54,7 +54,7 @@ static int luaS_traceback(lua_State *L) {
 void luaS_call(lua_State *L, int nargs, int nresults) {
   int rc;
   if(!lua_isfunction(L, -(nargs+1))) {
-    lua_printstack(L);
+    luaS_printstack(L);
     shuso_log_error(shuso_state(L), "nargs: %i", nargs);
     assert(lua_isfunction(L, -(nargs+1)));
   }
@@ -74,7 +74,7 @@ void luaS_call(lua_State *L, int nargs, int nresults) {
   lua_remove(L, 1);
 }
 
-char *lua_dbgval(lua_State *L, int n) {
+char *luaS_dbgval(lua_State *L, int n) {
   static char buf[255];
   int         type = lua_type(L, n);
   const char *typename = lua_typename(L, type);
@@ -104,16 +104,16 @@ char *lua_dbgval(lua_State *L, int n) {
   }
   return buf;
 }
-void lua_printstack(lua_State *L) {
+void luaS_printstack(lua_State *L) {
   int        top = lua_gettop(L);
   shuso_t   *S = shuso_state(L);
   shuso_log_warning(S, "lua stack:");
   for(int n=top; n>0; n--) {
-    shuso_log_warning(S, "  [%i]: %s", n, lua_dbgval(L, n));
+    shuso_log_warning(S, "  [%i]: %s", n, luaS_dbgval(L, n));
   }
 }
 
-void lua_mm(lua_State *L, int stack_index) {
+void luaS_mm(lua_State *L, int stack_index) {
   int absindex = lua_absindex(L, stack_index);
   lua_getglobal(L, "require");
   lua_pushliteral(L, "mm");
@@ -201,7 +201,7 @@ bool shuso_lua_create(shuso_t *S) {
   return true;
 }
 
-int shuso_Lua_do_embedded_script(lua_State *L) {
+int luaS_do_embedded_script(lua_State *L) {
   const char *name = luaL_checkstring(L, -1);
   shuso_lua_embedded_scripts_t *script;
   for(script = &shuttlesock_lua_embedded_scripts[0]; script->name != NULL; script++) {
@@ -219,17 +219,30 @@ int shuso_Lua_do_embedded_script(lua_State *L) {
   return 0;
 }
 
+shuso_t *shuso_state_from_lua(lua_State *L) {
+  lua_getfield(L, LUA_REGISTRYINDEX, "shuttlesock.userdata");
+  assert(lua_islightuserdata(L, -1));
+  shuso_t *S = (shuso_t *)lua_topointer(L, -1);
+  lua_pop(L, 1);
+  return S;
+}
+
+bool luaS_set_shuttlesock_state_pointer(lua_State *L, shuso_t *S) {
+  lua_pushlightuserdata(L, S);
+  lua_setfield(L, LUA_REGISTRYINDEX, "shuttlesock.userdata");
+  return true;
+}
 
 bool shuso_lua_initialize(shuso_t *S) {
-  shuso_lua_set_shuttlesock_state_pointer(S);
   lua_State *L = S->lua.state;
+  luaS_set_shuttlesock_state_pointer(L, S);
   
-  luaL_requiref(L, "shuttlesock.core", shuso_Lua_shuttlesock_core_module, 0);
+  luaL_requiref(L, "shuttlesock.core", luaS_push_core_module, 0);
   lua_pop(L, 1);
   
   for(shuso_lua_embedded_scripts_t *script = &shuttlesock_lua_embedded_scripts[0]; script->name != NULL; script++) {
     if(script->module) {
-      luaL_requiref(L, script->name, shuso_Lua_do_embedded_script, 0);
+      luaL_requiref(L, script->name, luaS_do_embedded_script, 0);
       lua_pop(L, 1);
     }
   }
@@ -254,4 +267,50 @@ bool shuso_lua_destroy(shuso_t *S) {
   S->lua.state = NULL;
   return true;
 }
+
+int luaS_resume(lua_State *thread, lua_State *from, int nargs) {
+  int          rc;
+  const char  *errmsg;
+  shuso_t     *S;
+  rc = lua_resume(thread, from, nargs);
+  switch(rc) {
+    case LUA_OK:
+    case LUA_YIELD:
+      break;
+    default:
+      S = shuso_state(thread);
+      errmsg = lua_tostring(thread, -1);
+      luaL_traceback(thread, thread, errmsg, 1);
+      shuso_log_error(S, "lua coroutine error: %s", lua_tostring(thread, -1));
+      lua_pop(thread, 1);
+      lua_gc(thread, LUA_GCCOLLECT, 0);
+      break;
+  }
+  return rc;
+}
+
+int luaS_call_or_resume(lua_State *L, int nargs) {
+  int         state_or_func_index = -1 - nargs;
+  int         type = lua_type(L, state_or_func_index);
+  lua_State  *coro;
+  switch(type) {
+    case LUA_TFUNCTION:
+      lua_call(L, nargs, 0);
+      return 0;
+    case LUA_TTHREAD:
+      coro = lua_tothread(L, state_or_func_index);
+      lua_xmove(L, coro, nargs);
+      lua_resume(coro, L, nargs);
+      return 0;
+    default:
+      return luaL_error(L, "attempted to call-or-resume something that's not a function or coroutine");
+  }
+}
+
+int luaS_shuso_error(lua_State *L) {
+  shuso_t *S = shuso_state(L);
+  const char *errmsg = shuso_last_error(S);
+  return luaL_error(L, "%s", errmsg == NULL ? "(unknown error)" : errmsg);
+}
+
 

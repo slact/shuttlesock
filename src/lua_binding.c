@@ -52,59 +52,6 @@ typedef struct {
   const char  data[];
 } shuso_lua_shared_string_t;
 
-shuso_t *shuso_state_from_lua(lua_State *L) {
-  lua_getfield(L, LUA_REGISTRYINDEX, "shuttlesock.userdata");
-  assert(lua_islightuserdata(L, -1));
-  shuso_t *S = (shuso_t *)lua_topointer(L, -1);
-  lua_pop(L, 1);
-  return S;
-}
-bool shuso_lua_set_shuttlesock_state_pointer(shuso_t *S) {
-  lua_State *L = S->lua.state;
-  lua_pushlightuserdata(L, S);
-  lua_setfield(L, LUA_REGISTRYINDEX, "shuttlesock.userdata");
-  return true;
-}
-
-static int shuso_lua_resume(lua_State *thread, lua_State *from, int nargs) {
-  int          rc;
-  const char  *errmsg;
-  shuso_t     *S;
-  rc = lua_resume(thread, from, nargs);
-  switch(rc) {
-    case LUA_OK:
-    case LUA_YIELD:
-      break;
-    default:
-      S = shuso_state(thread);
-      errmsg = lua_tostring(thread, -1);
-      luaL_traceback(thread, thread, errmsg, 1);
-      shuso_log_error(S, "lua coroutine error: %s", lua_tostring(thread, -1));
-      lua_pop(thread, 1);
-      lua_gc(thread, LUA_GCCOLLECT, 0);
-      break;
-  }
-  return rc;
-}
-
-static int lua_call_or_resume(lua_State *L, int nargs) {
-  int         state_or_func_index = -1 - nargs;
-  int         type = lua_type(L, state_or_func_index);
-  lua_State  *coro;
-  switch(type) {
-    case LUA_TFUNCTION:
-      lua_call(L, nargs, 0);
-      return 0;
-    case LUA_TTHREAD:
-      coro = lua_tothread(L, state_or_func_index);
-      lua_xmove(L, coro, nargs);
-      lua_resume(coro, L, nargs);
-      return 0;
-    default:
-      return luaL_error(L, "attempted to call-or-resume something that's not a function or coroutine");
-  }
-}
-
 static bool lua_push_handler_function_or_coroutine(lua_State *L, int nargs, lua_State **coroutine, bool caller_can_be_handler, bool allow_no_handler) {
 //is there a handler as the last argument? no? then is the caller a yieldable coroutine?
   lua_State *coro = NULL;
@@ -162,12 +109,6 @@ static int lua_push_nil_error(lua_State *L) {
   const char *errmsg = shuso_last_error(S);
   lua_pushstring(L, errmsg == NULL ? "no error" : errmsg);
   return 2;
-}
-
-static int lua_shuso_error(lua_State *L) {
-  shuso_t *S = shuso_state(L);
-  const char *errmsg = shuso_last_error(S);
-  return luaL_error(L, "%s", errmsg == NULL ? "(unknown error)" : errmsg);
 }
 
 static void lua_getlib_field(lua_State *L, const char *lib, const char *field) {
@@ -340,7 +281,7 @@ static int Lua_shuso_configure_handlers(lua_State *L) {
   
   if(!shuso_configure_handlers(S, &runtime_handlers)) {
     free_handlers_data(L, hdata);
-    return lua_shuso_error(L);
+    return luaS_shuso_error(L);
   }
   
   lua_pushboolean(L, 1);
@@ -351,7 +292,7 @@ static int Lua_shuso_configure_handlers(lua_State *L) {
 static int Lua_shuso_configure_finish(lua_State *L) {
   shuso_t *S = shuso_state(L);
   if(!shuso_configure_finish(S)) {
-    return lua_shuso_error(L);
+    return luaS_shuso_error(L);
   }
   lua_pushboolean(L, 1);
   return 1;
@@ -360,7 +301,7 @@ static int Lua_shuso_configure_finish(lua_State *L) {
 static int Lua_shuso_destroy(lua_State *L) {
   shuso_t *S = shuso_state(L);
   if(!shuso_destroy(S)) {
-    return lua_shuso_error(L);
+    return luaS_shuso_error(L);
   }
   lua_pushboolean(L, 1);
   return 1;
@@ -369,7 +310,7 @@ static int Lua_shuso_destroy(lua_State *L) {
 static int Lua_shuso_run(lua_State *L) {
   shuso_t *S = shuso_state(L);
   if(!shuso_run(S)) {
-    return lua_shuso_error(L);
+    return luaS_shuso_error(L);
   }
   lua_pushboolean(L, 1);
   return 1;
@@ -401,7 +342,7 @@ static int Lua_shuso_stop(lua_State *L) {
   shuso_t       *S = shuso_state(L);
   shuso_stop_t   lvl = stop_level_string_arg_to_enum(L, "ask", 1);
   if(!shuso_stop(S, lvl)) {
-    return lua_shuso_error(L);
+    return luaS_shuso_error(L);
   }
   lua_pushboolean(L, 1);
   return 1;
@@ -410,7 +351,7 @@ static int Lua_shuso_stop(lua_State *L) {
 static int Lua_shuso_spawn_manager(lua_State *L) {
   shuso_t *S = shuso_state(L);
   if(!shuso_spawn_manager(S)) {
-    return lua_shuso_error(L);
+    return luaS_shuso_error(L);
   }
   lua_pushboolean(L, 1);
   return 1;
@@ -419,7 +360,7 @@ static int Lua_shuso_stop_manager(lua_State *L) {
   shuso_t      *S = shuso_state(L);
   shuso_stop_t  lvl = stop_level_string_arg_to_enum(L, "ask", 1);
   if(!shuso_stop_manager(S, lvl)) {
-    return lua_shuso_error(L);
+    return luaS_shuso_error(L);
   }
   lua_pushboolean(L, 1);
   return 1;
@@ -429,7 +370,7 @@ static int Lua_shuso_spawn_worker(lua_State *L) {
   int         workernum = S->common->process.workers_end;
   shuso_process_t   *proc = &S->common->process.worker[workernum];
   if(!shuso_spawn_worker(S, proc)) {
-    return lua_shuso_error(L);
+    return luaS_shuso_error(L);
   }
   lua_pushboolean(L, 1);
   return 1;
@@ -443,7 +384,7 @@ static int Lua_shuso_stop_worker(lua_State *L) {
   shuso_process_t   *proc = &S->common->process.worker[workernum];
   shuso_stop_t       lvl = stop_level_string_arg_to_enum(L, "ask", 2);
   if(!shuso_stop_worker(S, proc, lvl)) {
-    return lua_shuso_error(L);
+    return luaS_shuso_error(L);
   }
   S->common->process.workers_end++;
   lua_pushboolean(L, 1);
@@ -462,7 +403,7 @@ static int Lua_shuso_set_log_fd(lua_State *L) {
     return luaL_error(L, "couldn't dup file");
   }
   if(!shuso_set_log_fd(S, fd2)) {
-    return lua_shuso_error(L);
+    return luaS_shuso_error(L);
   }
   lua_pushboolean(L, 1);
   return 1;
@@ -532,7 +473,7 @@ static void watcher_callback(struct ev_loop *loop, ev_watcher *watcher, int even
   else {
     coro = lua_tothread(L, -1);
     lua_rawgeti(coro, LUA_REGISTRYINDEX, w->ref.self);
-    rc = shuso_lua_resume(coro, NULL, 1);
+    rc = luaS_resume(coro, NULL, 1);
   }
   if((handler_is_coroutine && rc == LUA_OK) /* coroutine is finished */
    ||(w->type == LUA_EV_WATCHER_TIMER && w->watcher.timer.ev.repeat == 0.0) /* timer is finished */
@@ -1066,7 +1007,7 @@ static void resolve_hostname_callback(shuso_t *S, shuso_resolver_result_t result
         break;
     }
     lua_pushinteger(L, result);
-    lua_call_or_resume(L, 3);
+    luaS_call_or_resume(L, 3);
     return;
   }
   
@@ -1074,7 +1015,7 @@ static void resolve_hostname_callback(shuso_t *S, shuso_resolver_result_t result
     lua_pushnil(L);
     lua_pushliteral(L, "failed to resolve name: missing hostent struct");
     lua_pushinteger(L, SHUSO_RESOLVER_FAILURE);
-    lua_call_or_resume(L, 3);
+    luaS_call_or_resume(L, 3);
     return;
   }
   
@@ -1146,7 +1087,7 @@ static void resolve_hostname_callback(shuso_t *S, shuso_resolver_result_t result
   lua_pushlstring(L, hostent->h_addr, hostent->h_length);
   lua_setfield(L, -2, "address_binary");
   
-  lua_call_or_resume(L, 1);
+  luaS_call_or_resume(L, 1);
 }
 
 //logger
@@ -1262,7 +1203,7 @@ static int Lua_shuso_ipc_send_fd(lua_State *L) {
   shuso_t *S = shuso_state(L);
   bool ok = shuso_ipc_send_fd(S, proc, fd, ref, NULL);
   if(!ok) {
-    return lua_shuso_error(L);
+    return luaS_shuso_error(L);
   }
   lua_pushboolean(L, 1);
   return 1;
@@ -1328,7 +1269,7 @@ int Lua_shuso_ipc_receive_fd_start(lua_State *L) {
     lua_pushvalue(L, 1);
     lua_pushnil(L);
     lua_rawset(L, -3);
-    return lua_shuso_error(L);
+    return luaS_shuso_error(L);
   }
   
   lua_pushboolean(L, 1);
@@ -1639,7 +1580,7 @@ luaL_Reg shuttlesock_core_module_methods[] = {
   {NULL, NULL}
 };
 
-int shuso_Lua_shuttlesock_core_module(lua_State *L) {
+int luaS_push_core_module(lua_State *L) {
   luaL_newlib(L, shuttlesock_core_module_methods);
   return 1;
 }
