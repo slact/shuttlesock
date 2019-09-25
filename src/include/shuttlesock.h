@@ -105,21 +105,6 @@ struct shuso_socket_s {
   void              *data;
 }; //shuso_socket_t;
 
-struct shuso_runtime_handlers_s {
-  shuso_handler_fn *start_master;
-  shuso_handler_fn *stop_master;
-  shuso_handler_fn *start_manager;
-  shuso_handler_fn *stop_manager;
-  shuso_handler_fn *start_worker;
-  shuso_handler_fn *stop_worker;
-  void   *privdata;
-}; //shuso_runtime_handlers_t
-
-struct shuso_config_handlers_s {
-  shuso_config_init_fn *initialize;
-  shuso_config_set_fn  *set;
-}; //shuso_config_handlers_t
-
 //the shuso_config struct is designed to be zeroed on initialization
 struct shuso_config_s {
   struct {
@@ -173,7 +158,6 @@ typedef struct {
 
 struct shuso_common_s {
   shuso_runstate_t    state;
-  shuso_runtime_handlers_t    phase_handlers;
   shuso_ipc_handler_t ipc_handlers[256];
   shuso_core_module_ctx_t    *core_module_ctx;
   shuso_config_t      config;
@@ -249,7 +233,6 @@ shuso_t *shuso_create_with_lua(lua_State *lua, const char **err);
 bool shuso_runstate_check(shuso_t *S, shuso_runstate_t allowed_state, const char *whatcha_doing);
 bool shuso_configure_file(shuso_t *S, const char *path);
 bool shuso_configure_string(shuso_t *S, const char *str_title, const char *str);
-bool shuso_configure_handlers(shuso_t *S, const shuso_runtime_handlers_t *handlers);
 bool shuso_configure_finish(shuso_t *S);
 
 

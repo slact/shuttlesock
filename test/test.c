@@ -35,9 +35,7 @@ describe(modules) {
       assert(test_module.subscribe == NULL);
       S = shuso_create(NULL);
       if(!test_config.verbose) {
-
         shuso_set_log_fd(S, dev_null);
-
       }
     }
     after_each() {
@@ -45,7 +43,7 @@ describe(modules) {
     }
     
     test("bad subscribe string") {
-      test_module.subscribe = "!@#@#$$%#";
+      test_module.subscribe = "chirp chhorp !@#@#$$%#";
       shuso_add_module(S, &test_module);
       shuso_configure_finish(S);
       assert_shuso_error(S, "invalid character .+ in subscribe string");
@@ -55,6 +53,12 @@ describe(modules) {
       shuso_add_module(S, &test_module);
       shuso_configure_finish(S);
       assert_shuso_error(S, "module %w+ was not found");
+    }
+    test("subscribe to nonexistent event of real module") {
+      test_module.subscribe = "core:start_banana";
+      shuso_add_module(S, &test_module);
+      shuso_configure_finish(S);
+      assert_shuso_error(S, "does not publish .*event");
     }
     test("subscribe to malformed event") {
       test_module.subscribe = "fakemodule:what:nothing another:malformed:event";
