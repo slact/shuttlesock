@@ -40,9 +40,10 @@ osx_task:
   test_optimized_script:
     - ./rebuild.sh O3
     - ./test.sh
-  test_sanitized_script:
-    - ./rebuild.sh O2 sanitize-memory
-    - ./test.sh
+#  test_sanitized_script:
+#    - brew install llvm
+#    - ./rebuild.sh O2 sanitize-address
+#    - ./test.sh
 freebsd_task:
   freebsd_instance:
     image: freebsd-12-0-release-amd64
