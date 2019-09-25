@@ -10,6 +10,31 @@
 #define INIT_LUA_ALLOCS 1
 #endif
 
+bool luaS_function_call_result_ok(lua_State *L, int nargs, bool preserve_result) {
+  luaS_call(L, nargs, 2);
+  if(lua_isnil(L, -2)) {
+    shuso_t *S = shuso_state(L);
+    if(!lua_isstring(L, -1)) {
+      shuso_set_error(S, "lua function returned nil with no error message");      
+    }
+    else {
+      const char *errstr = lua_tostring(L, -1);
+      shuso_set_error(S, "%s", errstr);
+    }
+    //lua_printstack(L);
+    //raise(SIGABRT);
+    lua_pop(L, 2);
+    return false;
+  }
+  bool ret = lua_toboolean(L, -2);
+  if(preserve_result) {
+    lua_pop(L, 1); //just pop the nil standin for the error
+  }
+  else {
+    lua_pop(L, 2);
+  }
+  return ret;
+}
 
 static int luaS_traceback(lua_State *L) {
   if (!lua_isstring(L, -1)) { /* 'message' not a string? */

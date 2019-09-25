@@ -3,31 +3,6 @@
 #include <shuttlesock/lua_bridge.h>
 #include <lauxlib.h>
 
-static bool lua_function_call_result_ok(shuso_t *S, lua_State *L, int nargs, bool preserve_result) {
-  luaS_call(L, nargs, 2);
-  if(lua_isnil(L, -2)) {
-    if(!lua_isstring(L, -1)) {
-      shuso_set_error(S, "lua function returned nil with no error message");      
-    }
-    else {
-      const char *errstr = lua_tostring(L, -1);
-      shuso_set_error(S, "%s", errstr);
-    }
-    //lua_printstack(L);
-    //raise(SIGABRT);
-    lua_pop(L, 2);
-    return false;
-  }
-  bool ret = lua_toboolean(L, -2);
-  if(preserve_result) {
-    lua_pop(L, 1); //just pop the nil standin for the error
-  }
-  else {
-    lua_pop(L, 2);
-  }
-  return ret;
-}
-
 static bool Lua_push_module_function(lua_State *L, const char *funcname) {
   lua_getglobal(L, "require");
   lua_pushliteral(L, "shuttlesock.module");
@@ -53,7 +28,7 @@ static bool add_module(shuso_t *S, shuso_module_t *module, const char *adding_fu
   lua_pushstring(L, module->subscribe);
   lua_pushstring(L, module->publish); 
   lua_pushstring(L, module->parent_modules); 
-  if(!lua_function_call_result_ok(S, L, 6, true)) {
+  if(!luaS_function_call_result_ok(L, 6, true)) {
     S->common->state = SHUSO_STATE_MISCONFIGURED;
     return false;
   }
@@ -97,7 +72,7 @@ bool shuso_event_initialize(shuso_t *S, shuso_module_t *mod, const char *name, s
   lua_pushlightuserdata(L, mod);
   lua_pushstring(L, name);
   lua_pushlightuserdata(L, mev);
-  return lua_function_call_result_ok(S, L, 3, false);
+  return luaS_function_call_result_ok(L, 3, false);
 }
 
 bool shuso_initialize_added_modules(shuso_t *S) {
@@ -109,7 +84,7 @@ bool shuso_initialize_added_modules(shuso_t *S) {
     }
     Lua_push_module_function(L, "start_initializing_module");
     lua_pushstring(L, module->name);
-    if(!lua_function_call_result_ok(S, L, 1, false)) {
+    if(!luaS_function_call_result_ok(L, 1, false)) {
       return false;
     }
     const char *error_before_initializing_module = shuso_last_error(S);
@@ -124,7 +99,7 @@ bool shuso_initialize_added_modules(shuso_t *S) {
     }
     Lua_push_module_function(L, "finish_initializing_module");
     lua_pushstring(L, module->name);
-    if(!lua_function_call_result_ok(S, L, 1, false)) {
+    if(!luaS_function_call_result_ok(L, 1, false)) {
       return false;
     }
   }
@@ -143,7 +118,7 @@ bool shuso_event_listen(shuso_t *S, const char *name, shuso_module_event_fn *cal
   shuso_module_t  *module;
   
   Lua_push_module_function(L, "currently_initializing_module");
-  if(!lua_function_call_result_ok(S, L, 0, true)) {
+  if(!luaS_function_call_result_ok(L, 0, true)) {
     return false;
   }
   lua_getfield(L, -1, "ptr");
@@ -153,7 +128,7 @@ bool shuso_event_listen(shuso_t *S, const char *name, shuso_module_event_fn *cal
   
   Lua_push_module_function(L, "find_event");
   lua_pushstring(L, name);
-  if(!lua_function_call_result_ok(S, L, 1, true)) {
+  if(!luaS_function_call_result_ok(L, 1, true)) {
     return false;
   }
   
@@ -162,7 +137,7 @@ bool shuso_event_listen(shuso_t *S, const char *name, shuso_module_event_fn *cal
   lua_pushlightuserdata(L, module);
   lua_pushlightuserdata(L, *((void **)&callback));
   lua_pushlightuserdata(L, pd);
-  if(!lua_function_call_result_ok(S, L, 4, false)) {
+  if(!luaS_function_call_result_ok(L, 4, false)) {
     lua_pop(L, 1);
     return false;
   }
@@ -180,25 +155,25 @@ bool shuso_module_finalize(shuso_t *S, shuso_module_t *mod) {
   
   Lua_push_module_function(L, "find");
   lua_pushlightuserdata(L, mod);
-  if(!lua_function_call_result_ok(S, L, 1, true)) {
+  if(!luaS_function_call_result_ok(L, 1, true)) {
     return false;
   }
   
   lua_getfield(L, -1, "all_events_initialized");
   lua_pushvalue(L, -2);
-  if(!lua_function_call_result_ok(S, L, 1, false)) {
+  if(!luaS_function_call_result_ok(L, 1, false)) {
     return false;
   }
   
   lua_getfield(L, -1, "finalize");
   lua_pushvalue(L, -2);
-  if(!lua_function_call_result_ok(S, L, 1, false)) {
+  if(!luaS_function_call_result_ok(L, 1, false)) {
     return false;
   }
   
   lua_getfield(L, -1, "dependent_modules");
   lua_pushvalue(L, -2);
-  if(!lua_function_call_result_ok(S, L, 1, true)) {
+  if(!luaS_function_call_result_ok(L, 1, true)) {
     return false;
   }
   n = luaL_len(L, -1);
@@ -206,7 +181,7 @@ bool shuso_module_finalize(shuso_t *S, shuso_module_t *mod) {
   
 #ifdef SHUTTLESOCK_DEBUG_MODULE_SYSTEM
   Lua_push_module_function(L, "count");
-  if(!lua_function_call_result_ok(S, L, 1, true)) {
+  if(!luaS_function_call_result_ok(L, 1, true)) {
     return false;
   }
   
@@ -243,7 +218,7 @@ bool shuso_module_finalize(shuso_t *S, shuso_module_t *mod) {
   
   lua_getfield(L, -1, "create_parent_modules_index_map");
   lua_pushvalue(L, -2);
-  if(!lua_function_call_result_ok(S, L, 1, true)) {
+  if(!luaS_function_call_result_ok(L, 1, true)) {
     return false;
   }
   n = luaL_len(L, -1);
@@ -303,7 +278,7 @@ bool shuso_module_finalize(shuso_t *S, shuso_module_t *mod) {
       Lua_push_module_function(L, "dependency_index");
       lua_pushstring(L, mod->name);
       lua_pushstring(L, cur->module->name);
-      if(!lua_function_call_result_ok(S, L, 2, true)) {
+      if(!luaS_function_call_result_ok(L, 2, true)) {
         return false;
       }
       lua_pop(L, 1);
@@ -363,7 +338,7 @@ shuso_module_t *shuso_get_module(shuso_t *S, const char *name) {
   shuso_module_t    *module;
   Lua_push_module_function(L, "find");
   lua_pushstring(L, name);
-  if(!lua_function_call_result_ok(S, L, 1, true)) {
+  if(!luaS_function_call_result_ok(L, 1, true)) {
     return NULL;
   }
   lua_getfield(L, -1, "ptr");

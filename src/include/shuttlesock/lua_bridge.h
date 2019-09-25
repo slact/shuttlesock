@@ -26,5 +26,6 @@ void lua_printstack(lua_State *L);
 void lua_mm(lua_State *L, int stack_index);
 
 void luaS_call(lua_State *L, int nargs, int nresults);
+bool luaS_function_call_result_ok(lua_State *L, int nargs, bool preserve_result);
 
 #endif //SHUTTLESOCK_LUA_BRIDGE_H
