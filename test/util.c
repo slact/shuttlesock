@@ -53,7 +53,7 @@ bool ___runcheck(shuso_t *S, char **err) {
   if(!chk->process.manager.stopped)
     return checkfail(err, "manager never stopped");
 
-  for(unsigned i = 0; i<= SHUTTLESOCK_MAX_WORKERS; i++) {
+  for(unsigned i = 0; i< SHUTTLESOCK_MAX_WORKERS; i++) {
     if(chk->process.worker[i].started && !chk->process.worker[i].stopped) {
       return checkfail(err, "worker %i was started but never stopped", i);
     }
