@@ -1,7 +1,7 @@
 #!/usr/bin/env zsh
 VALGRIND_OPT=( "--tool=memcheck" "--track-origins=yes" "--read-var-info=yes"  )
 
-VG_MEMCHECK_OPT=( "--leak-check=full" "--show-leak-kinds=all" "--leak-check-heuristics=all" "--keep-stacktraces=alloc-and-free" "--track-fds=yes" "--errors-for-leak-kinds=all" "--error-exitcode=1")
+VG_MEMCHECK_OPT=( "--leak-check=full" "--show-leak-kinds=all" "--leak-check-heuristics=all" "--keep-stacktraces=alloc-and-free" "--track-fds=yes" "--errors-for-leak-kinds=all" "--error-exitcode=1" "--suppressions=valgrind-suppressions.txt")
 
 #expensive definedness checks (newish option)
 #VG_MEMCHECK_OPT+=( "--expensive-definedness-checks=yes")
@@ -10,7 +10,7 @@ VG_MEMCHECK_OPT=( "--leak-check=full" "--show-leak-kinds=all" "--leak-check-heur
 VG_MEMCHECK_OPT+=("--num-callers=20")
 
 #generate suppresions
-VG_MEMCHECK_OPT+=("--gen-suppressions=all")
+#VG_MEMCHECK_OPT+=("--gen-suppressions=all")
 
 #track files
 #VG_MEMCHECK_OPT+=("--track-fds=yes")

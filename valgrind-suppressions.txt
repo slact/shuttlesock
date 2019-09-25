@@ -1,0 +1,11 @@
+{
+  <pthread_allocation>
+  Memcheck:Leak
+  match-leak-kinds: possible
+  ...
+  fun:pthread_create*
+  fun:shuso_spawn_worker
+  ...
+  fun:shuso_run
+  ...
+}
