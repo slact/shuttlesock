@@ -4,10 +4,10 @@ local parser_mt
 local Config = {}
 local config_mt
 
-local function mm_directive(directive)
+local function mm_setting(setting)
   local mm = require "mm"
   local cpy = {}
-  for k,v in pairs(directive) do
+  for k,v in pairs(setting) do
     cpy[k]=v
   end
   cpy.parent = "..."
@@ -15,27 +15,26 @@ local function mm_directive(directive)
   mm(cpy)
 end
 
-local config_directives = {
+local config_settings = {
   {
     name = "lua_path",
     path = "/",
     description = "path to all the internal ",
     nargs = "1..10",
     default = {".", "/usr/lib/shuttlesock/lua"},
-    handler = function(values, default, module_ctx, shuttlesock_ctx)
-      values = values or default
-      parent.config_include_path = directive.values[1]
+    handler = function(setting, default)
+      local values = setting.values or default
+      setting.parent.config_lua_path = values[1]
       return true
     end
   },
   {
     name = "include_path",
     path = "",
-    description = "include path for relative paths in config.include directives",
+    description = "include path for relative paths in config.include settings",
     nargs = 1,
-    handler = function(values, default, module_ctx, shuttlesock_ctx)
-      local parent = directive.parent
-      parent.config_include_path = values[1]
+    handler = function(setting)
+      setting.parent.config_include_path = values[1]
       return true
     end
   },
@@ -45,13 +44,13 @@ local config_directives = {
     description = "include configs matching the provided glob pattern",
     nargs   = 1,
     default = nil,
-    internal_handler = function(directive, default, config, shuttlesock_ctx)
-      local path = directive.values[1].raw
+    internal_handler = function(setting, default, config)
+      local path = setting.values[1].raw
       
-      local include_path = config:get_directive("include_path", directive.parent)
+      local include_path = config:get_setting("include_path", setting.parent)
       local paths
       if path:match("[%[%]%?%*]") then
-        paths = Config.glob(include_path, directive.values[1])
+        paths = Config.glob(include_path, setting.values[1])
       else
         paths = {path}
       end
@@ -59,7 +58,7 @@ local config_directives = {
       local tokens = {
         {type="comment", value = "#include " .. path ..";"}
       }
-      local directives = { }
+      local settings = { }
       
       config.config_include_stack = config.config_include_stack or {}
       table.insert(config.config_include_stack, config.name)
@@ -71,18 +70,16 @@ local config_directives = {
       for _, p in ipairs(paths) do
         local included_config = Config.new(p)
         included_config.config_include_stack = config.config_include_stack
-        local ok, err = included_config:load()
-        if not ok then return nil, err end
-        ok, err = included_config:handle("config.include_path")
-        if not ok then return nil, err end
-        ok, err = included_config:handle("config.include")
-        if not ok then return nil, err end
+        assert(included_config:load())
+        assert(included_config:parse())
+        assert(included_config:handle("config.include_path"))
+        assert(included_config:handle("config.include"))
         
         table.insert(tokens, {type="comment", value = "# included file " .. p ..";"})
         
-        for _, d in ipairs(included_config.root.block.directives) do
-          table.insert(directives, d)
-          d.parent = directive.parent
+        for _, d in ipairs(included_config.root.block.settings) do
+          table.insert(settings, d)
+          d.parent = setting.parent
         end
         
         for _, t in ipairs(included_config.root.block.tokens) do
@@ -90,8 +87,8 @@ local config_directives = {
         end
       end
       
-      assert(config:replace_token(directive, table.unpack(tokens)))
-      assert(config:replace_directive(directive, table.unpack(directives)))
+      assert(config:replace_token(setting, table.unpack(tokens)))
+      assert(config:replace_setting(setting, table.unpack(settings)))
       
       config.config_include_stack = nil
       
@@ -100,7 +97,7 @@ local config_directives = {
   }
 }
 
-function Parser.new(name, string, root_directive)
+function Parser.new(name, string, root_setting)
   local self = {
     name = name,
     str = string,
@@ -111,10 +108,10 @@ function Parser.new(name, string, root_directive)
     root = nil
   }
   setmetatable(self, parser_mt)
-  if not root_directive then
-    self:push_directive("root", "config", true)
+  if not root_setting then
+    self:push_setting("root", "config", true)
   else
-    self:push_directive(root_directive, nil, true)
+    self:push_setting(root_setting, nil, true)
   end
   self:push_block("ROOT")
   self.root = self.stack[1]
@@ -160,29 +157,29 @@ do --parser
     return chunk.type == chunk_type and chunk
   end
   
-  function parser:in_directive(stack_position)
-    return self:in_chunk_type("directive", stack_position)
+  function parser:in_setting(stack_position)
+    return self:in_chunk_type("setting", stack_position)
   end
   function parser:in_block(stack_position)
     return self:in_chunk_type("block", stack_position)
   end
   
-  function parser:push_directive(directive_name, module_name, is_root)
+  function parser:push_setting(setting_name, module_name, is_root)
     if is_root then
       assert(self.top == nil)
       assert(#self.stack == 0)
     else
       assert(self:in_block())
-      assert(self:in_directive(-1))
+      assert(self:in_setting(-1))
     end
     
-    local directive
-    if type(directive_name) == "table" and not module_name then
-      directive = directive_name
+    local setting
+    if type(setting_name) == "table" and not module_name then
+      setting = setting_name
     else
-      directive = {
-        type = "directive",
-        name = directive_name,
+      setting = {
+        type = "setting",
+        name = setting_name,
         module = module_name,
         position = {
           first = self.cur,
@@ -196,32 +193,32 @@ do --parser
         block = nil,
       }
       if module_name then
-        directive.full_name = directive.module .. "." .. directive.name
+        setting.full_name = setting.module .. "." .. setting.name
       end
-      if is_root and not directive.parent then
-        directive.parent = directive --i'm my own grandpa
+      if is_root and not setting.parent then
+        setting.parent = setting --i'm my own grandpa
       else
-        directive.parent = self.stack[#self.stack - 1]
+        setting.parent = self.stack[#self.stack - 1]
       end
     end
     
-    table.insert(self.stack, directive)
-    self.top = directive
+    table.insert(self.stack, setting)
+    self.top = setting
     return true
   end
   
-  function parser:pop_directive()
-    local directive = assert(self:in_directive())
-    directive.position.last = self.cur
+  function parser:pop_setting()
+    local setting = assert(self:in_setting())
+    setting.position.last = self.cur
     
     table.remove(self.stack)
     self.top = self.stack[#self.stack]
     if self.top == nil then
-      assert(directive == self.root)
+      assert(setting == self.root)
     else
       local block = assert(self:in_block())
-      table.insert(block.directives, directive)
-      table.insert(block.tokens, directive)
+      table.insert(block.settings, setting)
+      table.insert(block.tokens, setting)
     end
     return true
   end
@@ -242,13 +239,13 @@ do --parser
   end
   
   function parser:add_semicolon(pos)
-    local directive = assert(self:in_directive())
+    local setting = assert(self:in_setting())
     local semi = {type="semicolon", position = pos}
-    table.insert(directive.tokens, semi)
-    return directive
+    table.insert(setting.tokens, semi)
+    return setting
   end
   
-  function parser:add_value_to_directive(value_type, val)
+  function parser:add_value_to_setting(value_type, val)
     if val == nil then
       val = self:match() --last match
     end
@@ -262,13 +259,13 @@ do --parser
       raw = val
     }
     
-    local directive = assert(self:in_directive())
-    if not directive.position.values_first then
-      directive.position.values_first = value.position.first
+    local setting = assert(self:in_setting())
+    if not setting.position.values_first then
+      setting.position.values_first = value.position.first
     end
-    directive.position.values_last = value.position.last
-    table.insert(directive.values, value)
-    table.insert(directive.tokens, value)
+    setting.position.values_last = value.position.last
+    table.insert(setting.values, value)
+    table.insert(setting.tokens, value)
     return true
   end
   
@@ -279,13 +276,13 @@ do --parser
       position = {
         first = self.cur,
         last = self.cur,
-        directives_first = nil,
-        directives_last = nil
+        settings_first = nil,
+        settings_last = nil
       },
-      directives = {},
+      settings = {},
       comments = {},
       tokens = {},
-      source_directive = assert(self:in_directive())
+      source_setting = assert(self:in_setting())
     }
     table.insert(self.stack, block)
     self.top = block
@@ -296,11 +293,11 @@ do --parser
     local block = self.top
     table.remove(self.stack)
     self.top = self.stack[#self.stack]
-    local directive = assert(self:in_directive())
-    assert(not directive.block)
-    directive.block = block
-    --finishing a block means we are also finishing the directive it belongs to
-    self:pop_directive()
+    local setting = assert(self:in_setting())
+    assert(not setting.block)
+    setting.block = block
+    --finishing a block means we are also finishing the setting it belongs to
+    self:pop_setting()
     return true
   end
 
@@ -310,9 +307,9 @@ do --parser
       token_count = token_count + 1
     end
     
-    if self:in_directive() == "directive" then
+    if self:in_setting() == "setting" then
       return nil, self:error("unexpected end of file, expected \";\"")
-    elseif self:in_block() == "block" and self.top.source_directive ~= self.root then
+    elseif self:in_block() == "block" and self.top.source_setting ~= self.root then
       return nil, self:error("unexpected end of file, expected \"}\"")
     else
       self:pop_block()
@@ -359,7 +356,7 @@ do --parser
   function parser:skip_space(spacechars)
     spacechars = spacechars or " \t\r\n"
     local m = self:match("^["..spacechars.."]+", "last_space")
-    if m and self:in_directive() then
+    if m and self:in_setting() then
       local nl = nil
       repeat
         nl = m:find("\n", nl)
@@ -392,7 +389,7 @@ do --parser
           --string end found
           self.last_match = self.str:sub(self.cur, unquote)
           self.cur = unquote + 1
-          return self:add_value_to_directive("string")
+          return self:add_value_to_setting("string")
         end
       end
     until not unquote
@@ -402,7 +399,7 @@ do --parser
   function parser:match_variable()
     local var = self:match("^%$([%w%.%_]+)")
     if var then
-      return self:add_value_to_directive("variable")
+      return self:add_value_to_setting("variable")
     end
     
     if self:match("^%$[^%s;]+") then
@@ -418,19 +415,19 @@ do --parser
     if not self:match("^[^%s;]+") then
       return nil, self:error("invalid value")
     end
-    return self:add_value_to_directive("value")
+    return self:add_value_to_setting("value")
   end
   
-  function parser:match_directive_name()
+  function parser:match_setting_name()
     if not self:match("^[^%s]+") then
       if self:match("^;") then
         self:error("unexpected \";\"")
       elseif self:match("^{") then
         self:error("unexpected \"{\"")
       elseif self:match("^%S+") then
-        self:error("invalid config directive name \"" .. self:match() .. "\"")
+        self:error("invalid config setting name \"" .. self:match() .. "\"")
       else
-        self:error("expected config directive")
+        self:error("expected config setting")
       end
       return nil, self:last_error()
     end
@@ -438,10 +435,10 @@ do --parser
     if name:match("%.") then
       module_name, name = name:match("^([^%.]+)%.([^%s]+)$")
       if not module_name then
-        return nil, self:error("invalid config directive name \""..self:match().."\"")
+        return nil, self:error("invalid config setting name \""..self:match().."\"")
       end
     end
-    self:push_directive(name, module_name)
+    self:push_setting(name, module_name)
     return true
   end
   
@@ -450,7 +447,7 @@ do --parser
     self:add_semicolon(self.cur - 1)
     self:skip_space(" \t")
     self:skip_comment()
-    return self:pop_directive()
+    return self:pop_setting()
   end
   
   function parser:print_stack()
@@ -468,7 +465,7 @@ do --parser
       if self:match("^}") then
         return self:pop_block()
       else
-        local ok, err = self:match_directive_name()
+        local ok, err = self:match_setting_name()
         if not ok then
           return nil, self:error(err)
         end
@@ -477,7 +474,7 @@ do --parser
     end
     
     
-    assert(self:in_directive())
+    assert(self:in_setting())
     local char = self.str:sub(self.cur, self.cur)
     local ok, err
     if char == "\"" or char == "'" then
@@ -552,7 +549,7 @@ end
 
 local function resolve_path(prefix, name)
   if not prefix or name:match("^%/") then
-    --absolute path
+    --absolute path or no path given
     return name
   else
     prefix = prefix:match("^(.*)%/$") or prefix --strip trailing slash
@@ -577,10 +574,10 @@ function Config.glob(glob)
   error("glob function not available. set it with Config.glob = func")
 end
 
-function Config.new(name, string)
+function Config.new(name)
   local config = {
     name = name, --could be the filename
-    string = string,
+    string = nil,
     handlers = {},
     handlers_any_module = {},
     parent_lookup_table = setmetatable({}, {__mode='kv'}),
@@ -588,8 +585,8 @@ function Config.new(name, string)
   }
   setmetatable(config, config_mt)
   
-  for _, directive_handler in pairs(config_directives) do
-    assert(config:register("config", directive_handler))
+  for _, setting_handler in pairs(config_settings) do
+    assert(config:register_setting("config", setting_handler))
   end
   
   return config
@@ -615,8 +612,8 @@ do --config
     return tbl
   end
 
-  local function match_path(directive, handler)
-    local dpath = split_path(directive)
+  local function match_path(setting, handler)
+    local dpath = split_path(setting)
     local hpath = split_path(handler)
     for i=#dpath, 1, -1 do
       local d = dpath[i]
@@ -630,7 +627,27 @@ do --config
     return true
   end
   
-  function config:get_directive(name, context)
+  function config:parse(str)
+    if str then
+      assert(type(str) == "string")
+      assert(not self.string)
+      self.string = str
+    end
+    local parser = Parser.new(self.name, self.string)
+    assert(parser:parse())
+    self.root = parser.root
+    table.insert(self.parsers, parser)
+    for setting in self:each_setting() do
+      setting.parser_index = #self.parsers
+    end
+    
+    --now handle includes
+    assert(self:handle("config.include_path"))
+    assert(self:handle("config.include"))
+    return self
+  end
+  
+  function config:get_setting(name, context)
     if not context then context = self.root end
     local module
     if not name:match("%.") then
@@ -643,7 +660,7 @@ do --config
     end
     
     while context and context.parent ~= context do
-      for _, d in ipairs(context.block.directives) do
+      for _, d in ipairs(context.block.settings) do
         if name == d.name and (module and module == d.module or true) then
           return d
         end
@@ -651,116 +668,88 @@ do --config
       context = context.parent
     end
     
-    return nil, "directive not found"
+    return nil, "setting not found"
   end
   
-  function config:find_handler_for_directive(directive)
-    if directive.full_name then
-      local handler = self.handlers[directive.full_name]
+  function config:find_handler_for_setting(setting)
+    if setting.full_name then
+      local handler = self.handlers[setting.full_name]
       if handler then
         return handler
       else
-        return nil, "unknown directive " .. directive.full_name
+        return nil, "unknown setting " .. setting.full_name
       end
     else
-      local name = "*."..directive.name
+      local name = "*."..setting.name
       local possible_handlers = self.handlers_any_module[name]
       if not possible_handlers then
-        return nil, "unknown directive " .. directive.name
+        return nil, "unknown setting " .. setting.name
       end
-      self:get_directive_path(directive)
+      self:get_setting_path(setting)
       local matches = {}
       for _, handler in ipairs(possible_handlers) do
-        if match_path(directive, handler) then
+        if match_path(setting, handler) then
           table.insert(matches, handler)
         end
       end
       if #matches == 0 then
-        return nil, "unknown directive " .. directive.name
+        return nil, "unknown setting " .. setting.name
       elseif #matches > 1 then
         local handler_names = {}
         for _, h in ipairs(possible_handlers) do
           table.insert(handler_names, h.module .. "," ..h.name)
         end
-        return nil, "ambiguous directive " .. directive.name..", could be any of :" .. table.concat(handler_names, ", ")
+        return nil, "ambiguous setting " .. setting.name..", could be any of :" .. table.concat(handler_names, ", ")
       else
         return matches[1]
       end
     end
   end
   
-  function config:get_directive_path(directive)
-    if directive.path then
-      return directive.path
+  function config:get_setting_path(setting)
+    if setting.path then
+      return setting.path
     end
     local buf = {}
-    local cur = directive
+    local cur = setting
     while true do
       cur = cur.parent
       if cur.parent == cur or not cur then
-        directive.path = "/"..table.concat(buf, "/")
-        return directive.path
+        setting.path = "/"..table.concat(buf, "/")
+        return setting.path
       else
-        table.insert(cur, directive.full_name or ("*."..directive.name))
+        table.insert(cur, setting.full_name or ("*."..setting.name))
       end
     end
   end
   
   function config:load(path_prefix)
     assert(not self.loaded, "config already loaded")
-    local config_string
-    if self.string then
-      config_string = self.string
-    else
-      local err
-      config_string, err = read_file(resolve_path(path_prefix, self.name), "config")
-      if not config_string then
-        return nil, err
-      end
-    end
-    
-    local parser = Parser.new(self.name, config_string)
-    local ok = true
-    local res, err = parser:parse()
-    if not ok then
-      return nil, res
-    end
-    if not res then
-      return nil, err
-    end
-    
-    self.root = parser.root
-    
-    table.insert(self.parsers, parser)
-    for directive in self:each_directive() do
-      directive.parser_index = #self.parsers
-    end
-    
-    --now handle includes
-    assert(self:handle("config.include_path"))
-    assert(self:handle("config.include"))
-    
+    assert(not self.string, "config string already set")
+    assert(self.name, "config name must be set to the filename when using config:load()")
+    self.string = assert(read_file(resolve_path(path_prefix, self.name), "config"))
+    self.loaded = true
     return self
   end
 
   function config:handle(handlers, shuttlesock_ctx)
-    for directive in self:each_directive() do
+    for setting in self:each_setting() do
       local ok, handler, err
-      handler, err = self:find_handler_for_directive(directive)
+      handler, err = self:find_handler_for_setting(setting)
       if handler then
         if handler.handler then
-          ok, err = handler.handler(directive.values, handler.default, shuttlesock_ctx)
+          ok, err = handler.handler(setting.values, handler.default, shuttlesock_ctx)
         elseif handler.internal_handler then
-          ok, err = handler.internal_handler(directive, handler.default, self, shuttlesock_ctx)
+          ok, err = handler.internal_handler(setting, handler.default, self, shuttlesock_ctx)
         end
       else
         ok = true
       end
       if not ok then
-        local err_prefix = "error in \""..(directive.full_name or directive.name).."\" directive"
-        local parser = self.parsers[directive.parser_index]
+        local err_prefix = "error in \""..(setting.full_name or setting.name).."\" setting"
+        local parser = self.parsers[setting.parser_index]
         if parser then
-          return nil, parser:error(err_prefix, directive.position.first) .. ": " .. err
+          return nil, parser:error(err_prefix, setting.position.first) .. ": " .. err
         else
           return nil, err_prefix .. ": " .. err
         end
@@ -769,21 +758,22 @@ do --config
     return true
   end
   
-  function config:each_directive(start, filters) --for loop iterator
-    local should_walk_directive = filters and filters.directive_block or function(directive)
-      return directive.block
+  function config:each_setting(start, filters) --for loop iterator
+    --assert(self.root)
+    local should_walk_setting = filters and filters.setting_block or function(setting)
+      return setting.block
     end
-    local function walk_directive(block, parent_directive)
-      for _, directive in ipairs(block.directives) do
-        coroutine.yield(directive, parent_directive)
-        if should_walk_directive(directive) then
-          walk_directive(directive.block, directive)
+    local function walk_setting(block, parent_setting)
+      for _, setting in ipairs(block.settings) do
+        coroutine.yield(setting, parent_setting)
+        if should_walk_setting(setting) then
+          walk_setting(setting.block, setting)
         end
       end
     end
-    assert(self.root)
+    --assert(self.root)
     return coroutine.wrap(function()
-      return walk_directive(self.root.block or start, nil)
+      return walk_setting(self.root.block or start, nil)
     end)
   end
   
@@ -800,14 +790,14 @@ do --config
     return nil, element_name .. " to replace not found"
   end
   
-  function config:replace_directive(directive, ...)
-    return replace_in_table("directive", directive.parent.block.directives, directive, {...})
+  function config:replace_setting(setting, ...)
+    return replace_in_table("setting", setting.parent.block.settings, setting, {...})
   end
-  function config:replace_token(directive, ...)
-    return replace_in_table("token", directive.parent.block.tokens, directive, {...})
+  function config:replace_token(setting, ...)
+    return replace_in_table("token", setting.parent.block.tokens, setting, {...})
   end
   
-  function config:register(module_name, directive)
+  function config:register_setting(module_name, setting)
     local name
     local aliases = {}
     local path
@@ -817,81 +807,81 @@ do --config
     local default
     
     assert(type(module_name) == "string", "module name must be a string. " .. mock("mild"))
-    assert(type(directive) == "table", "drective must be a table")
+    assert(type(setting) == "table", "drective must be a table")
     
-    assert(type(directive.name) == "string", "directive.name must be a string")
-    assert(directive.name:match("^[%w_%.]+"), "directive.name \""..directive.name.."\" is invalid")
-    name = directive.name
+    assert(type(setting.name) == "string", "setting.name must be a string")
+    assert(setting.name:match("^[%w_%.]+"), "setting.name \""..setting.name.."\" is invalid")
+    name = setting.name
     
-    if directive.alias then
-      assert(type(directive.aliases) == "table", "directive.aliases must be a table")
-      for k, v in pairs(directive.aliases) do
-        assert(type(k) == "number", "directive aliases must be a number-indexed table")
-        assert(v:match("^[%w_%.]+"), "directive alias \"" ..v.."\" is invalid")
+    if setting.alias then
+      assert(type(setting.aliases) == "table", "setting.aliases must be a table")
+      for k, v in pairs(setting.aliases) do
+        assert(type(k) == "number", "setting aliases must be a number-indexed table")
+        assert(v:match("^[%w_%.]+"), "setting alias \"" ..v.."\" is invalid")
         table.insert(aliases, v)
       end
     end
     
-    assert(type(directive.path) == "string", "directive.path must be a string")
-    assert(not directive.path:match("%/%/"), "directive.path \"" .. directive.path .."\" is invalid")
-    assert(directive.path:match("^[%w_%.%/]*"), "directive.path \"" .. directive.path .."\" is invalid")
-    path = directive.path:match("^(.+)/$") or directive.path
+    assert(type(setting.path) == "string", "setting.path must be a string")
+    assert(not setting.path:match("%/%/"), "setting.path \"" .. setting.path .."\" is invalid")
+    assert(setting.path:match("^[%w_%.%/]*"), "setting.path \"" .. setting.path .."\" is invalid")
+    path = setting.path:match("^(.+)/$") or setting.path
     
-    description = assert(directive.description, "it may seem draconian, but drective.description is required.")
+    description = assert(setting.description, "it may seem draconian, but drective.description is required.")
     
-    if not directive.nargs then
+    if not setting.nargs then
       args_min, args_max = 1, 1
-    elseif type(directive.nargs) == "number" then
+    elseif type(setting.nargs) == "number" then
       if math.type then
-        assert(math.type(directive.nargs) == "integer", "directive.nargs must be an integer")
+        assert(math.type(setting.nargs) == "integer", "setting.nargs must be an integer")
       else
-        assert(math.floor(directive.nargs) == directive.nargs, "directive.nargs must be an integer")
+        assert(math.floor(setting.nargs) == setting.nargs, "setting.nargs must be an integer")
       end
-      args_min, args_max = directive.nargs, directive.nargs
-    elseif type(directive.nargs == "string") then
-      args_min, args_max = directive.nargs:match("^(%d+)%s*%-%s*(%d+)$")
+      args_min, args_max = setting.nargs, setting.nargs
+    elseif type(setting.nargs == "string") then
+      args_min, args_max = setting.nargs:match("^(%d+)%s*%-%s*(%d+)$")
       if not args_min or not args_max then
-        args_min, args_max = directive.nargs:match("^(%d+)%s*%.%.%s*(%d+)$")
+        args_min, args_max = setting.nargs:match("^(%d+)%s*%.%.%s*(%d+)$")
       end
       if not args_min or not args_max then
-        args_min = directive.nargs:match("^%d$")
+        args_min = setting.nargs:match("^%d$")
         args_max = args_min
       end
       if not args_min then
-        assert(args_min and math.floor(args_min) ~= args_min, "directive.nargs is invalid")
+        assert(args_min and math.floor(args_min) ~= args_min, "setting.nargs is invalid")
       end
       args_min, args_max = tonumber(args_min), tonumber(args_max)
     else
-      error("directive.nargs must be a number or string")
+      error("setting.nargs must be a number or string")
     end
-    assert(args_min <= args_max, "directive.nargs minimum must be smaller or equal to maximum")
-    assert(args_min >= 0, "directive.nargs minimum must be non-negative. " .. mock("moderate"))
-    assert(args_max >= 0, "directive.nargs maximum must be non-negative." .. mock("moderate"))
+    assert(args_min <= args_max, "setting.nargs minimum must be smaller or equal to maximum")
+    assert(args_min >= 0, "setting.nargs minimum must be non-negative. " .. mock("moderate"))
+    assert(args_max >= 0, "setting.nargs maximum must be non-negative." .. mock("moderate"))
     
-    if directive.block then
-      if type(directive.block) ~= "boolean" then
-        assert(directive.block == "optional", "directive.block must be boolean, nil, or the string \"optional\"")
+    if setting.block then
+      if type(setting.block) ~= "boolean" then
+        assert(setting.block == "optional", "setting.block must be boolean, nil, or the string \"optional\"")
       end
-      block = directive.block
+      block = setting.block
     else
       block = false
     end
     
-    if directive.default then
-      if type(directive.default) == "table" then
-        for k, v in pairs(directive.default) do
-          assert(type(k) == "number", "directive.default key must be numeric. " .. mock("strong"))
-          assert(type(v) == "number" or type(v) == "string" or type(v) == "boolean", "directive.default table values must be strings, numbers, or booleans")
+    if setting.default then
+      if type(setting.default) == "table" then
+        for k, v in pairs(setting.default) do
+          assert(type(k) == "number", "setting.default key must be numeric. " .. mock("strong"))
+          assert(type(v) == "number" or type(v) == "string" or type(v) == "boolean", "setting.default table values must be strings, numbers, or booleans")
         end
       else
-        local t = type(directive.default)
-        assert(t == "number" or t == "string" or t == "boolean", "directive.default table values must be strings, numbers, or booleans")
+        local t = type(setting.default)
+        assert(t == "number" or t == "string" or t == "boolean", "setting.default table values must be strings, numbers, or booleans")
       end
-      default = directive.default
+      default = setting.default
     end
     
-    if not directive.internal_handler then
-      assert(type(directive.handler) == "function", "directive.handler must be a function." .. mock("moderate"))
+    if not setting.internal_handler then
+      assert(type(setting.handler) == "function", "setting.handler must be a function." .. mock("moderate"))
     end
     
     local handler = {
@@ -903,13 +893,13 @@ do --config
       arg_min = args_min,
       arg_default = default,
       block = block,
-      handler = directive.handler,
-      internal_handler = directive.internal_handler
+      handler = setting.handler,
+      internal_handler = setting.internal_handler
     }
     
     local full_name = module_name .. "." .. name
     
-    assert(not self.handlers[full_name], ('directive "%s" for module %s already exists'):format(name, module_name))
+    assert(not self.handlers[full_name], ('setting "%s" for module %s already exists'):format(name, module_name))
     
     self.handlers[full_name] = handler
     
@@ -938,7 +928,7 @@ do --config
       else
         return ("{\n%s\n%s}\n"):format(table.concat(buf, "\n"), indent(lvl-1))
       end
-    elseif cur.type == "directive" then
+    elseif cur.type == "setting" then
       local str = indent(lvl) .. (cur.full_name or cur.name)
       local prev_type = "none"
       for _, token in ipairs(cur.tokens) do
