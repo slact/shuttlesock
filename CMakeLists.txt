@@ -23,8 +23,8 @@ set(libsrc
   src/stalloc.c
   src/resolver.c
   src/shared_slab.c
-  src/settings.c
   src/module.c
+  src/config.c
   ${PROJECT_BINARY_DIR}/src/embedded_lua_scripts.c
   src/lua_binding.c
   src/lua_bridge.c
