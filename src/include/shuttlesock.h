@@ -21,7 +21,7 @@
 #include <shuttlesock/lua_bridge.h>
 #include <shuttlesock/sysutil.h>
 #include <shuttlesock/log.h>
-#include <shuttlesock/config_file.h>
+#include <shuttlesock/config.h>
 #include <shuttlesock/module.h>
 
 struct shuso_process_s {
@@ -127,7 +127,11 @@ typedef struct {
 struct shuso_common_s {
   shuso_runstate_t    state;
   shuso_ipc_handler_t ipc_handlers[256];
-  shuso_core_module_ctx_t    *core_module_ctx;
+  struct {
+    shuso_core_module_ctx_t    *core;
+    shuso_config_module_ctx_t  *config;
+  }                   module_ctx;
+  
   shuso_config_t      config;
   struct {
     size_t              count;

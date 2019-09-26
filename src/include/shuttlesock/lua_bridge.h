@@ -18,6 +18,7 @@ bool luaS_set_shuttlesock_state_pointer(lua_State *L, shuso_t *S);
 
 //lua functions here
 int luaS_push_core_module(lua_State *L);
+int luaS_push_system_module(lua_State *L);
 int luaS_do_embedded_script(lua_State *L);
 
 //debug stuff
@@ -30,6 +31,10 @@ void luaS_call(lua_State *L, int nargs, int nresults);
 int luaS_resume(lua_State *thread, lua_State *from, int nargs);
 int luaS_call_or_resume(lua_State *L, int nargs);
 bool luaS_function_call_result_ok(lua_State *L, int nargs, bool preserve_result);
+bool luaS_function_pcall_result_ok(lua_State *L, int nargs, bool preserve_result);
+
+//system calls and such
+int luaS_glob(lua_State *L); //glob(); pop 1 string, push glob table of strings or nil, err
 
 //errorsmithing
 int luaS_shuso_error(lua_State *L);

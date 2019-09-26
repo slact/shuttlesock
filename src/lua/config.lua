@@ -15,11 +15,26 @@ local function mm_setting(setting)
   mm(cpy)
 end
 
+local function resolve_path(prefix, name)
+  if not prefix or name:match("^%/") then
+    --absolute path or no path given
+    return name
+  else
+    prefix = prefix:match("^(.*)%/$") or prefix --strip trailing slash
+    return prefix .. "/" .. name
+  end
+end
+
+local function glob(globstr)
+  local system = require "shuttlesock.system"
+  return system.glob(globstr)
+end
+
 local config_settings = {
   {
     name = "lua_path",
     path = "/",
-    description = "path to all the internal ",
+    description = "path to all the internal lua stuff",
     nargs = "1..10",
     default = {".", "/usr/lib/shuttlesock/lua"},
     handler = function(setting, default)
@@ -31,7 +46,7 @@ local config_settings = {
   {
     name = "include_path",
     path = "",
-    description = "include path for relative paths in config.include settings",
+    description = "sets path for the 'include' setting",
     nargs = 1,
     handler = function(setting)
       setting.parent.config_include_path = values[1]
@@ -50,7 +65,7 @@ local config_settings = {
       local include_path = config:get_setting("include_path", setting.parent)
       local paths
       if path:match("[%[%]%?%*]") then
-        paths = Config.glob(include_path, setting.values[1])
+        paths = glob(resolve_path(include_path, setting.values[1]))
       else
         paths = {path}
       end
@@ -547,16 +562,6 @@ local function mock(strength)
   return mock_strength[math.random(#mock_strength)]
 end
 
-local function resolve_path(prefix, name)
-  if not prefix or name:match("^%/") then
-    --absolute path or no path given
-    return name
-  else
-    prefix = prefix:match("^(.*)%/$") or prefix --strip trailing slash
-    return prefix .. "/" .. name
-  end
-end
-
 local function read_file(path, file_description)
   local f, err = io.open(path, "rb")
   if not f then
@@ -568,10 +573,6 @@ local function read_file(path, file_description)
   end
   f:close()
   return str
-end
-
-function Config.glob(glob)
-  error("glob function not available. set it with Config.glob = func")
 end
 
 function Config.new(name)
@@ -899,7 +900,7 @@ do --config
     
     local full_name = module_name .. "." .. name
     
-    assert(not self.handlers[full_name], ('setting "%s" for module %s already exists'):format(name, module_name))
+    assert(not self.handlers[full_name], ('module %s setting "%s" already exists'):format(module_name, name))
     
     self.handlers[full_name] = handler
     

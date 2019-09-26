@@ -123,6 +123,10 @@ shuso_t *shuso_create_with_lua(lua_State *lua, const char **err) {
     goto fail;
   }
   
+  if(!shuso_config_initialize(S)) {
+    goto fail;
+  }
+  
   common_ctx->process.master.procnum = SHUTTLESOCK_MASTER;
   common_ctx->process.manager.procnum = SHUTTLESOCK_MANAGER;
   for(int i = 0; i< SHUTTLESOCK_MAX_WORKERS; i++) {

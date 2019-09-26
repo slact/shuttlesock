@@ -10,8 +10,7 @@
 #define INIT_LUA_ALLOCS 1
 #endif
 
-bool luaS_function_call_result_ok(lua_State *L, int nargs, bool preserve_result) {
-  luaS_call(L, nargs, 2);
+static bool function_result_ok(lua_State *L, bool preserve_result) {
   if(lua_isnil(L, -2)) {
     shuso_t *S = shuso_state(L);
     if(!lua_isstring(L, -1)) {
@@ -34,6 +33,21 @@ bool luaS_function_call_result_ok(lua_State *L, int nargs, bool preserve_result)
     lua_pop(L, 2);
   }
   return ret;
+}
+
+bool luaS_function_call_result_ok(lua_State *L, int nargs, bool preserve_result) {
+  luaS_call(L, nargs, 2);
+  return function_result_ok(L, preserve_result);
+}
+
+bool luaS_function_pcall_result_ok(lua_State *L, int nargs, bool preserve_result) {
+  int rc = lua_pcall(L, nargs, 2, 0);
+  if(rc != LUA_OK) {
+    shuso_set_error(shuso_state(L), lua_tostring(L, -1));
+    lua_pop(L, 1);
+    return false;
+  }
+  return function_result_ok(L, preserve_result);
 }
 
 static int luaS_traceback(lua_State *L) {
@@ -122,11 +136,12 @@ void luaS_mm(lua_State *L, int stack_index) {
   lua_call(L, 1, 0);
 }
 
-static int shuso_Lua_glob(lua_State *L) {
+int luaS_glob(lua_State *L) {
   const char *pattern = luaL_checkstring(L, 1);
   int         rc = 0;
   glob_t      globres;
   rc = glob(pattern, GLOB_ERR | GLOB_MARK, NULL, &globres);
+  lua_remove(L, 1);
   switch(rc) {
     case 0:
       lua_newtable(L);
@@ -240,6 +255,9 @@ bool shuso_lua_initialize(shuso_t *S) {
   luaL_requiref(L, "shuttlesock.core", luaS_push_core_module, 0);
   lua_pop(L, 1);
   
+  luaL_requiref(L, "shuttlesock.system", luaS_push_system_module, 0);
+  lua_pop(L, 1);
+  
   for(shuso_lua_embedded_scripts_t *script = &shuttlesock_lua_embedded_scripts[0]; script->name != NULL; script++) {
     if(script->module) {
       luaL_requiref(L, script->name, luaS_do_embedded_script, 0);
@@ -251,9 +269,6 @@ bool shuso_lua_initialize(shuso_t *S) {
   lua_getglobal(L, "require");
   lua_pushliteral(L, "shuttlesock.config");
   lua_call(L, 1, 1);
-  
-  lua_pushcfunction(L, shuso_Lua_glob);
-  lua_setfield(L, -2, "glob");
   
   S->config.index = luaL_ref(L, LUA_REGISTRYINDEX);
   

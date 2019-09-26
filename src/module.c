@@ -48,6 +48,15 @@ static bool add_module(shuso_t *S, shuso_module_t *module, const char *adding_fu
     S->common->modules.array[module->index] = module;
   }
   
+  //register the config settings
+  if(module->settings) {
+    for(shuso_setting_t *setting = &module->settings[0]; setting->name != NULL; setting++) {
+      if(!shuso_config_register_setting(S, setting, module)){
+        return false;
+      }
+    }
+  }
+  
   return true;
 }
 
@@ -351,7 +360,7 @@ shuso_module_t *shuso_get_module(shuso_t *S, const char *name) {
 }
 
 bool shuso_core_module_event_publish(shuso_t *S, const char *name, intptr_t code, void *data) {
-  shuso_core_module_ctx_t *ctx = S->common->core_module_ctx;
+  shuso_core_module_ctx_t *ctx = S->common->module_ctx.core;
   shuso_module_event_t    *ev = (shuso_module_event_t *)&ctx->event;
   shuso_module_event_t    *cur;
   int n = sizeof(ctx->event)/sizeof(shuso_module_event_t);
@@ -387,7 +396,7 @@ static bool core_module_init_function(shuso_t *S, shuso_module_t *self) {
   shuso_event_initialize(S, self, "master.manager_exited", &ctx->event.manager_exited);
   
   shuso_context_list_initialize(S, self, &ctx->context_list, &S->stalloc);
-  S->common->core_module_ctx = ctx;
+  S->common->module_ctx.core = ctx;
   return true;
 }
 shuso_module_t shuso_core_module = {

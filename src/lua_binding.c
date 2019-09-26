@@ -1580,7 +1580,19 @@ luaL_Reg shuttlesock_core_module_methods[] = {
   {NULL, NULL}
 };
 
+luaL_Reg shuttlesock_system_module_methods[] = {
+  {"glob", luaS_glob},
+  //{"cores_online", Lua_shuso_cores_online},
+  //{"strsignal", Lua_shuso_strsignal},
+  {NULL, NULL}
+};
+
 int luaS_push_core_module(lua_State *L) {
   luaL_newlib(L, shuttlesock_core_module_methods);
+  return 1;
+}
+
+int luaS_push_system_module(lua_State *L) {
+  luaL_newlib(L, shuttlesock_system_module_methods);
   return 1;
 }
