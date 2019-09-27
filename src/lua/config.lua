@@ -3,7 +3,7 @@ local parser_mt
 
 local Config = {}
 local config_mt
-
+--[[
 local function mm_setting(setting)
   local mm = require "mm"
   local cpy = {}
@@ -14,7 +14,7 @@ local function mm_setting(setting)
   cpy.block = "..."
   mm(cpy)
 end
-
+]]
 local function resolve_path(prefix, name)
   if not prefix or name:match("^%/") then
     --absolute path or no path given
@@ -49,7 +49,7 @@ local config_settings = {
     description = "sets path for the 'include' setting",
     nargs = 1,
     handler = function(setting)
-      setting.parent.config_include_path = values[1]
+      setting.parent.config_include_path = setting.values[1]
       return true
     end
   },
@@ -806,35 +806,48 @@ do --config
     local args_min, args_max
     local block
     local default
+    local function ensure(condition, fmt, ...)
+      if not condition then
+        error("module %s setting \"%s\" "..fmt):format(module_name, setting.name, ...)
+      end
+      return true
+    end
+    local function ensure_type(field_name, expected_type)
+      local t = type(setting[field_name])
+      if not setting[field_name] then
+        error("module %s setting \"%s\" must be of type %s, but was %s"):format(module_name, setting.name, expected_type, t)
+      end
+    end
     
     assert(type(module_name) == "string", "module name must be a string. " .. mock("mild"))
-    assert(type(setting) == "table", "drective must be a table")
+    assert(type(setting) == "table", "module "..module_name.." setting must be a table")
     
-    assert(type(setting.name) == "string", "setting.name must be a string")
-    assert(setting.name:match("^[%w_%.]+"), "setting.name \""..setting.name.."\" is invalid")
+    assert(type(setting.name) == "string", "module "..module_name.." setting name must be a string, but is ".. type(setting.name))
+    
+    ensure(setting.name:match("^[%w_%.]+"), "name contains invalid characters")
     name = setting.name
     
     if setting.alias then
-      assert(type(setting.aliases) == "table", "setting.aliases must be a table")
+      ensure_type("aliases", "table")
       for k, v in pairs(setting.aliases) do
-        assert(type(k) == "number", "setting aliases must be a number-indexed table")
-        assert(v:match("^[%w_%.]+"), "setting alias \"" ..v.."\" is invalid")
+        ensure(type(k) == "number", "aliases must be a number-indexed table")
+        ensure(v:match("^[%w_%.]+"), "alias '%s' is invalid", v)
         table.insert(aliases, v)
       end
     end
     
-    assert(type(setting.path) == "string", "setting.path must be a string")
-    assert(not setting.path:match("%/%/"), "setting.path \"" .. setting.path .."\" is invalid")
-    assert(setting.path:match("^[%w_%.%/]*"), "setting.path \"" .. setting.path .."\" is invalid")
+    ensure_type("path", "string")
+    ensure(not setting.path:match("%/%/"), "path '%s' is invalid", setting.path)
+    ensure(setting.path:match("^[%w_%.%/]*"), "path '%s' is invalid", setting.path)
     path = setting.path:match("^(.+)/$") or setting.path
     
-    description = assert(setting.description, "it may seem draconian, but drective.description is required.")
+    description = ensure(setting.description, "description is required, draconian as that may seem")
     
     if not setting.nargs then
       args_min, args_max = 1, 1
     elseif type(setting.nargs) == "number" then
       if math.type then
-        assert(math.type(setting.nargs) == "integer", "setting.nargs must be an integer")
+        ensure(math.type(setting.nargs) == "integer", "setting.nargs must be an integer")
       else
         assert(math.floor(setting.nargs) == setting.nargs, "setting.nargs must be an integer")
       end
@@ -849,19 +862,19 @@ do --config
         args_max = args_min
       end
       if not args_min then
-        assert(args_min and math.floor(args_min) ~= args_min, "setting.nargs is invalid")
+        assert(args_min and math.floor(args_min) ~= args_min, "nargs is invalid")
       end
       args_min, args_max = tonumber(args_min), tonumber(args_max)
     else
-      error("setting.nargs must be a number or string")
+      ensure_type("nargs", "number or string")
     end
-    assert(args_min <= args_max, "setting.nargs minimum must be smaller or equal to maximum")
-    assert(args_min >= 0, "setting.nargs minimum must be non-negative. " .. mock("moderate"))
-    assert(args_max >= 0, "setting.nargs maximum must be non-negative." .. mock("moderate"))
+    ensure(args_min <= args_max, "nargs minimum must be smaller or equal to maximum")
+    ensure(args_min >= 0, "nargs minimum must be non-negative. " .. mock("moderate"))
+    ensure(args_max >= 0, "nargs maximum must be non-negative." .. mock("moderate"))
     
     if setting.block then
       if type(setting.block) ~= "boolean" then
-        assert(setting.block == "optional", "setting.block must be boolean, nil, or the string \"optional\"")
+        ensure(setting.block == "optional", "block must be boolean, nil, or the string \"optional\"")
       end
       block = setting.block
     else
@@ -869,20 +882,19 @@ do --config
     end
     
     if setting.default then
-      if type(setting.default) == "table" then
-        for k, v in pairs(setting.default) do
-          assert(type(k) == "number", "setting.default key must be numeric. " .. mock("strong"))
-          assert(type(v) == "number" or type(v) == "string" or type(v) == "boolean", "setting.default table values must be strings, numbers, or booleans")
-        end
-      else
-        local t = type(setting.default)
-        assert(t == "number" or t == "string" or t == "boolean", "setting.default table values must be strings, numbers, or booleans")
+      default = type(setting.default) == "table" and setting.default or {setting.default}
+      for k, v in pairs(default) do
+        ensure(type(k) == "number", "default keys must be numeric. " .. mock("strong"))
+        ensure(type(v) == "number" or type(v) == "string" or type(v) == "boolean", "default values must be strings, numbers, or booleans")
+        ensure(k <= args_max, "default argument count exeeds max nargs")
       end
-      default = setting.default
     end
     
-    if not setting.internal_handler then
-      assert(type(setting.handler) == "function", "setting.handler must be a function." .. mock("moderate"))
+    if setting.handler then
+      ensure(type(setting.handler) == "function", "handler must be a function." .. mock("moderate"))
+    end
+    if setting.internal_handler then
+      ensure(type(setting.internal_handler) == "function", "internal_handler must be a function." .. mock("moderate"))
     end
     
     local handler = {
@@ -900,7 +912,7 @@ do --config
     
     local full_name = module_name .. "." .. name
     
-    assert(not self.handlers[full_name], ('module %s setting "%s" already exists'):format(module_name, name))
+    ensure(not self.handlers[full_name], 'already exists')
     
     self.handlers[full_name] = handler
     
@@ -910,7 +922,7 @@ do --config
     end
     table.insert(self.handlers_any_module[shortname], handler)
     
-    return true
+    return handler
   end
   
   function config:config_string(cur, lvl)
