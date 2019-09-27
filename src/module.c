@@ -84,27 +84,46 @@ bool shuso_event_initialize(shuso_t *S, shuso_module_t *mod, const char *name, s
   return luaS_function_call_result_ok(L, 3, false);
 }
 
+bool shuso_events_initialize(shuso_t *S, shuso_module_t *module,  void *events_struct, shuso_event_init_t *event_init) {
+  for(shuso_event_init_t *cur = event_init; cur && cur->name && cur->event; cur++) {
+    if(!shuso_event_initialize(S, module, cur->name, cur->event)) {
+      return false;
+    }
+  }
+  S->common->modules.events[module->index] = events_struct;
+  return true;
+}
+
+void *shuso_events(shuso_t *S, shuso_module_t *module) {
+  return S->common->modules.events[module->index];
+}
+
 bool shuso_initialize_added_modules(shuso_t *S) {
   lua_State *L = S->lua.state;
+  if(S->common->modules.events == NULL) {
+    S->common->modules.events = shuso_stalloc(&S->stalloc, sizeof(void *) * S->common->modules.count);
+  }
+  if(S->common->modules.events == NULL) {
+    return shuso_set_error(S, "failed to allocate memory for modules' events array");
+  }
   for(unsigned i=0; i<S->common->modules.count; i++) {
     shuso_module_t *module = S->common->modules.array[i];
-    if(!module->initialize) {
-      return shuso_set_error(S, "module %s is missing its initialization function", module->name);
-    }
     Lua_push_module_function(L, "start_initializing_module");
     lua_pushstring(L, module->name);
     if(!luaS_function_call_result_ok(L, 1, false)) {
       return false;
     }
-    const char *error_before_initializing_module = shuso_last_error(S);
-    if(!module->initialize(S, module)) {
-      if(shuso_last_error(S) == NULL) {
-        return shuso_set_error(S, "module %s failed to initialize, but reported no error", module->name);
+    if(module->initialize_events) {
+      const char *error_before_initializing_module = shuso_last_error(S);
+      if(!module->initialize_events(S, module)) {
+        if(shuso_last_error(S) == NULL) {
+          return shuso_set_error(S, "module %s failed to initialize, but reported no error", module->name);
+        }
+        return false;
       }
-      return false;
-    }
-    if(shuso_last_error(S) != NULL && shuso_last_error(S) != error_before_initializing_module) {
-      return false;
+      if(shuso_last_error(S) != NULL && shuso_last_error(S) != error_before_initializing_module) {
+        return false;
+      }
     }
     Lua_push_module_function(L, "finish_initializing_module");
     lua_pushstring(L, module->name);
@@ -219,9 +238,8 @@ bool shuso_module_finalize(shuso_t *S, shuso_module_t *mod) {
 #ifdef SHUTTLESOCK_DEBUG_MODULE_SYSTEM
       mod->submodules.submodule_presence_map[submodule->index] = 1;
 #endif
-      lua_pop(L, 1);
+      lua_pop(L, 2);
     }
-    lua_pop(L, 1);
   }
   lua_pop(L, 1);
   
@@ -360,10 +378,10 @@ shuso_module_t *shuso_get_module(shuso_t *S, const char *name) {
 }
 
 bool shuso_core_module_event_publish(shuso_t *S, const char *name, intptr_t code, void *data) {
-  shuso_core_module_ctx_t *ctx = S->common->module_ctx.core;
-  shuso_module_event_t    *ev = (shuso_module_event_t *)&ctx->event;
+  shuso_core_module_events_t *events = shuso_events(S, &shuso_core_module);
+  shuso_module_event_t    *ev = (shuso_module_event_t *)events;
   shuso_module_event_t    *cur;
-  int n = sizeof(ctx->event)/sizeof(shuso_module_event_t);
+  int n = sizeof(*events)/sizeof(shuso_module_event_t);
   for(int i = 0; i < n; i++) {
     cur = &ev[i];
     if(strcmp(cur->name, name) == 0) {
@@ -374,29 +392,29 @@ bool shuso_core_module_event_publish(shuso_t *S, const char *name, intptr_t code
 }
 
 static bool core_module_init_function(shuso_t *S, shuso_module_t *self) {
-  shuso_core_module_ctx_t *ctx = shuso_stalloc(&S->stalloc, sizeof(*ctx));
-  if(!ctx) {
-    return shuso_set_error(S, "failed to allocate module context");
-  }
-  shuso_event_initialize(S, self, "configure", &ctx->event.configure);
-  shuso_event_initialize(S, self, "configure.after", &ctx->event.configure_after);
+  shuso_core_module_events_t *events = shuso_stalloc(&S->stalloc, sizeof(*events));
+  shuso_events_initialize(S, self, events, (shuso_event_init_t[]){
+    {"configure",       &events->configure},
+    {"configure.after", &events->configure_after},
+    
+    {"master.start",    &events->start_master},
+    {"manager.start",   &events->start_manager},
+    {"worker.start",    &events->start_worker},
+    
+    {"master.stop",     &events->stop_master},
+    {"manager.stop",    &events->stop_manager},
+    {"worker.stop",     &events->stop_worker},
+    
+    {"manager.workers_started",   &events->manager_all_workers_started},
+    {"master.workers_started",    &events->master_all_workers_started},
+    {"worker.workers_started",    &events->worker_all_workers_started},
+    {"manager.worker_exited",     &events->worker_exited},
+    {"master.manager_exited",     &events->manager_exited},
+    {NULL, NULL}
+  });
   
-  shuso_event_initialize(S, self, "master.start", &ctx->event.start_master);
-  shuso_event_initialize(S, self, "manager.start", &ctx->event.start_manager);
-  shuso_event_initialize(S, self, "worker.start", &ctx->event.start_worker);
-  
-  shuso_event_initialize(S, self, "master.stop", &ctx->event.stop_master);
-  shuso_event_initialize(S, self, "manager.stop", &ctx->event.stop_manager);
-  shuso_event_initialize(S, self, "worker.stop", &ctx->event.stop_worker);
-  
-  shuso_event_initialize(S, self, "manager.workers_started", &ctx->event.manager_all_workers_started);
-  shuso_event_initialize(S, self, "master.workers_started", &ctx->event.master_all_workers_started);
-  shuso_event_initialize(S, self, "worker.workers_started", &ctx->event.worker_all_workers_started);
-  shuso_event_initialize(S, self, "manager.worker_exited", &ctx->event.worker_exited);
-  shuso_event_initialize(S, self, "master.manager_exited", &ctx->event.manager_exited);
-  
-  shuso_context_list_initialize(S, self, &ctx->context_list, &S->stalloc);
-  S->common->module_ctx.core = ctx;
+  //shuso_context_list_initialize(S, self, &ctx->context_list, &S->stalloc);
+  //S->common->module_ctx.core = ctx;
   return true;
 }
 shuso_module_t shuso_core_module = {
@@ -420,5 +438,5 @@ shuso_module_t shuso_core_module = {
    " manager.worker_exited"
    " master.manager_exited"
   ,
-  .initialize = core_module_init_function
+  .initialize_events = core_module_init_function
 };

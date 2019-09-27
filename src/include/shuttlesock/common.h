@@ -102,11 +102,6 @@ typedef void shuso_socket_fn(shuso_t *S, shuso_socket_t *socket);
 typedef void shuso_socket_listener_fn(shuso_t *S, shuso_socket_t *socket, void *pd);
 
 typedef void shuso_handler_fn(shuso_t *S, void *pd);
-typedef bool shuso_config_set_fn(shuso_t *S, void *config, shuso_config_setting_t *cf);
-
-typedef void *shuso_config_init_fn(shuso_t *S, void *parent);
-typedef struct shuso_runtime_handlers_s shuso_runtime_handlers_t;
-typedef struct shuso_config_handlers_s shuso_config_handlers_t;
 
 typedef bool shuso_module_init_fn(shuso_t *S, shuso_module_t *);
 typedef void shuso_module_event_fn(shuso_t *S, shuso_event_state_t *, intptr_t code, void *data, void *pd);

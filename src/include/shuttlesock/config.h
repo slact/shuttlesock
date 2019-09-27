@@ -9,6 +9,9 @@ extern shuso_module_t shuso_config_module;
 typedef struct {
   lua_reference_t  ref;
   bool             parsed;
+  const char      *config_serialized_str;
+  size_t           config_serialized_str_len;
+  lua_reference_t  config_serialized_str_ref;
 } shuso_config_module_ctx_t;
 
 struct shuso_setting_value_s {
@@ -40,8 +43,7 @@ struct shuso_setting_s {
   int                     block; // 0/false - no, 1/true - yes, SHUSO_SETTING_BLOCK_OPTIONAL - maybe
   shuso_setting_values_t *values;
   shuso_setting_values_t *inherited_values;
-  lua_reference_t         setting_handler_ref;
-  lua_reference_t         setting_ref;
+  lua_reference_t         config_setting_ref;
 }; // shuso_setting_t
 
 extern shuso_setting_value_t SHUTTLESOCK_VALUES_END;

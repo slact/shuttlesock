@@ -178,7 +178,7 @@ static void runcheck_event_listener(shuso_t *S, shuso_event_state_t *evs, intptr
   
 }
 
-static bool runcheck_module_initialize(shuso_t *S, shuso_module_t *self) {
+static bool runcheck_module_initialize_events(shuso_t *S, shuso_module_t *self) {
   
   shuso_event_listen(S, "core:configure", runcheck_event_listener, self);
   shuso_event_listen(S, "core:configure.after", runcheck_event_listener, self);
@@ -238,7 +238,7 @@ shuso_t *shusoT_create(test_runcheck_t **external_ptr, double test_timeout) {
       " core:worker.workers_started"
       " core:manager.worker_exited"
       " core:master.manager_exited",
-    .initialize = runcheck_module_initialize,
+    .initialize_events = runcheck_module_initialize_events,
     .privdata = chk
   };
   chk->timeout = test_timeout;

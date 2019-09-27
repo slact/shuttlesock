@@ -29,6 +29,31 @@ shuso_setting_t SHUTTLESOCK_SETTINGS_END = {
   .name = NULL,
 };
 
+bool shuso_config_serialize(shuso_t *S) {
+  lua_State                  *L = S->lua.state;
+  shuso_config_module_ctx_t  *ctx = S->common->module_ctx.config;
+  if(!luaS_pcall_config_method(L, "serialize", 0, true)) {
+    return false;
+  }
+  ctx->config_serialized_str = lua_tolstring(L, -1, &ctx->config_serialized_str_len);
+  if(ctx->config_serialized_str_ref != LUA_NOREF) {
+    luaL_unref(L, LUA_REGISTRYINDEX, ctx->config_serialized_str_ref);
+  }
+  ctx->config_serialized_str_ref = luaL_ref(L, LUA_REGISTRYINDEX);
+  return true;
+}
+
+bool shuso_config_unserialize(shuso_t *S) {
+  lua_State                  *L = S->lua.state;
+  shuso_config_module_ctx_t  *ctx = S->common->module_ctx.config;
+  lua_pushlstring(L, ctx->config_serialized_str, ctx->config_serialized_str_len);
+  if(!luaS_pcall_config_method(L, "unserialize", 0, true)) {
+    return false;
+  }
+  ctx->config_serialized_str = NULL;
+  ctx->config_serialized_str_len = 0;
+  return true; 
+}
 
 bool shuso_config_register_setting(shuso_t *S, shuso_setting_t *setting, shuso_module_t *module) {
   lua_State *L = S->lua.state;
@@ -83,7 +108,7 @@ bool shuso_config_register_setting(shuso_t *S, shuso_setting_t *setting, shuso_m
   
   lua_pushstring(L, module->name);
   
-  if(!luaS_pcall_config_method(L, "register_setting", 2, true)) {
+  if(!luaS_pcall_config_method(L, "register_setting", 2, false)) {
     return false;
   }
   return true;
@@ -106,14 +131,17 @@ bool shuso_config_initialize(shuso_t *S) {
   if(ref == LUA_REFNIL || ref == LUA_NOREF) {
     return shuso_set_error(S, "failed to create lua reference to new config");
   }
-  ctx->ref = ref;
-  S->common->module_ctx.config = ctx;
+  *ctx =(shuso_config_module_ctx_t ) {
+    .ref = ref,
+    .parsed = false,
+    .config_serialized_str_ref = LUA_NOREF,
+    .config_serialized_str = NULL
+  };
   
   return true;
 }
 
 shuso_module_t shuso_config_module = {
   .name = "config",
-  .version = "0.0.1",
-  .initialize = NULL
+  .version = "0.0.1"
 };

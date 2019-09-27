@@ -9,7 +9,7 @@ struct shuso_module_s {
   const char             *name;
   const char             *version;
   const char             *parent_modules;
-  shuso_module_init_fn   *initialize;
+  shuso_module_init_fn   *initialize_events;
   const char             *subscribe; //space-separated list of modname:event_name events this module may subscribe to
   const char             *publish; //space-separated list of event_names this module may publish
   void                   *privdata;
@@ -18,13 +18,14 @@ struct shuso_module_s {
   uint8_t                *parent_modules_index_map;
   int                     index; //global module number
   shuso_setting_t        *settings;
+  void                   *events; //module struct ptr for calling events, set during intiialize_events
   struct {
     int                     count;
     shuso_module_t        **array;
 #ifdef SHUTTLESOCK_DEBUG_MODULE_SYSTEM
     uint8_t                *submodule_presence_map;
 #endif
-  }                       submodules;  
+  }                       submodules;
 }; //shuso_module_t
 
 typedef struct {
@@ -54,28 +55,36 @@ struct shuso_event_state_s {
   const char           *name;
 }; //shuso_event_state_t
 
+typedef struct {
+  shuso_module_event_t configure;
+  shuso_module_event_t configure_after;
+  
+  shuso_module_event_t start_master;
+  shuso_module_event_t start_manager;
+  shuso_module_event_t start_worker;
+  
+  shuso_module_event_t stop_master;
+  shuso_module_event_t stop_manager;
+  shuso_module_event_t stop_worker;
+  
+  shuso_module_event_t manager_all_workers_started;
+  shuso_module_event_t master_all_workers_started;
+  shuso_module_event_t worker_all_workers_started;
+  shuso_module_event_t worker_exited;
+  shuso_module_event_t manager_exited;
+  
+} shuso_core_module_events_t;
+
 struct shuso_core_module_ctx_s {
-  struct {
-    shuso_module_event_t configure;
-    shuso_module_event_t configure_after;
-    
-    shuso_module_event_t start_master;
-    shuso_module_event_t start_manager;
-    shuso_module_event_t start_worker;
-    
-    shuso_module_event_t stop_master;
-    shuso_module_event_t stop_manager;
-    shuso_module_event_t stop_worker;
-    
-    shuso_module_event_t manager_all_workers_started;
-    shuso_module_event_t master_all_workers_started;
-    shuso_module_event_t worker_all_workers_started;
-    shuso_module_event_t worker_exited;
-    shuso_module_event_t manager_exited;
-    
-  }               event;
+  shuso_core_module_events_t  events;
   shuso_module_context_list_t context_list;
 }; //shuso_core_module_ctx_t
+
+
+typedef struct {
+  const char           *name;
+  shuso_module_event_t *event;
+}shuso_event_init_t;
 
 bool shuso_set_core_module(shuso_t *S, shuso_module_t *module);
 bool shuso_add_module(shuso_t *S, shuso_module_t *module);
@@ -92,7 +101,9 @@ shuso_module_t *shuso_get_module(shuso_t *S, const char *name);
 void *shuso_context(shuso_t *S, shuso_module_t *parent, shuso_module_t *module, shuso_module_context_list_t *context_list);
 
 //event stuff
+void *shuso_events(shuso_t *S, shuso_module_t *module);
 bool shuso_event_initialize(shuso_t *S, shuso_module_t *mod, const char *name, shuso_module_event_t *mev);
+bool shuso_events_initialize(shuso_t *S, shuso_module_t *module,  void *events_struct, shuso_event_init_t *events_init);
 bool shuso_event_listen(shuso_t *S, const char *name, shuso_module_event_fn *callback, void *pd);
 bool shuso_event_publish(shuso_t *S, shuso_module_t *publisher_module, shuso_module_event_t *event, intptr_t code, void *data);
 

@@ -136,6 +136,7 @@ struct shuso_common_s {
   struct {
     size_t              count;
     shuso_module_t    **array;
+    void              **events;
   }                   modules;
   struct {          //process
     shuso_process_t     master;

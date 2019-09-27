@@ -15,10 +15,6 @@ bool set_test_options(int *argc, char **argv) {
   return true;
 }
 
-static bool tm_init(shuso_t *S, shuso_module_t *self) {
-  return true;
-}
-
 describe(modules) {
   static shuso_t *S = NULL;
   shuso_module_t test_module;
@@ -28,8 +24,7 @@ describe(modules) {
     before_each() {
       test_module = (shuso_module_t ){
         .name = "tm",
-        .version="0.0.0",
-        .initialize = tm_init
+        .version="0.0.0"
       };
       assert(test_module.publish == NULL);
       assert(test_module.subscribe == NULL);
