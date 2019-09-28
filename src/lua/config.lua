@@ -733,16 +733,17 @@ do --config
     return self
   end
 
-  function config:handle(handlers, shuttlesock_ctx)
+  function config:handle(handlers)
     for setting in self:each_setting() do
       local ok, handler, err
       handler, err = self:find_handler_for_setting(setting)
       if handler then
         if handler.handler then
-          ok, err = handler.handler(setting.values, handler.default, shuttlesock_ctx)
+          ok, err = handler.handler(setting.values, handler.default)
         elseif handler.internal_handler then
-          ok, err = handler.internal_handler(setting, handler.default, self, shuttlesock_ctx)
+          ok, err = handler.internal_handler(setting, handler.default, self)
         end
+        setting.handler = handler
       else
         ok = true
       end
@@ -764,9 +765,12 @@ do --config
     local should_walk_setting = filters and filters.setting_block or function(setting)
       return setting.block
     end
+    local should_yield_setting = filters and filters.setting or function(setting) return true end
     local function walk_setting(block, parent_setting)
       for _, setting in ipairs(block.settings) do
-        coroutine.yield(setting, parent_setting)
+        if should_yield_setting(setting) then
+          coroutine.yield(setting, parent_setting)
+        end
         if should_walk_setting(setting) then
           walk_setting(setting.block, setting)
         end
@@ -774,7 +778,7 @@ do --config
     end
     --assert(self.root)
     return coroutine.wrap(function()
-      return walk_setting(self.root.block or start, nil)
+      return walk_setting(start or self.root.block, nil)
     end)
   end
   
@@ -900,6 +904,7 @@ do --config
     local handler = {
       module = module_name,
       name = name,
+      aliases = aliases or {},
       path = path,
       description = description,
       arg_max = args_max,
@@ -915,6 +920,9 @@ do --config
     ensure(not self.handlers[full_name], 'already exists')
     
     self.handlers[full_name] = handler
+    for _, alias in ipairs(handler.aliases) do
+      self.handlers[module_name.."."..alias] = handler
+    end
     
     local shortname="*."..name
     if not self.handlers_any_module[shortname] then
@@ -974,6 +982,40 @@ do --config
       error("unexpected chunk type " .. cur.type)
     end
   end
+  
+  function config:each_block()
+    return self:each_setting(nil, {setting = function(s) return s.block end})
+  end
+  
+  function config:all_settings()
+    local t = {}
+    for setting in self:each_setting() do
+      table.insert(t, setting)
+    end
+    return t
+  end
+  
+  function config:all_blocks()
+    local t = {}
+    for block in self:each_block() do
+      table.insert(t, block)
+    end
+    return t
+  end
+  
+  function config:predecessor(setting) --setting to inherit values from
+    setting = setting.parent
+    while setting and setting.parent ~= parent do
+      for _, d in ipairs(context.block.settings) do
+        if setting.handler and setting.handler = d.handler then
+          return d
+        end
+      end
+      setting = setting.parent
+    end
+    return false
+  end
+  
 end
 
 return Config

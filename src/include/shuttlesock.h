@@ -128,7 +128,6 @@ struct shuso_common_s {
   shuso_runstate_t    state;
   shuso_ipc_handler_t ipc_handlers[256];
   struct {
-    shuso_core_module_ctx_t    *core;
     shuso_config_module_ctx_t  *config;
   }                   module_ctx;
   

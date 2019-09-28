@@ -75,6 +75,11 @@ shuso_t *shuso_create_with_lua(lua_State *lua, const char **err) {
   const char         *errmsg = NULL;
   
   shuso_system_initialize();
+  common_ctx->process.master.procnum = SHUTTLESOCK_MASTER;
+  common_ctx->process.manager.procnum = SHUTTLESOCK_MANAGER;
+  for(int i = 0; i< SHUTTLESOCK_MAX_WORKERS; i++) {
+    common_ctx->process.worker[i].procnum = i;
+  }
   
   if(!(resolver_global_initialized = shuso_resolver_global_init(&errmsg))) {
     goto fail;
@@ -123,14 +128,9 @@ shuso_t *shuso_create_with_lua(lua_State *lua, const char **err) {
     goto fail;
   }
   
-  if(!shuso_config_initialize(S)) {
+  if(!shuso_config_system_initialize(S)) {
+    errmsg = "failed to initialize config system";
     goto fail;
-  }
-  
-  common_ctx->process.master.procnum = SHUTTLESOCK_MASTER;
-  common_ctx->process.manager.procnum = SHUTTLESOCK_MANAGER;
-  for(int i = 0; i< SHUTTLESOCK_MAX_WORKERS; i++) {
-    common_ctx->process.worker[i].procnum = i;
   }
   
   return S;
@@ -181,6 +181,11 @@ bool shuso_configure_finish(shuso_t *S) {
   if(!(shuso_runstate_check(S, SHUSO_STATE_CONFIGURING, "finish configuring"))) {
     return false;
   }
+  
+  if(!shuso_config_system_generate(S)) {
+    return false;
+  }
+  
   // create the default loop so that we can catch SIGCHLD
   // http://pod.tst.eu/http://cvs.schmorp.de/libev/ev.pod#FUNCTIONS_CONTROLLING_EVENT_LOOPS:
   // "The default loop is the only loop that can handle ev_child watchers [...]"

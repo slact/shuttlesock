@@ -41,7 +41,6 @@ typedef enum {
   SHUSO_VALUE_STRING,
   SHUSO_VALUE_INTEGER,
   SHUSO_VALUE_FLOAT,
-  SHUSO_VALUE_TIME,
   SHUSO_VALUE_BOOL,
 } shuso_setting_value_type_t;
 
@@ -81,11 +80,11 @@ typedef struct shuso_process_s shuso_process_t;
 
 typedef struct shuso_setting_value_s shuso_setting_value_t;
 typedef struct shuso_setting_values_s shuso_setting_values_t;
+typedef struct shuso_setting_block_s shuso_setting_block_t;
 typedef struct shuso_setting_s shuso_setting_t;
 
 typedef struct shuso_config_s shuso_config_t;
 typedef struct shuso_config_file_s shuso_config_file_t;
-typedef struct shuso_config_setting_s shuso_config_setting_t;
 
 typedef struct shuso_module_s shuso_module_t;
 typedef struct shuso_module_event_s shuso_module_event_t;
@@ -103,6 +102,8 @@ typedef void shuso_socket_listener_fn(shuso_t *S, shuso_socket_t *socket, void *
 
 typedef void shuso_handler_fn(shuso_t *S, void *pd);
 
-typedef bool shuso_module_init_fn(shuso_t *S, shuso_module_t *);
+typedef bool shuso_module_events_init_fn(shuso_t *S, shuso_module_t *);
+typedef bool shuso_module_config_init_fn(shuso_t *S, shuso_module_t *, shuso_setting_block_t *);
+
 typedef void shuso_module_event_fn(shuso_t *S, shuso_event_state_t *, intptr_t code, void *data, void *pd);
 #endif /*SHUTTLESOCK_COMMON_H*/

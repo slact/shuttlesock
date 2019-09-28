@@ -6,12 +6,26 @@ extern shuso_module_t shuso_config_module;
 
 #define SHUSO_SETTING_BLOCK_OPTIONAL 2
 
+struct shuso_setting_block_s {
+  //this is for debugging mostly
+  const char     *name;
+  //const char     *value_string;
+  lua_reference_t ref;
+}; // shuso_setting_block_t
+
 typedef struct {
   lua_reference_t  ref;
   bool             parsed;
-  const char      *config_serialized_str;
-  size_t           config_serialized_str_len;
-  lua_reference_t  config_serialized_str_ref;
+  struct {
+    shuso_setting_block_t  *root;
+    shuso_setting_block_t **array;
+    size_t                 count;
+  }                blocks;
+  struct {
+    const char       *str;
+    size_t            len;
+    lua_reference_t   ref;
+  }                serialized;
 } shuso_config_module_ctx_t;
 
 struct shuso_setting_value_s {
@@ -20,17 +34,15 @@ struct shuso_setting_value_s {
     bool        value_bool;
     int         value_int;
     double      value_float;
-    double      value_time;
     const char *value_string;
   };
-  bool          inherited;
-  bool          defaulted;
-}; //shuso_settimg_value_t
+  size_t        len;
+}; //shuso_setting_value_t
 
 
 struct shuso_setting_values_s {
   uint16_t              count;
-  shuso_setting_value_t values[];
+  shuso_setting_value_t array[];
 };// shuso_setting_values_t
 
 struct shuso_setting_s {
@@ -58,8 +70,9 @@ bool shuso_setting_set_error(shuso_t *S, const char *fmt, ...);
 //for shuttlesock developers' eyes only
 bool shuso_config_register_setting(shuso_t *S, shuso_setting_t *setting, shuso_module_t *module);
 
-bool shuso_config_initialize(shuso_t *S);
-bool shuso_config_file_parser_initialize(shuso_t *S);
+bool shuso_config_system_initialize(shuso_t *S);
+bool shuso_config_system_generate(shuso_t *S);
+
 bool shuso_config_file_parse(shuso_t *S, const char *config_file_path);
 bool shuso_config_string_parse(shuso_t *S, const char *config);
 
