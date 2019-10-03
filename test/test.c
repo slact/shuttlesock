@@ -116,6 +116,9 @@ describe(init_and_shutdown) {
   }
 }
 
+static bool config_test_init_config(shuso_t *S, shuso_module_t *module, shuso_setting_block_t *block) {
+  return true;
+}
 
 describe(config) {
   static shuso_module_t    test_module;
@@ -125,7 +128,8 @@ describe(config) {
     S = shusoT_create(&chk, 5);
     test_module = (shuso_module_t ){
       .name = "tm",
-      .version="0.0.0"
+      .version="0.0.0",
+      .initialize_config = config_test_init_config
     };
   }
   after_each() {
