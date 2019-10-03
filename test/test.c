@@ -116,8 +116,8 @@ describe(init_and_shutdown) {
   }
 }
 
-static bool config_test_init_config(shuso_t *S, shuso_module_t *module, shuso_setting_block_t *block) {
-  return true;
+static bool config_test_a_setting_init_config(shuso_t *S, shuso_module_t *module, shuso_setting_block_t *block) {
+  return false;
 }
 
 describe(config) {
@@ -129,13 +129,13 @@ describe(config) {
     test_module = (shuso_module_t ){
       .name = "tm",
       .version="0.0.0",
-      .initialize_config = config_test_init_config
     };
   }
   after_each() {
     shusoT_destroy(S, &chk);
   }
   test("a setting please") {
+    test_module.initialize_config = config_test_a_setting_init_config;
     test_module.settings = (shuso_module_setting_t []){
       { 
         .name="foobar",

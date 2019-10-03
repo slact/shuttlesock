@@ -691,7 +691,6 @@ do --config
         return true
       end
     end
-    print("NOAPE")
     return false
   end
   
