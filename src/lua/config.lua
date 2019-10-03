@@ -125,11 +125,11 @@ function Parser.new(name, string, opt)
   }
   setmetatable(self, parser_mt)
   if not opt.root then
-    self:push_setting("root", "config", true)
+    self:push_setting("::ROOT", "config", true)
   else
     self:push_setting(opt.root, nil, true)
   end
-  self:push_block("ROOT")
+  self:push_block("::ROOT")
   if opt.file then
     self.is_file = true
   end
@@ -212,7 +212,7 @@ do --parser
         block = nil,
       }
       if module_name then
-        setting.full_name = setting.module .. "." .. setting.name
+        setting.full_name = setting.module .. ":" .. setting.name
       end
       if is_root and not setting.parent then
         setting.parent = setting --i'm my own grandpa
@@ -482,9 +482,9 @@ do --parser
     end
     local module_name, name = nil, self:match()
     if name:match("%.") then
-      module_name, name = name:match("^([^%.]+)%.([^%s]+)$")
+      module_name, name = name:match("^([^%:%.]+):([^%s]+)$")
       if not module_name then
-        return nil, self:error("invalid config setting name \""..self:match().."\"")
+        return nil, self:error("invalid config setting name \""..name.."\"")
       end
     end
     self:push_setting(name, module_name)
@@ -616,7 +616,6 @@ function Config.new(name)
     string = nil,
     handlers = {},
     handlers_any_module = {},
-    parent_lookup_table = setmetatable({}, {__mode='kv'}),
     parsers = {}
   }
   setmetatable(config, config_mt)
@@ -639,10 +638,10 @@ do --config
     
     local tbl = {}
     if not pathy_thing.path:match("^%/") then
-      table.insert(tbl, "*.*")
+      table.insert(tbl, "*:*")
     end
     for pathpart in pathy_thing.path:gmatch("^[^%/]+") do
-      table.insert(tbl, pathpart:match("%.") and pathpart or "*."..pathpart)
+      table.insert(tbl, pathpart:match("%:") and pathpart or "*:"..pathpart)
     end
     pathy_thing.split_path = tbl
     return tbl
@@ -655,7 +654,7 @@ do --config
       local d = dpath[i]
       for j = #hpath, 1, -1 do
         local h = hpath[j]
-        if d ~= h and h ~= "*.*" and h:match("^%*%.(.+)") ~= d:match("^[^%.]*%.(.+)") then
+        if d ~= h and h ~= "*:*" and h:match("^%*%:(.+)") ~= d:match("^[^%:]*%:(.+)") then
           return false
         end
       end
@@ -678,8 +677,8 @@ do --config
     end
     
     --now handle includes
-    assert(self:handle("config.include_path"))
-    assert(self:handle("config.include"))
+    assert(self:handle("config:include_path"))
+    assert(self:handle("config:include"))
     return self
   end
   
@@ -697,13 +696,13 @@ do --config
   function config:find_setting(name, context)
     if not context then context = self.root end
     local module
-    if not name:match("%.") then
+    if not name:match("%:") then
       module = false
     elseif name:match("^%*") then
       module = false
-      name = name:match("^[^%.]+%.(.*)")
+      name = name:match("^[^%:]+%:(.*)")
     else
-      module, name = name:match("^([^%.]+)%.(.*)")
+      module, name = name:match("^([^%:]+)%:(.*)")
     end
     
     while context and context.parent ~= context do
@@ -727,7 +726,7 @@ do --config
         return nil, "unknown setting " .. setting.full_name
       end
     else
-      local name = "*."..setting.name
+      local name = "*:"..setting.name
       local possible_handlers = self.handlers_any_module[name]
       if not possible_handlers then
         return nil, "unknown setting " .. setting.name
@@ -746,7 +745,7 @@ do --config
         for _, h in ipairs(possible_handlers) do
           table.insert(handler_names, h.module .. "," ..h.name)
         end
-        return nil, "ambiguous setting " .. setting.name..", could be any of :" .. table.concat(handler_names, ", ")
+        return nil, "ambiguous setting " .. setting.name..", could be any of: " .. table.concat(handler_names, ", ")
       else
         return matches[1]
       end
@@ -765,7 +764,7 @@ do --config
         setting.path = "/"..table.concat(buf, "/")
         return setting.path
       else
-        table.insert(cur, setting.full_name or ("*."..setting.name))
+        table.insert(cur, setting.full_name or ("*:"..setting.name))
       end
     end
   end
@@ -878,21 +877,21 @@ do --config
     
     assert(type(setting.name) == "string", "module "..module_name.." setting name must be a string, but is ".. type(setting.name))
     
-    ensure(setting.name:match("^[%w_%.]+"), "name contains invalid characters")
+    ensure(setting.name:match("^[%w_%.]+$"), "name contains invalid characters")
     name = setting.name
     
     if setting.alias then
       ensure_type("aliases", "table")
       for k, v in pairs(setting.aliases) do
         ensure(type(k) == "number", "aliases must be a number-indexed table")
-        ensure(v:match("^[%w_%.]+"), "alias '%s' is invalid", v)
+        ensure(v:match("^[%w_%.]+$"), "alias '%s' is invalid", v)
         table.insert(aliases, v)
       end
     end
     
     ensure_type("path", "string")
     ensure(not setting.path:match("%/%/"), "path '%s' is invalid", setting.path)
-    ensure(setting.path:match("^[%w_%.%/]*"), "path '%s' is invalid", setting.path)
+    ensure(setting.path:match("^[%w%:_%.%/]*$"), "path '%s' is invalid", setting.path)
     path = setting.path:match("^(.+)/$") or setting.path
     
     description = ensure(setting.description, "description is required, draconian as that may seem")
@@ -912,7 +911,7 @@ do --config
         args_min, args_max = setting.nargs:match("^(%d+)%s*%.%.%s*(%d+)$")
       end
       if not args_min or not args_max then
-        args_min = setting.nargs:match("^%d$")
+        args_min = setting.nargs:match("^%d+$")
         args_max = args_min
       end
       if not args_min then
@@ -954,7 +953,7 @@ do --config
     local handler = {
       module = module_name,
       name = name,
-      full_name = module_name .. "." .. name,
+      full_name = module_name .. ":" .. name,
       aliases = aliases or {},
       path = path,
       description = description,
@@ -975,7 +974,7 @@ do --config
       self.handlers[alias_full_name] = handler
     end
     
-    local shortname="*."..name
+    local shortname="*:"..name
     if not self.handlers_any_module[shortname] then
       self.handlers_any_module[shortname] = {}
     end
