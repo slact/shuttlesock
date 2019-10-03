@@ -75,15 +75,6 @@ shuso_t *shuso_create_with_lua(lua_State *lua, const char **err) {
   const char         *errmsg = NULL;
   
   shuso_system_initialize();
-  common_ctx->process.master.procnum = SHUTTLESOCK_MASTER;
-  common_ctx->process.manager.procnum = SHUTTLESOCK_MANAGER;
-  for(int i = 0; i< SHUTTLESOCK_MAX_WORKERS; i++) {
-    common_ctx->process.worker[i].procnum = i;
-  }
-  
-  if(!(resolver_global_initialized = shuso_resolver_global_init(&errmsg))) {
-    goto fail;
-  }
   
   if((common_ctx = calloc(1, sizeof(*common_ctx))) == NULL) {
     errmsg = "not enough memory to allocate common_ctx";
@@ -91,6 +82,16 @@ shuso_t *shuso_create_with_lua(lua_State *lua, const char **err) {
   }
   if((S = calloc(1, sizeof(*S))) == NULL) {
     errmsg = "not enough memory to allocate S";
+    goto fail;
+  }
+  
+  common_ctx->process.master.procnum = SHUTTLESOCK_MASTER;
+  common_ctx->process.manager.procnum = SHUTTLESOCK_MANAGER;
+  for(int i = 0; i< SHUTTLESOCK_MAX_WORKERS; i++) {
+    common_ctx->process.worker[i].procnum = i;
+  }
+  
+  if(!(resolver_global_initialized = shuso_resolver_global_init(&errmsg))) {
     goto fail;
   }
   
@@ -183,7 +184,7 @@ bool shuso_configure_finish(shuso_t *S) {
   }
   
   if(!shuso_config_system_generate(S)) {
-    return false;
+    goto fail;
   }
   
   // create the default loop so that we can catch SIGCHLD

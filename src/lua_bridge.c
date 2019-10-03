@@ -25,14 +25,15 @@ static bool function_result_ok(lua_State *L, bool preserve_result) {
     lua_pop(L, 2);
     return false;
   }
-  bool ret = lua_toboolean(L, -2);
+  //bool ret = lua_toboolean(L, -2);
   if(preserve_result) {
     lua_pop(L, 1); //just pop the nil standin for the error
   }
   else {
     lua_pop(L, 2);
   }
-  return ret;
+  //return ret;
+  return true;
 }
 
 bool luaS_function_call_result_ok(lua_State *L, int nargs, bool preserve_result) {

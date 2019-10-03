@@ -17,7 +17,7 @@ bool set_test_options(int *argc, char **argv) {
 
 describe(modules) {
   static shuso_t *S = NULL;
-  shuso_module_t test_module;
+  static shuso_module_t test_module;
   
   subdesc(bad_modules) {
   
@@ -116,6 +116,44 @@ describe(init_and_shutdown) {
   }
 }
 
+
+describe(config) {
+  static shuso_module_t    test_module;
+  static test_runcheck_t  *chk = NULL;
+  static shuso_t          *S = NULL;
+  before_each() {
+    S = shusoT_create(&chk, 5);
+    test_module = (shuso_module_t ){
+      .name = "tm",
+      .version="0.0.0"
+    };
+  }
+  after_each() {
+    shusoT_destroy(S, &chk);
+  }
+  test("a setting please") {
+    test_module.settings = (shuso_module_setting_t []){
+      { 
+        .name="foobar",
+        .path="/",
+        .description="yello",
+        .nargs="1..30",
+        .default_value="42",
+        .block=false
+      },
+      SHUTTLESOCK_SETTINGS_END
+    };
+    shuso_add_module(S, &test_module);
+    shuso_config_string_parse(S, " \
+      foobar \"what is this\" 'i dont even really even' number e semicolon r; \
+    "
+    );
+    shuso_configure_finish(S);
+    shusoT_run_test(S, SHUTTLESOCK_MANAGER, stop_shuttlesock, NULL, (void *)(intptr_t)SHUTTLESOCK_MANAGER);
+    assert_shuso_ok(S);
+  }
+  
+}
 
 #define IPC_ECHO 130
 

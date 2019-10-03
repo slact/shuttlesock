@@ -62,7 +62,7 @@ local config_settings = {
     internal_handler = function(setting, default, config)
       local path = setting.values[1].raw
       
-      local include_path = config:get_setting("include_path", setting.parent)
+      local include_path = config:find_setting("include_path", setting.parent)
       local paths
       if path:match("[%[%]%?%*]") then
         paths = glob(resolve_path(include_path, setting.values[1]))
@@ -112,7 +112,8 @@ local config_settings = {
   }
 }
 
-function Parser.new(name, string, root_setting)
+function Parser.new(name, string, opt)
+  opt = opt or {}
   local self = {
     name = name,
     str = string,
@@ -123,12 +124,15 @@ function Parser.new(name, string, root_setting)
     root = nil
   }
   setmetatable(self, parser_mt)
-  if not root_setting then
+  if not opt.root then
     self:push_setting("root", "config", true)
   else
-    self:push_setting(root_setting, nil, true)
+    self:push_setting(opt.root, nil, true)
   end
   self:push_block("ROOT")
+  if opt.file then
+    self.is_file = true
+  end
   self.root = self.stack[1]
   return self
 end
@@ -260,7 +264,7 @@ do --parser
     return setting
   end
   
-  function parser:add_value_to_setting(value_type, val)
+  function parser:add_value_to_setting(value_type, val, opt)
     if val == nil then
       val = self:match() --last match
     end
@@ -271,8 +275,31 @@ do --parser
         first = self.cur - #val,
         last = self.cur
       },
-      raw = val
+      value = {
+        raw = val,
+      }
     }
+    if type(val) == "string" and opt and opt.quote_char then
+      --unquote value
+      val = val:match(("^%s(.*)%s$"):format(opt.quote_char, opt.quote_char))
+    end
+    
+    value.value.string = tostring(val)
+    value.value.number = tonumber(val)
+    value.value.integer = math.tointeger(value.value.number)
+    
+    local boolies = {
+      off=false,
+      no=false,
+      ["0"]=false,
+      ['false']=false,
+      
+      on=true,
+      yes=true,
+      ['1']=true,
+      ['true']=true
+    }
+    value.value.boolean = boolies[val]
     
     local setting = assert(self:in_setting())
     if not setting.position.values_first then
@@ -305,12 +332,14 @@ do --parser
   end
   
   function parser:pop_block()
+    assert(self:in_block())
     local block = self.top
     table.remove(self.stack)
     self.top = self.stack[#self.stack]
     local setting = assert(self:in_setting())
     assert(not setting.block)
     setting.block = block
+    block.setting = setting
     --finishing a block means we are also finishing the setting it belongs to
     self:pop_setting()
     return true
@@ -322,10 +351,15 @@ do --parser
       token_count = token_count + 1
     end
     
-    if self:in_setting() == "setting" then
-      return nil, self:error("unexpected end of file, expected \";\"")
-    elseif self:in_block() == "block" and self.top.source_setting ~= self.root then
-      return nil, self:error("unexpected end of file, expected \"}\"")
+    local unexpected_end
+    if self:in_setting() then
+      unexpected_end = ";"
+    elseif self:in_block() and self.top.source_setting ~= self.root then
+      unexpected_end = "}"
+    end
+    
+    if unexpected_end then
+      return nil, self:error(("unexpected end of %s, expected \"%s\""):format(self.is_file and "file" or "string", unexpected_end))
     else
       self:pop_block()
     end
@@ -404,7 +438,7 @@ do --parser
           --string end found
           self.last_match = self.str:sub(self.cur, unquote)
           self.cur = unquote + 1
-          return self:add_value_to_setting("string")
+          return self:add_value_to_setting("string", self.last_match, {quote_char=quote_char})
         end
       end
     until not unquote
@@ -427,7 +461,7 @@ do --parser
   end
   
   function parser:match_value()
-    if not self:match("^[^%s;]+") then
+    if not self:match("^[^%s%;]+") then
       return nil, self:error("invalid value")
     end
     return self:add_value_to_setting("value")
@@ -466,13 +500,14 @@ do --parser
   end
   
   function parser:print_stack()
+    print("parser "..tostring(self).." stack:")
     for _, v in ipairs(self.stack) do
       print("  ", v.name, v.type)
     end
   end
   
   function parser:next_token()
-    if self.cur >= #self.str then
+    if self.cur > #self.str then
       return nil --we're done
     end
     
@@ -648,7 +683,19 @@ do --config
     return self
   end
   
-  function config:get_setting(name, context)
+  function config:block_handled_by_module(block, module_name)
+    local setting = block.setting
+    self:get_setting_path(setting)
+    for _, handler in pairs(self.handlers) do
+      if handler.module == module_name and match_path(setting, handler) then
+        return true
+      end
+    end
+    print("NOAPE")
+    return false
+  end
+  
+  function config:find_setting(name, context)
     if not context then context = self.root end
     local module
     if not name:match("%.") then
@@ -669,7 +716,7 @@ do --config
       context = context.parent
     end
     
-    return nil, "setting not found"
+    return false
   end
   
   function config:find_handler_for_setting(setting)
@@ -733,27 +780,29 @@ do --config
     return self
   end
 
-  function config:handle(handlers)
+  function config:handle(handler_name)
     for setting in self:each_setting() do
       local ok, handler, err
       handler, err = self:find_handler_for_setting(setting)
-      if handler then
+      if handler and (not handler_name or handler_name == handler.full_name) then
         if handler.handler then
           ok, err = handler.handler(setting.values, handler.default)
         elseif handler.internal_handler then
           ok, err = handler.internal_handler(setting, handler.default, self)
+        else
+          ok = true
         end
-        setting.handler = handler
+        setting.handled_by = handler.full_name
       else
         ok = true
       end
       if not ok then
-        local err_prefix = "error in \""..(setting.full_name or setting.name).."\" setting"
+        local err_prefix = "error handling \""..(setting.full_name or setting.name).."\" setting"
         local parser = self.parsers[setting.parser_index]
         if parser then
-          return nil, parser:error(err_prefix, setting.position.first) .. ": " .. err
+          return nil, parser:error(err_prefix, setting.position.first) .. ": ".. (err or "unspecified error")
         else
-          return nil, err_prefix .. ": " .. err
+          return nil, err_prefix .. ": ".. (err or "unspecified error")
         end
       end
     end
@@ -776,7 +825,9 @@ do --config
         end
       end
     end
-    --assert(self.root)
+    if not self.root then
+      return function() return nil end
+    end
     return coroutine.wrap(function()
       return walk_setting(start or self.root.block, nil)
     end)
@@ -809,21 +860,21 @@ do --config
     local description
     local args_min, args_max
     local block
-    local default
+    local default_values
     local function ensure(condition, fmt, ...)
       if not condition then
-        error("module %s setting \"%s\" "..fmt):format(module_name, setting.name, ...)
+        error(("module %s setting \"%s\" "..fmt):format(module_name, setting.name, ...))
       end
       return true
     end
     local function ensure_type(field_name, expected_type)
       local t = type(setting[field_name])
       if not setting[field_name] then
-        error("module %s setting \"%s\" must be of type %s, but was %s"):format(module_name, setting.name, expected_type, t)
+        error(("module %s setting \"%s\" must be of type %s, but was %s"):format(module_name, setting.name, expected_type, t))
       end
     end
     
-    assert(type(module_name) == "string", "module name must be a string. " .. mock("mild"))
+    assert(type(module_name) == "string", "module name must be a string, but was "..type(module_name)..". " .. mock("mild"))
     assert(type(setting) == "table", "module "..module_name.." setting must be a table")
     
     assert(type(setting.name) == "string", "module "..module_name.." setting name must be a string, but is ".. type(setting.name))
@@ -886,12 +937,12 @@ do --config
     end
     
     if setting.default then
-      default = type(setting.default) == "table" and setting.default or {setting.default}
-      for k, v in pairs(default) do
-        ensure(type(k) == "number", "default keys must be numeric. " .. mock("strong"))
-        ensure(type(v) == "number" or type(v) == "string" or type(v) == "boolean", "default values must be strings, numbers, or booleans")
-        ensure(k <= args_max, "default argument count exeeds max nargs")
-      end
+      ensure_type("default", "string")
+      local default_value_parser = Parser.new(setting.name .. " default value", ("%s %s;"):format(setting.name, setting.default))
+      local default_parsed, err = default_value_parser:parse()
+      ensure(default_parsed, "default string invalid: %s", err)
+      default_values = default_parsed.block.settings[1].values
+      assert(default_values)
     end
     
     if setting.handler then
@@ -904,24 +955,25 @@ do --config
     local handler = {
       module = module_name,
       name = name,
+      full_name = module_name .. "." .. name,
       aliases = aliases or {},
       path = path,
       description = description,
-      arg_max = args_max,
-      arg_min = args_min,
-      arg_default = default,
+      nargs_max = args_max,
+      nargs_min = args_min,
+      default_values = default_values,
       block = block,
       handler = setting.handler,
       internal_handler = setting.internal_handler
     }
     
-    local full_name = module_name .. "." .. name
+    ensure(not self.handlers[handler.full_name], 'already exists')
     
-    ensure(not self.handlers[full_name], 'already exists')
-    
-    self.handlers[full_name] = handler
+    self.handlers[handler.full_name] = handler
     for _, alias in ipairs(handler.aliases) do
-      self.handlers[module_name.."."..alias] = handler
+      local alias_full_name = module_name.."."..alias
+      ensure(not self.handlers[alias_full_name], 'aliased as %s already exists', alias_full_name)
+      self.handlers[alias_full_name] = handler
     end
     
     local shortname="*."..name
@@ -995,25 +1047,53 @@ do --config
     return t
   end
   
+  function config:get_root()
+    if not self.root then
+      return nil, "config has not been parsed and therefore has no root"
+    end
+    return self.root
+  end
+  
   function config:all_blocks()
-    local t = {}
+    local t = {self.root.block}
     for block in self:each_block() do
       table.insert(t, block)
     end
     return t
   end
   
+  function config:default_values(setting)
+    if not setting.handled_by then
+      return nil, "unhandled setting " .. setting.name .. " has no default values"
+    end
+    local handler = self.handlers[setting.handled_by]
+    if not handler then
+      return nil, ("can't find handler for setting %s handled by %s"):format(setting.full_name, setting.handled_by)
+    end
+    return handler.default_values or {}
+  end
+  
   function config:predecessor(setting) --setting to inherit values from
     setting = setting.parent
-    while setting and setting.parent ~= parent do
-      for _, d in ipairs(context.block.settings) do
-        if setting.handler and setting.handler = d.handler then
-          return d
+    while setting and setting.parent ~= setting do
+      if setting.block then
+        for _, d in ipairs(setting.block.settings) do
+          if setting.handled_by and setting.handled_by == d.handled_by then
+            return d
+          end
         end
       end
       setting = setting.parent
     end
     return false
+  end
+  
+  function config:inherited_values(setting)
+    local predecessor = self:predecessor(setting)
+    if not predecessor then
+      return {}
+    end
+    return predecessor.values
   end
   
 end

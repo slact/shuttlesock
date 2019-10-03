@@ -22,6 +22,12 @@ static bool add_module(shuso_t *S, shuso_module_t *module, const char *adding_fu
   }
   lua_State *L = S->lua.state;
   Lua_push_module_function(L, adding_function_name);
+  if(!module->name) {
+    return shuso_set_error(S, "module name missing");
+  }
+  if(!module->version) {
+    return shuso_set_error(S, "module %s version string is missing", module->name);
+  }
   lua_pushstring(L, module->name);
   lua_pushlightuserdata(L, module);
   lua_pushstring(L, module->version);
@@ -50,7 +56,7 @@ static bool add_module(shuso_t *S, shuso_module_t *module, const char *adding_fu
   
   //register the config settings
   if(module->settings) {
-    for(shuso_setting_t *setting = &module->settings[0]; setting->name != NULL; setting++) {
+    for(shuso_module_setting_t *setting = &module->settings[0]; setting->name != NULL; setting++) {
       if(!shuso_config_register_setting(S, setting, module)){
         return false;
       }

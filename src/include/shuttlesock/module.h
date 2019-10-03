@@ -5,6 +5,16 @@
 
 extern shuso_module_t shuso_core_module;
 
+struct shuso_module_setting_s {
+  const char             *name;
+  const char             *aliases;
+  const char             *path;
+  const char             *description;
+  const char             *nargs;
+  const char             *default_value;
+  int                     block; // 0/false - no, 1/true - yes, SHUSO_SETTING_BLOCK_OPTIONAL - maybe
+};// shuso_module_setting_t
+
 struct shuso_module_s {
   const char             *name;
   const char             *version;
@@ -18,7 +28,7 @@ struct shuso_module_s {
   
   uint8_t                *parent_modules_index_map;
   int                     index; //global module number
-  shuso_setting_t        *settings;
+  shuso_module_setting_t *settings;
   void                   *events; //module struct ptr for calling events, set during intiialize_events
   struct {
     int                     count;
