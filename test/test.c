@@ -149,7 +149,7 @@ describe(config) {
     };
     shuso_add_module(S, &test_module);
     shuso_config_string_parse(S, " \
-      foobar \"what is this\" 'i dont even really even' number e semicolon r; \
+      foobar 10 11 12 13 \"14\"; \
     "
     );
     shuso_configure_finish(S);
