@@ -377,7 +377,7 @@ bool shuso_config_system_generate(shuso_t *S) {
   }
   lua_pushnil(L);
   while(lua_next(L, -2)) {
-    int i = lua_tointeger(L, -2) + 1;
+    int i = lua_tointeger(L, -2) - 1;
     lua_getfield(L, -1, "ptr");
     ctx->blocks.array[i] = lua_topointer(L, -1);
     lua_pop(L, 2);
