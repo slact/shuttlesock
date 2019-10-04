@@ -120,14 +120,14 @@ bool shuso_initialize_added_modules(shuso_t *S) {
       return false;
     }
     if(module->initialize_events) {
-      const char *error_before_initializing_module = shuso_last_error(S);
+      int errcount = shuso_error_count(S);
       if(!module->initialize_events(S, module)) {
         if(shuso_last_error(S) == NULL) {
           return shuso_set_error(S, "module %s failed to initialize, but reported no error", module->name);
         }
         return false;
       }
-      if(shuso_last_error(S) != NULL && shuso_last_error(S) != error_before_initializing_module) {
+      if(shuso_error_count(S) > errcount) {
         return false;
       }
     }

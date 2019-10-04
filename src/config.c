@@ -339,10 +339,16 @@ bool shuso_config_system_generate(shuso_t *S) {
         if(!module->initialize_config) {
           return shuso_set_error(S, "module %s initialize_config is required, but is set to NULL", module->name);
         }
-        
-        
-        module->initialize_config(S, module, block);
-        
+        int errcount = shuso_error_count(S);
+        if(!module->initialize_config(S, module, block)) {
+          if(shuso_last_error(S) == NULL) {
+            return shuso_set_error(S, "module %s failed to initialize config, but reported no error", module->name);
+          }
+          return false;
+        }
+        if(shuso_error_count(S) > errcount) {
+          return false;
+        }
         
       }
       lua_pop(L, 1);

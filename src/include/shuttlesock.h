@@ -190,6 +190,7 @@ struct shuso_s {
   } config;
   struct {
     char                       *msg;
+    int                         error_count;
     int                         error_number; //errno
     char                       *combined_errors;
     bool                        static_memory;
@@ -221,10 +222,12 @@ bool shuso_stop_manager(shuso_t *S, shuso_stop_t forcefulness);
 bool shuso_is_master(shuso_t *S);
 bool shuso_is_forked_manager(shuso_t *S);
 
+
 bool shuso_set_log_fd(shuso_t *S, int fd);
 
 bool shuso_set_error(shuso_t *S, const char *fmt, ...);
 bool shuso_set_error_errno(shuso_t *S, const char *fmt, ...);
+int shuso_error_count(shuso_t *S);
 const char *shuso_last_error(shuso_t *S);
 int shuso_last_errno(shuso_t *S);
 shuso_process_t *shuso_procnum_to_process(shuso_t *S, int procnum);

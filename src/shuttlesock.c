@@ -699,6 +699,7 @@ bool shuso_stop_worker(shuso_t *S, shuso_process_t *proc, shuso_stop_t forcefuln
 
 static void shuso_set_error_vararg(shuso_t *S, const char *fmt, va_list args) {
   const char *free_oldmsg = NULL;
+  S->error.error_count++;
   if(S->error.msg && !S->error.static_memory) {
     free_oldmsg = S->error.msg;
     //don't free oldmsg yet, so that it could be used as part of the new message
@@ -762,6 +763,10 @@ const char *shuso_last_error(shuso_t *S) {
 }
 int shuso_last_errno(shuso_t *S) {
   return S->error.error_number;
+}
+
+int shuso_error_count(shuso_t *S) {
+  return S->error.error_count;
 }
 
 
