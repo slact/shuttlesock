@@ -499,7 +499,7 @@ static int Lua_watcher_set(lua_State *L) {
   
   switch(w->type) {
     case LUA_EV_WATCHER_IO: {
-      if(nargs-1 < 2 && nargs-1 > 3) {
+      if(nargs-1 < 2 || nargs-1 > 3) {
         return luaL_error(L, "io watcher:set() expects 2-3 arguments");
       }
       int fd = luaL_checkinteger(L, 2);
@@ -890,7 +890,7 @@ static int Lua_shuso_shared_slab_alloc_string(lua_State *L) {
   size_t      len;
   const char *str = luaL_checklstring(L, 1, &len);
   shuso_lua_shared_string_t **shstr;
-  if((shstr = lua_newuserdata(L, sizeof(shstr))) == NULL) {
+  if((shstr = lua_newuserdata(L, sizeof(*shstr))) == NULL) {
     return luaL_error(L, "unable to allocate memory for new shared string");
   }
   if((*shstr = shuso_shared_slab_alloc(&S->common->shm, sizeof(shuso_lua_shared_string_t) + len)) == NULL) {

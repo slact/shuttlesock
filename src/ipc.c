@@ -480,7 +480,7 @@ bool shuso_ipc_receive_fd_finish(shuso_t *S, uintptr_t ref) {
     S->ipc.fd_receiver.count = 0;
   }
   else {
-    shuso_ipc_fd_receiver_t *reallocd = realloc(S->ipc.fd_receiver.array, sizeof(shuso_ipc_fd_receiver_t) * S->ipc.fd_receiver.count-1);
+    shuso_ipc_fd_receiver_t *reallocd = realloc(S->ipc.fd_receiver.array, sizeof(shuso_ipc_fd_receiver_t) * (S->ipc.fd_receiver.count-1));
     if(!reallocd) {
       //this is not terrible, and will not lead to undefined behavior. don't error out, just make a note of it
       shuso_log_error(S, "ipc_receive_fd_finish failed, no memory for shrinking realloc(). this isn't fatal, continue anyway.");
@@ -601,10 +601,12 @@ static void ipc_socket_transfer_receive_cb(shuso_loop *loop, shuso_ev_io *w, int
     }
     assert(fd != -1);
     if(!found) {
-      shuso_ipc_fd_receiver_t *reallocd = realloc(S->ipc.fd_receiver.array, sizeof(shuso_ipc_fd_receiver_t) * (S->ipc.fd_receiver.count+1));
+      shuso_ipc_fd_receiver_t *reallocd = realloc(S->ipc.fd_receiver.array, sizeof(*reallocd) * (S->ipc.fd_receiver.count+1));
       if(!reallocd) {
         shuso_log_error(S, "failed to receive file descriptor: no memory for realloc()");
-        if(fd != -1) close(fd);
+        if(fd != -1) {
+          close(fd);
+        }
         continue;
       }
       S->ipc.fd_receiver.array = reallocd;
@@ -623,14 +625,17 @@ static void ipc_socket_transfer_receive_cb(shuso_loop *loop, shuso_ev_io *w, int
       found->callback(S, SHUSO_OK, found->ref, fd, pd, found->pd);
     }
     else {
-      shuso_ipc_buffered_fd_t  *reallocd = realloc(found->buffered_fds.array, sizeof(shuso_ipc_buffered_fd_t) * (found->buffered_fds.count+1));
-      if(!reallocd) {
+      shuso_ipc_buffered_fd_t  *reallocd = realloc(found->buffered_fds.array, sizeof(*reallocd) * (found->buffered_fds.count+1));
+      if(reallocd == NULL) {
         shuso_log_error(S, "failed to receive file descriptor: no memory for buffered fd");
-        if(fd != -1) close(fd);
+        if(fd != -1) {
+          close(fd);
+        }
         continue;
       }
-      reallocd[found->buffered_fds.count] = (shuso_ipc_buffered_fd_t ) {.fd = fd, .pd = pd};
+      
       found->buffered_fds.array = reallocd;
+      reallocd[found->buffered_fds.count] = (shuso_ipc_buffered_fd_t ) {.fd = fd, .pd = pd};
       found->buffered_fds.count++;
     }
   }
