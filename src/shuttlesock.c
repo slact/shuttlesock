@@ -61,7 +61,10 @@ const char *shuso_runstate_as_string(shuso_runstate_t state) {
       return "SHUSO_STATE_RUNNING";
     case SHUSO_STATE_STOPPING:
       return "SHUSO_STATE_STOPPING";
+    default:
+      return "???";
   }
+  
 }
 shuso_t *shuso_create(const char **err) {
   return shuso_create_with_lua(NULL, err);
