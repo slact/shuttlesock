@@ -2,3 +2,5 @@ build/
 coredump/
 vgcore.*
 CMakeFiles/
+cachegrind.*
+callgrind-*
