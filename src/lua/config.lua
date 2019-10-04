@@ -4,6 +4,7 @@ local parser_mt
 local Config = {}
 local config_mt
 
+--[[
 local function mm_setting(setting)
   local mm = require "mm"
   local cpy = {}
@@ -14,6 +15,7 @@ local function mm_setting(setting)
   cpy.block = "..."
   mm(cpy)
 end
+]]
 
 local function resolve_path(prefix, name)
   if not prefix or name:match("^%/") then
