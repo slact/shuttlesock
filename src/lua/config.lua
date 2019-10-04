@@ -1057,10 +1057,6 @@ do --config
     end
   end
   
-  function config:each_block()
-    return self:each_setting(nil, {setting = function(s) return s.block end})
-  end
-  
   function config:all_settings()
     local t = {}
     for setting in self:each_setting() do
@@ -1078,15 +1074,15 @@ do --config
   
   function config:all_blocks()
     local t = {self.root.block}
-    for block in self:each_block() do
-      table.insert(t, block)
+    for setting in self:each_setting(nil, {setting = function(s) return s.block end}) do
+      table.insert(t, setting.block)
     end
     return t
   end
   
   function config:default_values(setting)
     if not setting.handled_by then
-      return nil, "unhandled setting " .. setting.name .. " has no default values"
+      return {}
     end
     local handler = self.handlers[setting.handled_by]
     if not handler then
