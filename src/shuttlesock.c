@@ -501,27 +501,6 @@ bool shuso_stop(shuso_t *S, shuso_stop_t forcefulness) {
   return true;
 }
 
-static bool shuso_worker_initialize(shuso_t *S) {
-  assert(S->process);
-  shuso_log_debug(S, "starting worker %i...", S->procnum);
-  S->process->pid = getpid();
-  *S->process->state = SHUSO_STATE_STARTING;
-  
-  shuso_ipc_channel_shared_start(S, S->process);
-  shuso_ipc_channel_local_init(S);
-  shuso_ipc_channel_local_start(S);
-  if(!shuso_lua_create(S)) {
-    *S->process->state = SHUSO_STATE_DEAD;
-    return false;
-  }
-  
-  //S->common->phase_handlers.start_worker(S, S->common->phase_handlers.privdata);
-  *S->process->state = SHUSO_STATE_RUNNING;
-  shuso_core_module_event_publish(S, "worker.start", SHUSO_OK, NULL);
-  shuso_log_notice(S, "started worker %i", S->procnum);
-  shuso_ipc_send(S, &S->common->process.manager, SHUTTLESOCK_IPC_CMD_WORKER_STARTED, (void *)(intptr_t )S->procnum); 
-  return true;
-}
 static void shuso_worker_shutdown(shuso_t *S) {
   shuso_log_debug(S, "stopping worker %i...", S->procnum);
   shuso_cleanup_loop(S);
@@ -540,25 +519,39 @@ static void shuso_worker_shutdown(shuso_t *S) {
   *worker_state = SHUSO_STATE_DEAD;
 }
 
-#ifndef SHUTTLESOCK_DEBUG_NO_WORKER_THREADS
  static void *shuso_run_worker(void *arg) {
   shuso_t   *S = arg;
   assert(S);
-  
+
+#ifndef SHUTTLESOCK_DEBUG_NO_WORKER_THREADS  
   char       threadname[16];
   snprintf(threadname, 16, "worker %i", S->procnum);
   shuso_system_thread_setname(threadname);
   
   S->ev.loop = ev_loop_new(S->ev.flags);
   ev_set_userdata(S->ev.loop, S);
-  shuso_worker_initialize(S);
+#endif
   
+  shuso_ipc_channel_shared_start(S, S->process);
+  shuso_ipc_channel_local_init(S);
+  shuso_ipc_channel_local_start(S);
+
+  
+  //S->common->phase_handlers.start_worker(S, S->common->phase_handlers.privdata);
+  *S->process->state = SHUSO_STATE_RUNNING;
+  shuso_core_module_event_publish(S, "worker.start", SHUSO_OK, NULL);
+  shuso_log_notice(S, "started worker %i", S->procnum);
+  shuso_ipc_send(S, &S->common->process.manager, SHUTTLESOCK_IPC_CMD_WORKER_STARTED, (void *)(intptr_t )S->procnum); 
+
+#ifndef SHUTTLESOCK_DEBUG_NO_WORKER_THREADS  
   ev_run(S->ev.loop, 0);
   
   shuso_worker_shutdown(S);
-  return NULL;
-}
+  return NULL;  
+#else
+  return S;
 #endif
+}
 
 bool shuso_spawn_worker(shuso_t *S, shuso_process_t *proc) {
   int               procnum = shuso_process_to_procnum(S, proc);
@@ -566,30 +559,32 @@ bool shuso_spawn_worker(shuso_t *S, shuso_process_t *proc) {
   bool              stalloc_initialized = false;
   bool              resolver_initialized = false;
   bool              shared_ipc_created = false;
-  shuso_t          *workerctx = NULL;
+  shuso_t          *wS = NULL;
 #ifndef SHUTTLESOCK_DEBUG_NO_WORKER_THREADS
   bool              pthreadattr_initialized = false;
 #endif
   assert(proc);
   assert(procnum >= SHUTTLESOCK_WORKER);
   
+  shuso_log_debug(S, "starting worker %i...", procnum);
+  
   if(S->procnum == SHUTTLESOCK_MASTER) {
-    err = "can't spawn worker from master";
+    err = "spawning workers from master is forbidden";
     goto fail;
   }
   else if(S->procnum >= SHUTTLESOCK_WORKER) {
-    err = "can't spawn worker from another worker";
+    err = "spawning workers from other workers is forbidden";
     goto fail;
   }
   
   if(*proc->state > SHUSO_STATE_NIL) {
-    err = "can't spawn worker here, it looks like there's a running worker already";
+    err = "this worker appears to have already been spawned";
     goto fail;
   }
   
-  workerctx = calloc(1, sizeof(*S));
-  if(!workerctx) {
-    err = "can't spawn worker: failed to malloc() shuttlesock context";
+  wS = calloc(1, sizeof(*S));
+  if(!wS) {
+    err = "failed to allocate shuttlesock context";
     goto fail;
   }
   
@@ -599,7 +594,7 @@ bool shuso_spawn_worker(shuso_t *S, shuso_process_t *proc) {
   if(prev_proc_state == SHUSO_STATE_NIL) {
     assert(proc->ipc.buf == NULL);
     if(!(shared_ipc_created = shuso_ipc_channel_shared_create(S, proc))) {
-      err = "can't spawn worker: failed to create shared IPC buffer";
+      err = "failed to create shared IPC buffer";
       goto fail;
     }
   }
@@ -608,39 +603,56 @@ bool shuso_spawn_worker(shuso_t *S, shuso_process_t *proc) {
     //TODO: ensure buf is empty
   }
   
-  workerctx->common = S->common;
-  workerctx->ev.flags = S->ev.flags;
-  workerctx->data = S->data;
+  wS->common = S->common;
+  wS->ev.flags = S->ev.flags;
+  wS->ev.loop = NULL;
+  wS->data = S->data;
   
-  workerctx->process = proc;
-  *workerctx->process->state = SHUSO_STATE_NIL;
-  workerctx->procnum = procnum;
-  if(!(stalloc_initialized = shuso_stalloc_init(&workerctx->stalloc, 0))) {
-    err = "can't spawn worker: failed to create context stalloc";
+  wS->process = proc;
+  *wS->process->state = SHUSO_STATE_STARTING;
+  wS->process->pid = getpid();
+  wS->procnum = procnum;
+  
+  if(!(stalloc_initialized = shuso_stalloc_init(&wS->stalloc, 0))) {
+    err = "failed to initialize stalloc";
     goto fail;
   }
   
-  if(!(resolver_initialized = shuso_resolver_init(workerctx, &workerctx->common->config, &workerctx->resolver))) {
-    err = "can't spawn worker: unable to initialize resolver";
+  if(!(resolver_initialized = shuso_resolver_init(wS, &wS->common->config, &wS->resolver))) {
+    err = "unable to initialize resolver";
     goto fail;
   }
   
+  if(!shuso_lua_create(wS)) {
+    *wS->process->state = SHUSO_STATE_DEAD;
+    err = "failed to create Lua state";
+    goto fail;
+  }
+  if(!shuso_lua_initialize(wS)) {
+    err = "failed to initialize Lua";
+    goto fail;
+  }
+  if(!shuso_config_system_initialize_worker(wS, S)) {
+    err = "failed to initialize config system";
+    goto fail;
+  }
   
 #ifdef SHUTTLESOCK_DEBUG_NO_WORKER_THREADS
-  workerctx->ev.loop = S->ev.loop;
-  assert(workerctx->ev.loop == ev_default_loop(0));
-  shuso_worker_initialize(workerctx);
+  wS->ev.loop = S->ev.loop;
+  assert(wS->ev.loop == ev_default_loop(0));
+  shuso_core_module_event_publish(wS, "worker.start.before", SHUSO_OK, S);
+  shuso_run_worker(wS);
 #else
   pthread_attr_t    pthread_attr;
   
   if(!(pthreadattr_initialized = (pthread_attr_init(&pthread_attr) == 0))) {
-    err = "can't spawn worker: pthread_attr_init() failed";
+    err = "pthread_attr_init() failed";
     goto fail;
   }
   pthread_attr_setdetachstate(&pthread_attr, PTHREAD_CREATE_DETACHED);
-  
-  if(pthread_create(&proc->tid, &pthread_attr, shuso_run_worker, workerctx) != 0) {
-    err = "can't spawn worker: failed to create thread";
+  shuso_core_module_event_publish(wS, "worker.start.before", SHUSO_OK, S);
+  if(pthread_create(&proc->tid, &pthread_attr, shuso_run_worker, wS) != 0) {
+    err = "failed to create thread";
     goto fail;
   }
 #endif
@@ -654,8 +666,8 @@ fail:
 #endif
   if(resolver_initialized) shuso_resolver_cleanup(&S->resolver);
   if(stalloc_initialized) shuso_stalloc_empty(&S->stalloc);
-  if(workerctx) free(workerctx);
-  return shuso_set_error(S, err);
+  if(wS) free(wS);
+  return shuso_set_error(S, "failed to start worker %d: %s", (int)procnum, err);
 }
 
 bool shuso_stop_worker(shuso_t *S, shuso_process_t *proc, shuso_stop_t forcefulness) {

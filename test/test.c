@@ -1,4 +1,7 @@
 #include "test.h"
+#include <lua.h>
+#include <lauxlib.h>
+#include <lualib.h>
 #ifndef __clang_analyzer__
 bool set_test_options(int *argc, char **argv) {
   snow_set_extra_help(""
@@ -156,7 +159,40 @@ describe(config) {
     shusoT_run_test(S, SHUTTLESOCK_MANAGER, stop_shuttlesock, NULL, (void *)(intptr_t)SHUTTLESOCK_MANAGER);
     assert_shuso_ok(S);
   }
-  
+}
+
+describe(lua_bridge) {
+  test("luaS_gxcopy") {
+    shuso_t          *Ss = shuso_create(NULL);
+    shuso_t          *Sd = shuso_create(NULL);
+    //shuso_configure_finish(Ss);
+    //shuso_configure_finish(Sd);
+    lua_State *Ls = Ss->lua.state;
+    lua_State *Ld = Sd->lua.state;
+    
+    assert(Ls);
+    assert(Ld);
+    
+    luaL_dostring(Ls,"\
+      local foo = require('shuttlesock.config').new() \
+      return foo \
+    ");
+    
+    luaS_gxcopy(Ls, Ld);
+    luaS_push_inspect_string(Ls, -1);
+    luaS_push_inspect_string(Ld, -1);
+    
+    const char *str_src = lua_tostring(Ls, -1), *str_dst = lua_tostring(Ld, -1);
+    asserteq_str(str_src, str_dst);
+    lua_pop(Ls, 1);
+    lua_pop(Ld, 1);
+    
+    lua_getmetatable(Ld, -1);
+    luaL_dostring(Ld, "return require('shuttlesock.config').metatable");
+    assert(lua_compare(Ld, -1, -2, LUA_OPEQ) == 1);
+    shuso_destroy(Ss);
+    shuso_destroy(Sd);
+  }
 }
 
 #define IPC_ECHO 130

@@ -73,6 +73,7 @@ typedef struct {
   shuso_module_event_t start_master;
   shuso_module_event_t start_manager;
   shuso_module_event_t start_worker;
+  shuso_module_event_t start_worker_before;
   
   shuso_module_event_t stop_master;
   shuso_module_event_t stop_manager;

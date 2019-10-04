@@ -10,11 +10,31 @@ static bool luaS_push_config_function(lua_State *L, const char *funcname) {
   return true;
 }
 
+static bool luaS_config_pointer_ref(lua_State *L, const void *ptr) {
+  lua_getfield(L, LUA_REGISTRYINDEX, "shuttlesock.config.pointer_ref_table");
+  lua_pushlightuserdata(L, (void *)ptr);
+  lua_pushvalue(L, -3);
+  lua_settable(L, -3);
+  lua_pop(L, 2);
+  return true;
+}
+
+static bool luaS_config_pointer_unref(lua_State *L, const void *ptr) {
+  lua_getfield(L, LUA_REGISTRYINDEX, "shuttlesock.config.pointer_ref_table");
+  assert(lua_istable(L, -1));
+  lua_pushlightuserdata(L, (void *)ptr);
+  lua_gettable(L, -2);
+  lua_remove(L, -2);  
+  return lua_isnil(L, -1);
+}
+
 static bool luaS_pcall_config_method(lua_State *L, const char *method_name, int nargs, bool keep_result) {
   shuso_t                    *S = shuso_state(L);
   int                         argstart = lua_absindex(L, -nargs);
   shuso_config_module_ctx_t  *ctx = S->common->module_ctx.config;
-  lua_rawgeti(L, LUA_REGISTRYINDEX, ctx->ref);
+  
+  luaS_config_pointer_unref(L, ctx);
+  
   lua_getfield(L, -1, method_name);
   lua_insert(L, argstart);
   lua_insert(L, argstart + 1);
@@ -24,32 +44,6 @@ static bool luaS_pcall_config_method(lua_State *L, const char *method_name, int 
 shuso_module_setting_t SHUTTLESOCK_SETTINGS_END = {
   .name = NULL,
 };
-
-bool shuso_config_serialize(shuso_t *S) {
-  lua_State                  *L = S->lua.state;
-  shuso_config_module_ctx_t  *ctx = S->common->module_ctx.config;
-  if(!luaS_pcall_config_method(L, "serialize", 0, true)) {
-    return false;
-  }
-  ctx->serialized.str = lua_tolstring(L, -1, &ctx->serialized.len);
-  if(ctx->serialized.ref != LUA_NOREF) {
-    luaL_unref(L, LUA_REGISTRYINDEX, ctx->serialized.ref);
-  }
-  ctx->serialized.ref = luaL_ref(L, LUA_REGISTRYINDEX);
-  return true;
-}
-
-bool shuso_config_unserialize(shuso_t *S) {
-  lua_State                  *L = S->lua.state;
-  shuso_config_module_ctx_t  *ctx = S->common->module_ctx.config;
-  lua_pushlstring(L, ctx->serialized.str, ctx->serialized.len);
-  if(!luaS_pcall_config_method(L, "unserialize", 0, true)) {
-    return false;
-  }
-  ctx->serialized.str = NULL;
-  ctx->serialized.len = 0;
-  return true; 
-}
 
 bool shuso_config_register_setting(shuso_t *S, shuso_module_setting_t *setting, shuso_module_t *module) {
   lua_State *L = S->lua.state;
@@ -93,6 +87,10 @@ bool shuso_config_register_setting(shuso_t *S, shuso_module_setting_t *setting, 
 
 bool shuso_config_system_initialize(shuso_t *S) {
   lua_State *L = S->lua.state;
+  
+  lua_newtable(L);
+  lua_setfield(L, LUA_REGISTRYINDEX, "shuttlesock.config.pointer_ref_table");
+  
   shuso_config_module_ctx_t *ctx = shuso_stalloc(&S->stalloc, sizeof(*ctx));
   if(!ctx) {
     return shuso_set_error(S, "failed to allocate module context");
@@ -104,19 +102,34 @@ bool shuso_config_system_initialize(shuso_t *S) {
   if(!luaS_function_call_result_ok(L, 0, true)) {
     return false;
   }
-  lua_reference_t ref = luaL_ref(L, LUA_REGISTRYINDEX);
-  if(ref == LUA_REFNIL || ref == LUA_NOREF) {
-    return shuso_set_error(S, "failed to create lua reference to new config");
-  }
+  
+  luaS_config_pointer_ref(L, ctx);
   *ctx =(shuso_config_module_ctx_t ) {
-    .ref = ref,
-    .parsed = false,
-    .serialized.ref = LUA_NOREF,
-    .serialized.str = NULL,
-    .serialized.len = 0
+    .parsed = false
   };
   
   S->common->module_ctx.config = ctx;
+  return true;
+}
+
+bool shuso_config_system_initialize_worker(shuso_t *S, shuso_t *Smanager) {
+  lua_State *L = S->lua.state;
+  lua_State *Lm = Smanager->lua.state;
+  
+  luaS_config_pointer_unref(Lm, Smanager->common->module_ctx.config);
+  
+  if(!luaS_gxcopy(Lm, L)) {
+    return false;
+  }
+  lua_pop(Lm, 1);
+
+  assert(lua_istable(L, -1));
+  
+  lua_newtable(L);
+  lua_setfield(L, LUA_REGISTRYINDEX, "shuttlesock.config.pointer_ref_table");
+
+  luaS_config_pointer_ref(L, S->common->module_ctx.config);
+  
   return true;
 }
 
@@ -169,6 +182,13 @@ static shuso_setting_values_t  *lua_setting_values_to_c_struct(lua_State *L, shu
 bool shuso_config_system_generate(shuso_t *S) {
   lua_State *L = S->lua.state;
   
+  shuso_config_module_ctx_t  *ctx = S->common->module_ctx.config;
+  if(!ctx->parsed) {
+    if(!shuso_config_string_parse(S, "")) {
+      return false;
+    }
+  }
+  
   if(!luaS_pcall_config_method(L, "handle", 0, false)) {
     return false;
   }
@@ -188,7 +208,8 @@ bool shuso_config_system_generate(shuso_t *S) {
   };
   lua_pushlightuserdata(L, root_block);
   lua_setfield(L, -2, "ptr");
-  root_block->ref = luaL_ref(L, LUA_REGISTRYINDEX); //also pops the block table
+  
+  assert(luaS_config_pointer_ref(L, root_block)); //also pops the block table
   
   shuso_setting_t *root_setting = shuso_stalloc(&S->stalloc, sizeof(*root_setting));
   if(!root_setting) {
@@ -206,8 +227,10 @@ bool shuso_config_system_generate(shuso_t *S) {
   };
   lua_pushlightuserdata(L, root_setting);
   lua_setfield(L, -2, "ptr");
-  root_setting->ref = luaL_ref(L, LUA_REGISTRYINDEX); //also pops the setting-block table
+  
   root_block->setting = root_setting;
+  luaS_config_pointer_ref(L, root_setting); //pops the root setting table too
+  
   //finished setting up root structs
   
   
@@ -283,12 +306,12 @@ bool shuso_config_system_generate(shuso_t *S) {
       lua_pushlightuserdata(L, block);
       lua_setfield(L, -2, "ptr");
       
-      block->ref = luaL_ref(L, LUA_REGISTRYINDEX); //also pops the setting-block table
+      assert(luaS_config_pointer_ref(L, block)); //also pops the block table
       setting->block = block;
       block->setting = setting;
     }
     
-    setting->ref = luaL_ref(L, LUA_REGISTRYINDEX); //also pops the setting table
+    luaS_config_pointer_ref(L, setting); //pops the setting table too
   }
   
   //walk the blocks again, and let the modules set their settings for each block
@@ -328,8 +351,6 @@ bool shuso_config_system_generate(shuso_t *S) {
   }
   lua_pop(L, 1);
   
-  
-  shuso_config_module_ctx_t  *ctx = S->common->module_ctx.config;
   assert(ctx->blocks.root == NULL);
   
   if(!luaS_pcall_config_method(L, "get_root", 0, true)) {
@@ -364,11 +385,13 @@ bool shuso_config_file_parse(shuso_t *S, const char *config_file_path) {
   return false;
 }
 bool shuso_config_string_parse(shuso_t *S, const char *config) {
+  shuso_config_module_ctx_t  *ctx = S->common->module_ctx.config;
   lua_State *L = S->lua.state;
   lua_pushstring(L, config);
   if(!luaS_pcall_config_method(L, "parse", 1, true)) {
     return false;
   }
+  ctx->parsed = true;
   return true;
 }
 
@@ -376,7 +399,7 @@ shuso_setting_t *shuso_setting(shuso_t *S, const shuso_setting_block_t *block, c
   lua_State         *L = S->lua.state;
   shuso_setting_t   *setting;
   lua_pushstring(L, name);
-  lua_rawgeti(L, LUA_REGISTRYINDEX, block->setting->ref);
+  assert(luaS_config_pointer_unref(L, block->setting));
   if(!luaS_pcall_config_method(L, "find_setting", 2, true)) {
     return NULL;
   }

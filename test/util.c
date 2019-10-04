@@ -54,6 +54,9 @@ bool ___runcheck(shuso_t *S, char **err) {
     return checkfail(err, "manager never stopped");
 
   for(unsigned i = 0; i< SHUTTLESOCK_MAX_WORKERS; i++) {
+    if(chk->process.worker[i].started && !chk->process.worker[i].before_started) {
+      return checkfail(err, "worker %i was started but didn't fire its start.before event", i);
+    }
     if(chk->process.worker[i].started && !chk->process.worker[i].stopped) {
       return checkfail(err, "worker %i was started but never stopped", i);
     }
@@ -99,7 +102,14 @@ static void runcheck_event_listener(shuso_t *S, shuso_event_state_t *evs, intptr
     assert(chk->process.manager.pid == getpid());
     chk->events.manager_start++;
   }
+  else if(strcmp(evn, "worker.start.before") == 0) {
+    assert(chk->process.worker[S->procnum].before_started == 0);
+    assert(chk->process.worker[S->procnum].started == 0);
+    assert(chk->process.worker[S->procnum].stopped == 0);
+    chk->process.worker[S->procnum].before_started = 1;
+  }
   else if(strcmp(evn, "worker.start") == 0) {
+    assert(chk->process.worker[S->procnum].before_started == 1);
     assert(chk->process.worker[S->procnum].started == 0);
     assert(chk->process.worker[S->procnum].stopped == 0);
     chk->process.worker[S->procnum].started = 1;
@@ -124,6 +134,7 @@ static void runcheck_event_listener(shuso_t *S, shuso_event_state_t *evs, intptr
     chk->events.manager_stop++;
   }
   else if(strcmp(evn, "worker.stop") == 0) {
+    assert(chk->process.worker[S->procnum].before_started == 1);
     assert(chk->process.worker[S->procnum].started == 1);
     assert(chk->process.worker[S->procnum].stopped == 0);
     
@@ -185,6 +196,7 @@ static bool runcheck_module_initialize_events(shuso_t *S, shuso_module_t *self) 
       
   shuso_event_listen(S, "core:master.start", runcheck_event_listener, self);
   shuso_event_listen(S, "core:manager.start", runcheck_event_listener, self);
+  shuso_event_listen(S, "core:worker.start.before", runcheck_event_listener, self);
   shuso_event_listen(S, "core:worker.start", runcheck_event_listener, self);
   
   shuso_event_listen(S, "core:master.stop", runcheck_event_listener, self);
@@ -227,6 +239,7 @@ shuso_t *shusoT_create(test_runcheck_t **external_ptr, double test_timeout) {
       
       " core:master.start"
       " core:manager.start"
+      " core:worker.start.before"
       " core:worker.start"
       
       " core:master.stop"

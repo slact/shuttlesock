@@ -3,7 +3,7 @@ local parser_mt
 
 local Config = {}
 local config_mt
---[[
+
 local function mm_setting(setting)
   local mm = require "mm"
   local cpy = {}
@@ -14,7 +14,7 @@ local function mm_setting(setting)
   cpy.block = "..."
   mm(cpy)
 end
-]]
+
 local function resolve_path(prefix, name)
   if not prefix or name:match("^%/") then
     --absolute path or no path given
@@ -60,8 +60,7 @@ local config_settings = {
     nargs   = 1,
     default = nil,
     internal_handler = function(setting, default, config)
-      local path = setting.values[1].raw
-      
+      local path = setting.values[1].value.string
       local include_path = config:find_setting("include_path", setting.parent)
       local paths
       if path:match("[%[%]%?%*]") then
@@ -137,6 +136,11 @@ function Parser.new(name, string, opt)
   return self
 end
 
+function Parser.restore(data)
+  setmetatable(data, parser_mt)
+  return data
+end
+
 do --parser
   local function count_slashes_reverse(str, start, cur)
     local count = 0
@@ -153,8 +157,14 @@ do --parser
   
   local parser = {}
   
-  parser_mt = {__index = parser}
-    
+  parser_mt = {
+    __index = parser,
+    __gxcopy = {
+      module="shuttlesock.config",
+      module_key="parser_metatable"
+    }
+  }
+  
   function parser:error(err, offset)
     if err then
       local line, column = self:location(offset)
@@ -481,7 +491,7 @@ do --parser
       return nil, self:last_error()
     end
     local module_name, name = nil, self:match()
-    if name:match("%.") then
+    if name:match("%:") then
       module_name, name = name:match("^([^%:%.]+):([^%s]+)$")
       if not module_name then
         return nil, self:error("invalid config setting name \""..name.."\"")
@@ -627,9 +637,23 @@ function Config.new(name)
   return config
 end
 
+function Config.restore(data)
+  setmetatable(data, config_mt)
+  for i, p in pairs(data.parsers) do
+    data.parsers[i]=Parser.restore(p)
+  end
+  return data
+end
+
 do --config
   local config = {}
-  config_mt = {__index=config}
+  config_mt = {
+    __index=config,
+    __gxcopy = {
+      module="shuttlesock.config",
+      module_key="metatable"
+    }
+  }
   
   local function split_path(pathy_thing)
     if pathy_thing.split_path then
@@ -1010,7 +1034,7 @@ do --config
         elseif token.type == "comment" then
           str = str .. pre .. token.value
         elseif token.type == "value" or token.type == "string" or token.type == "variable" then
-          str = str .. pre .. token.raw
+          str = str .. pre .. token.value.raw
         elseif token.type == "semicolon" then
           str = str .. (prev_type == "newline" and indent(lvl) or "")..";"
         else
@@ -1095,5 +1119,9 @@ do --config
   end
   
 end
+
+--needed in luaS_gxcopy
+Config.metatable = config_mt
+Config.parser_metatable = config_mt
 
 return Config

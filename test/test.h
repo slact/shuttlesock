@@ -12,7 +12,8 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 
-#include <sys/types.h>
+#include <sys/types.h>
+
 #include <sys/wait.h>
 
 typedef struct {
@@ -38,6 +39,7 @@ test_config_t test_config;
 typedef struct {
   _Atomic pid_t     pid;
   _Atomic int       status;
+  _Atomic uint8_t   before_started;
   _Atomic uint8_t   started;
   _Atomic uint8_t   stopped;
   _Atomic int       exit_code;
@@ -57,6 +59,7 @@ typedef struct {
   struct {
     _Atomic int    master_start;
     _Atomic int    manager_start;
+    _Atomic int    worker_start_before;
     _Atomic int    worker_start;
     _Atomic int    master_stop;
     _Atomic int    manager_stop;

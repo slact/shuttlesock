@@ -406,6 +406,7 @@ static bool core_module_init_function(shuso_t *S, shuso_module_t *self) {
     {"master.start",    &events->start_master},
     {"manager.start",   &events->start_manager},
     {"worker.start",    &events->start_worker},
+    {"worker.start.before",    &events->start_worker_before},
     
     {"master.stop",     &events->stop_master},
     {"manager.stop",    &events->stop_manager},
@@ -432,6 +433,7 @@ shuso_module_t shuso_core_module = {
    
    " master.start"
    " manager.start"
+   " worker.start.before" //worker state created, but pthread not yet started
    " worker.start"
    
    " master.stop"
