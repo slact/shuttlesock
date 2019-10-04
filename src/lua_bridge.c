@@ -20,7 +20,7 @@ static bool function_result_ok(lua_State *L, bool preserve_result) {
       const char *errstr = lua_tostring(L, -1);
       shuso_set_error(S, "%s", errstr);
     }
-    //lua_printstack(L);
+    //luaS_printstack(L);
     //raise(SIGABRT);
     lua_pop(L, 2);
     return false;
@@ -124,7 +124,7 @@ void luaS_printstack(lua_State *L) {
   shuso_t   *S = shuso_state(L);
   shuso_log_warning(S, "lua stack:");
   for(int n=top; n>0; n--) {
-    shuso_log_warning(S, "  [%i]: %s", n, luaS_dbgval(L, n));
+    shuso_log_warning(S, "  [%-2i  %i]: %s", -(top-n+1), n, luaS_dbgval(L, n));
   }
 }
 
