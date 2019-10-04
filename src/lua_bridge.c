@@ -385,6 +385,8 @@ static bool gxcopy_any(gxcopy_state_t *gxs);
 
 static bool gxcopy_cache_load(gxcopy_state_t *gxs) {
   lua_State *Ls = gxs->src.state, *Ld = gxs->dst.state;
+  luaL_checkstack(Ls, 2, NULL);
+  luaL_checkstack(Ld, 2, NULL);
   
   //is this thing cached?
   lua_rawgeti(Ls, LUA_REGISTRYINDEX, gxs->src.copies_ref);
@@ -405,6 +407,8 @@ static bool gxcopy_cache_load(gxcopy_state_t *gxs) {
 
 static bool gxcopy_cache_store(gxcopy_state_t *gxs) {
   lua_State *Ls = gxs->src.state, *Ld = gxs->dst.state;
+  luaL_checkstack(Ls, 3, NULL);
+  luaL_checkstack(Ld, 2, NULL);
   
    //cache copied thing in dst state
   lua_rawgeti(Ld, LUA_REGISTRYINDEX, gxs->dst.copies_ref);
@@ -423,6 +427,9 @@ static bool gxcopy_cache_store(gxcopy_state_t *gxs) {
 
 static bool gxcopy_metatable(gxcopy_state_t *gxs) {
   lua_State *Ls = gxs->src.state, *Ld = gxs->dst.state;
+  luaL_checkstack(Ls, 3, NULL);
+  luaL_checkstack(Ld, 3, NULL);
+  
   assert(lua_istable(Ls, -1));
   if(!lua_getmetatable(Ls, -1)) {
     return true;
@@ -476,6 +483,9 @@ static bool gxcopy_metatable(gxcopy_state_t *gxs) {
 
 static bool gxcopy_table(gxcopy_state_t *gxs) {
   lua_State *Ls = gxs->src.state, *Ld = gxs->dst.state;
+  luaL_checkstack(Ls, 4, NULL);
+  luaL_checkstack(Ld, 1, NULL);
+  
   int tindex = lua_absindex(Ls, -1);
   lua_rawgeti(Ls, LUA_REGISTRYINDEX, LUA_RIDX_GLOBALS);
   if(lua_compare(Ls, -1, -2, LUA_OPEQ)) {
@@ -510,6 +520,7 @@ static bool gxcopy_table(gxcopy_state_t *gxs) {
 
 static bool gxcopy_upvalues(gxcopy_state_t *gxs, int nups) {
   lua_State *Ls = gxs->src.state;
+  luaL_checkstack(Ls, 1, NULL);
   for(int i=1; i<=nups; i++) {
     assert(lua_getupvalue(Ls, -1, i));
     if(!gxcopy_any(gxs)) {
@@ -522,6 +533,8 @@ static bool gxcopy_upvalues(gxcopy_state_t *gxs, int nups) {
 
 static bool gxcopy_function(gxcopy_state_t *gxs) {
   lua_State *Ls = gxs->src.state, *Ld = gxs->dst.state;
+  luaL_checkstack(Ls, 2, NULL);
+  luaL_checkstack(Ld, 2, NULL);
   if(gxcopy_cache_load(gxs)) {
     return true;
   }
@@ -592,6 +605,7 @@ static bool gxcopy_any(gxcopy_state_t *gxs) {
       lua_pushnil(Ld);
       break;
     case LUA_TNUMBER:
+      luaL_checkstack(Ld, 1, NULL);
       if(lua_isinteger(Ls, -1)) {
         lua_pushinteger(Ld, lua_tointeger(Ls, -1));
       }
@@ -600,11 +614,13 @@ static bool gxcopy_any(gxcopy_state_t *gxs) {
       }
       break;
     case LUA_TBOOLEAN:
+      luaL_checkstack(Ld, 1, NULL);
       lua_pushboolean(Ld, lua_toboolean(Ls, -1));
       break;
     case LUA_TSTRING: {
       size_t sz;
       const char *str = lua_tolstring(Ls, -1, &sz);
+      luaL_checkstack(Ld, 1, NULL);
       lua_pushlstring(Ld, str, sz);
     } break;
     case LUA_TTABLE:
@@ -628,6 +644,7 @@ static bool gxcopy_any(gxcopy_state_t *gxs) {
       }
       break;
     case LUA_TLIGHTUSERDATA:
+      luaL_checkstack(Ld, 1, NULL);
       lua_pushlightuserdata(Ld, (void *)lua_topointer(Ls, -1));
       break;
   }
