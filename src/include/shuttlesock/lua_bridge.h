@@ -25,6 +25,8 @@ int luaS_do_embedded_script(lua_State *L);
 char *luaS_dbgval(lua_State *L, int n);
 void luaS_printstack(lua_State *L);
 void luaS_mm(lua_State *L, int stack_index);
+void luaS_inspect(lua_State *L, int stack_index);
+void luaS_push_inspect_string(lua_State *L, int stack_index);
 
 //running lua functions while being nice to shuttlesock
 void luaS_call(lua_State *L, int nargs, int nresults);

@@ -137,6 +137,24 @@ void luaS_mm(lua_State *L, int stack_index) {
   lua_call(L, 1, 0);
 }
 
+void luaS_push_inspect_string(lua_State *L, int stack_index) {
+  int absindex = lua_absindex(L, stack_index);
+  lua_getglobal(L, "require");
+  lua_pushliteral(L, "inspect");
+  lua_call(L, 1, 1);
+  lua_pushvalue(L, absindex);
+  lua_call(L, 1, 1);
+}
+
+void luaS_inspect(lua_State *L, int stack_index) {
+  luaS_push_inspect_string(L, stack_index);
+  
+  lua_getglobal(L, "print");
+  lua_pushvalue(L, -2);
+  lua_remove(L, -3);
+  lua_call(L, 1, 0);
+}
+
 int luaS_glob(lua_State *L) {
   const char *pattern = luaL_checkstring(L, 1);
   int         rc = 0;
