@@ -348,3 +348,305 @@ int luaS_shuso_error(lua_State *L) {
 }
 
 
+static int lua_function_dump_writer (lua_State *L, const void *b, size_t size, void *B) {
+  luaL_addlstring((luaL_Buffer *) B, (const char *)b, size);
+  return 0;
+}
+int luaS_function_dump(lua_State *L) {
+  luaL_Buffer b;
+  luaL_checktype(L, -1, LUA_TFUNCTION);
+  luaL_buffinit(L,&b);
+  if (lua_dump(L, lua_function_dump_writer, &b, 0) != 0)
+    return luaL_error(L, "unable to dump given function");
+  luaL_pushresult(&b);
+  return 1;
+}
+
+typedef struct {
+  struct {
+    lua_State *state;
+    int        copies_ref;
+  }          src;
+  struct {
+    lua_State *state;
+    int        copies_ref;
+  }          dst;
+} gxcopy_state_t;
+
+
+static bool gxcopy_any(gxcopy_state_t *gxs);
+
+static bool gxcopy_cache_load(gxcopy_state_t *gxs) {
+  lua_State *Ls = gxs->src.state, *Ld = gxs->dst.state;
+  
+  //is this thing cached?
+  lua_rawgeti(Ls, LUA_REGISTRYINDEX, gxs->src.copies_ref);
+  lua_pushvalue(Ls, -2);
+  lua_gettable(Ls, -2);
+  if(lua_isnumber(Ls, -1)) {
+    int index = lua_tonumber(Ls, -1);
+    lua_pop(Ls, 2);
+    
+    lua_rawgeti(Ld, LUA_REGISTRYINDEX, gxs->dst.copies_ref);
+    lua_rawgeti(Ld, -1, index);
+    lua_remove(Ld, -2);
+    return true;
+  }
+  lua_pop(Ls, 2);
+  return false;
+}
+
+static bool gxcopy_cache_store(gxcopy_state_t *gxs) {
+  lua_State *Ls = gxs->src.state, *Ld = gxs->dst.state;
+  
+   //cache copied thing in dst state
+  lua_rawgeti(Ld, LUA_REGISTRYINDEX, gxs->dst.copies_ref);
+  lua_pushvalue(Ld, -2);
+  int ref = luaL_ref(Ld, -2);
+  lua_pop(Ld, 1);
+  
+  //cache copied thing ref in src state
+  lua_rawgeti(Ls, LUA_REGISTRYINDEX, gxs->src.copies_ref);
+  lua_pushvalue(Ls, -2);
+  lua_pushinteger(Ls, ref);
+  lua_rawset(Ls, -3);
+  lua_pop(Ls, 1);
+  return true;
+}
+
+static bool gxcopy_metatable(gxcopy_state_t *gxs) {
+  lua_State *Ls = gxs->src.state, *Ld = gxs->dst.state;
+  assert(lua_istable(Ls, -1));
+  if(!lua_getmetatable(Ls, -1)) {
+    return true;
+  }
+  
+  if(lua_getfield(Ls, -1, "__gxcopy") == LUA_TTABLE) {
+    const char *module_name = NULL;
+    const char *module_key = NULL;
+    
+    if(lua_getfield(Ls, -1, "module") == LUA_TSTRING) {
+      module_name = lua_tostring(Ls, -1);
+    }
+    lua_pop(Ls, 1);
+    
+    if(lua_getfield(Ls, -1, "module_key") == LUA_TSTRING) {
+      module_key = lua_tostring(Ls, -1);
+    }
+    lua_pop(Ls, 1);
+    
+    lua_pop(Ls, 2); //pop __gxcopy and metatable
+    
+    if(!module_key || !module_name) {
+      return shuso_set_error(shuso_state(Ls), "failed to gxcopy metatable, __gxcopy missing 'module' or 'module_key' field");
+    }
+    
+    lua_getglobal(Ld, "require");
+    lua_pushstring(Ld, module_name);
+    if(lua_pcall(Ld, 1, 1, 0) != LUA_OK) {
+      return shuso_set_error(shuso_state(Ls), "failed to gxcopy metatable, __gxcopy 'module' %s is missing", module_name);
+    }
+    if(!lua_istable(Ld, -1)) {
+      return shuso_set_error(shuso_state(Ls), "failed to gxcopy metatable, __gxcopy 'module' %s is not a table", module_name);
+    }
+    if(lua_getfield(Ld, -1, module_key) != LUA_TTABLE) {
+      return shuso_set_error(shuso_state(Ls), "failed to gxcopy metatable, __gxcopy 'module' %s 'module_key' \"%s\" is not a table", module_name, module_key);
+    }
+    lua_setmetatable(Ld, -3);
+    lua_pop(Ld, 1);
+    return true;
+  }
+  lua_pop(Ls, 1);
+  
+  if(!gxcopy_any(gxs)) {
+    return false;
+  }
+  lua_pop(Ls, 1);
+  lua_setmetatable(Ld, -2);
+  
+  return true;
+}
+
+static bool gxcopy_table(gxcopy_state_t *gxs) {
+  lua_State *Ls = gxs->src.state, *Ld = gxs->dst.state;
+  int tindex = lua_absindex(Ls, -1);
+  lua_rawgeti(Ls, LUA_REGISTRYINDEX, LUA_RIDX_GLOBALS);
+  if(lua_compare(Ls, -1, -2, LUA_OPEQ)) {
+    //it's the globals table
+    lua_pop(Ls, 1);
+    lua_rawgeti(Ld, LUA_REGISTRYINDEX, LUA_RIDX_GLOBALS);
+    return true;
+  }
+  lua_pop(Ls, 1);
+  
+  if(gxcopy_cache_load(gxs)) {
+    return true;
+  }
+  lua_newtable(Ld);
+  gxcopy_cache_store(gxs);
+  
+  lua_pushnil(Ls);  /* first key */
+  while(lua_next(Ls, tindex) != 0) {
+    //key at -2, value at -1
+    lua_pushvalue(Ls, -2);
+    gxcopy_any(gxs); //copy key
+    lua_pop(Ls, 1);
+    gxcopy_any(gxs); //copy value
+    lua_pop(Ls, 1);
+    lua_rawset(Ld, -3);
+  }
+  if(!gxcopy_metatable(gxs)) {
+    return false;
+  }
+  return true;
+}
+
+static bool gxcopy_upvalues(gxcopy_state_t *gxs, int nups) {
+  lua_State *Ls = gxs->src.state;
+  for(int i=1; i<=nups; i++) {
+    assert(lua_getupvalue(Ls, -1, i));
+    if(!gxcopy_any(gxs)) {
+      return false;
+    }
+    lua_pop(Ls, 1);
+  }
+  return true;
+}
+
+static bool gxcopy_function(gxcopy_state_t *gxs) {
+  lua_State *Ls = gxs->src.state, *Ld = gxs->dst.state;
+  if(gxcopy_cache_load(gxs)) {
+    return true;
+  }
+  
+  lua_Debug dbg;
+  lua_pushvalue(Ls, -1);
+  lua_getinfo(Ls, ">Snlu", &dbg);
+  if(!dbg.name) dbg.name = "";
+
+  if(lua_iscfunction(Ls, -1)) {
+    //this one's easy;
+    lua_CFunction func = lua_tocfunction(Ls, -1);
+    if(dbg.nups > 0) {
+      if(!gxcopy_upvalues(gxs, dbg.nups)) {
+        return false;
+      }
+      lua_pushcclosure(Ld, func, dbg.nups);
+    }
+    else {
+      lua_pushcfunction(Ld, func);
+    }
+    gxcopy_cache_store(gxs);
+    return true;
+  }
+  
+  luaS_function_dump(Ls);
+  size_t sz;
+  const char *buf = lua_tolstring(Ls, -1, &sz);
+  
+  
+  if(luaL_loadbufferx(Ld, buf, sz, dbg.name, "b") != LUA_OK) {
+    return shuso_set_error(shuso_state(Ls), "failed to gxcopy function %s, loadbufferx failed", dbg.name);
+  }
+  lua_pop(Ls, 1);
+  assert(lua_isfunction(Ld, -1));
+  
+  int funcidx = lua_absindex(Ld, -1);
+  if(dbg.nups > 0) {
+    if(!gxcopy_upvalues(gxs, dbg.nups)) {
+      return false; 
+    }
+    for(int i=dbg.nups; i>0; i--) {
+      if(!lua_setupvalue(Ld, funcidx, i)) {
+        return shuso_set_error(shuso_state(Ls), "failed to gxcopy function %s, setupvalue %i failed", dbg.name, i);
+      }
+    }
+  }
+  
+  gxcopy_cache_store(gxs);
+  
+  return true;
+}
+
+static bool gxcopy_userdata(gxcopy_state_t *gxs) {
+  return shuso_set_error(shuso_state(gxs->src.state), "failed to gxcopy userdata, don'tknow how to do that yet");
+
+}
+static bool gxcopy_thread(gxcopy_state_t *gxs) {
+  return shuso_set_error(shuso_state(gxs->src.state), "failed to gxcopy coroutine, this isn't possible to do between different Lua states");
+}
+
+
+static bool gxcopy_any(gxcopy_state_t *gxs) {
+  lua_State *Ls = gxs->src.state, *Ld = gxs->dst.state;
+  int type = lua_type(Ls, -1);
+  switch(type) {
+    case LUA_TNIL:
+      lua_pushnil(Ld);
+      break;
+    case LUA_TNUMBER:
+      if(lua_isinteger(Ls, -1)) {
+        lua_pushinteger(Ld, lua_tointeger(Ls, -1));
+      }
+      else {
+        lua_pushnumber(Ld, lua_tonumber(Ls, -1));
+      }
+      break;
+    case LUA_TBOOLEAN:
+      lua_pushboolean(Ld, lua_toboolean(Ls, -1));
+      break;
+    case LUA_TSTRING: {
+      size_t sz;
+      const char *str = lua_tolstring(Ls, -1, &sz);
+      lua_pushlstring(Ld, str, sz);
+    } break;
+    case LUA_TTABLE:
+      if(!gxcopy_table(gxs)) {
+        return false;
+      }
+      break;
+    case LUA_TFUNCTION:
+      if(!gxcopy_function(gxs)) {
+        return false;
+      }
+      break;
+    case LUA_TUSERDATA:
+      if(!gxcopy_userdata(gxs)) {
+        return false;
+      }
+      break;
+    case LUA_TTHREAD:
+      if(!gxcopy_thread(gxs)) {
+        return false;
+      }
+      break;
+    case LUA_TLIGHTUSERDATA:
+      lua_pushlightuserdata(Ld, (void *)lua_topointer(Ls, -1));
+      break;
+  }
+  return true;
+}
+
+//copy value from one global state to another
+bool luaS_gxcopy(lua_State *Ls, lua_State *Ld) {
+  
+  lua_newtable(Ls);
+  int src_copies_ref = luaL_ref(Ls, LUA_REGISTRYINDEX);
+  
+  lua_newtable(Ld);
+  int dst_copies_ref = luaL_ref(Ld, LUA_REGISTRYINDEX);
+  
+  gxcopy_state_t gxs = {
+    .src.state = Ls,
+    .src.copies_ref = src_copies_ref,
+    .dst.state = Ld,
+    .dst.copies_ref = dst_copies_ref,
+  };
+  
+  bool ok = gxcopy_any(&gxs);
+  luaL_unref(Ls, LUA_REGISTRYINDEX, src_copies_ref);
+  luaL_unref(Ld, LUA_REGISTRYINDEX, dst_copies_ref);
+  return ok;
+}
+
+

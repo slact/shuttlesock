@@ -35,6 +35,12 @@ int luaS_call_or_resume(lua_State *L, int nargs);
 bool luaS_function_call_result_ok(lua_State *L, int nargs, bool preserve_result);
 bool luaS_function_pcall_result_ok(lua_State *L, int nargs, bool preserve_result);
 
+//copy value from one global state to another
+bool luaS_gxcopy(lua_State *source, lua_State *destination);
+
+//serialize function (no upvalues!!)
+int luaS_function_dump(lua_State *L);
+
 //system calls and such
 int luaS_glob(lua_State *L); //glob(); pop 1 string, push glob table of strings or nil, err
 
