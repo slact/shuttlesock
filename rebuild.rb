@@ -379,6 +379,9 @@ rebuild = Opts.new do
   self.test :debug_flag,
     set: {run_test: true}
   
+  no_luac :debug_flag,
+    cmake_define: {SHUTTLESOCK_NO_LUAC: true}
+  
   nothread :debug_flag,
     alt: ["nothreads", "no-threads"],
     cmake_define: {SHUTTLESOCK_DEBUG_NO_WORKER_THREADS: true}

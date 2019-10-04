@@ -245,7 +245,7 @@ int luaS_do_embedded_script(lua_State *L) {
         rc = luaL_loadbufferx(L, script->compiled, script->compiled_len, script->name, "b");
       }
       else {
-        rc = luaL_loadbuffer(L, script->script, script->strlen, script->name);
+        rc = luaL_loadbuffer(L, script->script, script->script_len, script->name);
       }
       if(rc != LUA_OK) {
         lua_error(L);

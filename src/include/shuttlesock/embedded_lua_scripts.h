@@ -6,7 +6,7 @@ typedef struct shuso_lua_embedded_scripts_s {
   const char *name;
   bool        module;
   const char *script;
-  size_t      strlen;
+  size_t      script_len;
   const char *compiled;
   size_t      compiled_len;
 } shuso_lua_embedded_scripts_t;
