@@ -240,11 +240,18 @@ int luaS_do_embedded_script(lua_State *L) {
   shuso_lua_embedded_scripts_t *script;
   for(script = &shuttlesock_lua_embedded_scripts[0]; script->name != NULL; script++) {
     if(strcmp(script->name, name) == 0) {
-      int rc = luaL_loadbuffer(L, script->script, script->strlen, script->name);
+      int rc;
+      if(script->compiled) {
+        rc = luaL_loadbufferx(L, script->compiled, script->compiled_len, script->name, "b");
+      }
+      else {
+        rc = luaL_loadbuffer(L, script->script, script->strlen, script->name);
+      }
       if(rc != LUA_OK) {
         lua_error(L);
         return 0;
       }
+      
       lua_call(L, 0, 1);
       return 1;
     }

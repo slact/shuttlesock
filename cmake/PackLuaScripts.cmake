@@ -58,7 +58,7 @@ function(pack_lua_scripts_finish)
     "#include <shuttlesock/embedded_lua_scripts.h>\n"
     "shuso_lua_embedded_scripts_t shuttlesock_lua_embedded_scripts[] = {\n"
     "${SCRIPTS_STRUCT}\n"
-    "  {NULL,false,NULL,0}\n"
+    "  {.name=NULL,.script=NULL}\n"
     "};\n"
   )
   
