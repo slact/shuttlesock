@@ -88,7 +88,10 @@ function(pack_lua_scripts_finish)
       endif()
       
       file(READ "${luac_outfile}" SCRIPT_STRING HEX)
-      file(SIZE "${luac_outfile}" SCRIPT_STRING_LENGTH)
+      
+      string(LENGTH "${SCRIPT_STRING}" SCRIPT_STRING_LENGTH)
+      math(EXPR SCRIPT_STRING_LENGTH "${SCRIPT_STRING_LENGTH} / 2")
+      
       string(REGEX REPLACE "([0-9a-f][0-9a-f])" "\\\\x\\1" SCRIPT_STRING ${SCRIPT_STRING})
       set(script_key "compiled")
       set(script_len_key "compiled_len")
