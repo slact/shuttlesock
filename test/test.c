@@ -120,7 +120,7 @@ describe(init_and_shutdown) {
 }
 
 static bool config_test_a_setting_init_config(shuso_t *S, shuso_module_t *module, shuso_setting_block_t *block) {
-  return false;
+  return true;
 }
 
 describe(config) {
@@ -152,9 +152,17 @@ describe(config) {
     };
     shuso_add_module(S, &test_module);
     shuso_config_string_parse(S, " \
-      foobar 10 11 12 13 \"14\"; \
-    "
-    );
+      foobar 10 11 12 13 \"14\"; \n\
+      blorp { \n\
+        shmoo { \n\
+          blorp { \n\
+            flarb 99; \n\
+            #yeah \n\
+            foobar 12; \n\
+          }\n\
+        }\n\
+      }\n\
+    ");
     shuso_configure_finish(S);
     shusoT_run_test(S, SHUTTLESOCK_MANAGER, stop_shuttlesock, NULL, (void *)(intptr_t)SHUTTLESOCK_MANAGER);
     assert_shuso_ok(S);
