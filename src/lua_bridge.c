@@ -6,7 +6,7 @@
 
 #include <glob.h>
 
-#if defined(SHUTTLESOCK_SANITIZE) || defined(SHUTTLESOCK_VALGRIND) || defined(__clang_analyzer__)
+#if defined(SHUTTLESOCK_SANITIZE) || defined(SHUTTLESOCK_DEBUG_VALGRIND) || defined(__clang_analyzer__)
 #define INIT_LUA_ALLOCS 1
 #endif
 

@@ -4,7 +4,7 @@
 #include <assert.h>
 #include <unistd.h>
 #include <stdio.h>
-#if defined(SHUTTLESOCK_VALGRIND)
+#if defined(SHUTTLESOCK_DEBUG_VALGRIND)
 #include <valgrind/memcheck.h>
 #endif
 
@@ -21,7 +21,7 @@
 static shuso_stalloc_page_t *add_page(shuso_stalloc_t *st) {
   shuso_stalloc_page_t *page = malloc(st->page.size);
   if(!page) return NULL;
-#ifdef SHUTTLESOCK_VALGRIND
+#ifdef SHUTTLESOCK_DEBUG_VALGRIND
   VALGRIND_MAKE_MEM_NOACCESS(page, st->page.size);
   VALGRIND_MAKE_MEM_UNDEFINED(page, sizeof(*page)); //page header
   st->page.cur+=sizeof(void *); //add padding
@@ -92,7 +92,7 @@ bool shuso_stalloc_init_clean(shuso_stalloc_t *st, size_t pagesize) {
 
 static void *plain_old_malloc(shuso_stalloc_t *st, size_t sz) {
   shuso_stalloc_allocd_t *cur;
-#if defined(SHUTTLESOCK_SANITIZE) || defined(SHUTTLESOCK_VALGRIND)
+#if defined(SHUTTLESOCK_SANITIZE) || defined(SHUTTLESOCK_DEBUG_VALGRIND)
   cur = malloc(sizeof(*cur));
   if(!cur) return NULL;
   cur->data = malloc(sz);
@@ -119,7 +119,7 @@ static void plain_old_free_last(shuso_stalloc_t *st) {
 #ifdef SHUTTLESOCK_STALLOC_TRACK_SPACE
   st->space.allocd -= cur->size;
 #endif
-#if defined(SHUTTLESOCK_SANITIZE) || defined(SHUTTLESOCK_VALGRIND)
+#if defined(SHUTTLESOCK_SANITIZE) || defined(SHUTTLESOCK_DEBUG_VALGRIND)
   free(cur->data);
 #endif
   free(cur);
@@ -140,7 +140,7 @@ static inline void *shuso_stalloc_with_alignment(shuso_stalloc_t *st, size_t sz,
     ret = cur;
     align_padding = 0;
   }
-#ifdef SHUTTLESOCK_VALGRIND
+#ifdef SHUTTLESOCK_DEBUG_VALGRIND
   ssize_t valgrind_padding = 0;
   if(ret == cur) {
     //add padding between used page chunks
@@ -154,7 +154,7 @@ static inline void *shuso_stalloc_with_alignment(shuso_stalloc_t *st, size_t sz,
     st->page.cur = &ret[sz];
 #ifdef SHUTTLESOCK_STALLOC_TRACK_SPACE
     st->space.wasted += align_padding;
-#ifdef SHUTTLESOCK_VALGRIND
+#ifdef SHUTTLESOCK_DEBUG_VALGRIND
     st->space.wasted -= valgrind_padding;
     st->space.reserved += valgrind_padding;
 #endif
@@ -164,7 +164,7 @@ static inline void *shuso_stalloc_with_alignment(shuso_stalloc_t *st, size_t sz,
     page->space.used += sz;
     page->space.cur = st->page.cur;
 #endif
-#ifdef SHUTTLESOCK_VALGRIND
+#ifdef SHUTTLESOCK_DEBUG_VALGRIND
     VALGRIND_MAKE_MEM_UNDEFINED(ret, sz);
 #endif
   }
@@ -181,7 +181,7 @@ static inline void *shuso_stalloc_with_alignment(shuso_stalloc_t *st, size_t sz,
 #endif
     ret = st->page.cur;
     st->page.cur = &ret[sz];
-#ifdef SHUTTLESOCK_VALGRIND
+#ifdef SHUTTLESOCK_DEBUG_VALGRIND
     VALGRIND_MAKE_MEM_UNDEFINED(ret, sz);
 #endif
   }

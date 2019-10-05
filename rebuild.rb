@@ -126,7 +126,7 @@ class Opts
       SHUTTLESOCK_DEBUG_NO_WORKER_THREADS: false,
       SHUTTLESOCK_DEBUG_MODULE_SYSTEM: false,
       SHUTTLESOCK_STALLOC_TRACK_SPACE: false,
-      SHUTTLESOCK_VALGRIND: false,
+      SHUTTLESOCK_DEBUG_VALGRIND: false,
       SHUTTLESOCK_SANITIZE: false,
       DISABLE_CCACHE: false
     }.merge(@cmake_defines)
@@ -337,7 +337,7 @@ rebuild = Opts.new do
     set: {clean_after: true, clang_analyze: true}
   
   valgrind :debug_flag,
-    cmake_define: {SHUTTLESOCK_VALGRIND: true}
+    cmake_define: {SHUTTLESOCK_DEBUG_VALGRIND: true}
   
   stalloc_track_space :debug_flag,
     cmake_define: {SHUTTLESOCK_STALLOC_TRACK_SPACE: true}
