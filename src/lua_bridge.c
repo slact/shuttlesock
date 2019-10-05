@@ -281,6 +281,12 @@ bool shuso_lua_initialize(shuso_t *S) {
   lua_State *L = S->lua.state;
   luaS_set_shuttlesock_state_pointer(L, S);
   
+#ifdef SHUTTLESOCK_DEBUG_LUACOV
+  lua_getglobal(L, "require");
+  lua_pushliteral(L, "luacov");
+  lua_call(L, 1, 1);
+#endif
+  
   luaL_requiref(L, "shuttlesock.core", luaS_push_core_module, 0);
   lua_pop(L, 1);
   

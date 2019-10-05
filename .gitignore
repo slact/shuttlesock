@@ -4,3 +4,4 @@ vgcore.*
 CMakeFiles/
 cachegrind.*
 callgrind-*
+coverage/

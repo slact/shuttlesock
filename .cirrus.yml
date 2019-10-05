@@ -5,13 +5,15 @@ linux_task:
     CODECOV_TOKEN: 47866546-4d0f-4b92-8359-083764e1123f
   setup_script:
     - apt-get update
-    - apt-get install -y --no-install-recommends valgrind ccache clang cmake libev-dev zsh ruby lua5.3 liblua5.3-dev
+    - apt-get install -y --no-install-recommends valgrind ccache clang cmake libev-dev zsh ruby lua5.3 liblua5.3-dev luarocks
+    - luarocks install luacov cluacov luacov-multiple luacheck
   test_basic_script:
     - ./rebuild.sh
     - ./test.sh
   codecov_script:
-    - ./rebuild.sh gcc-coverage no-display-coverage verbose
-    - bash <(curl -s https://codecov.io/bash)
+    - ./rebuild.sh gcc-coverage no-display-coverage
+    - bash <(curl -s https://codecov.io/bash) -cF c
+    - bash <(curl -s https://codecov.io/bash) -cF lua
   test_optimized_script:
     - ./rebuild.sh O3
     - ./test.sh

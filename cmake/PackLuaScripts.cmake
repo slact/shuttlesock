@@ -77,8 +77,7 @@ function(pack_lua_scripts_finish)
       file(WRITE "${luac_outfile}" "")
       message(STATUS "Compiling Lua script ${SCRIPT_FILE}")
       execute_process(
-        COMMAND "${LUAC_PROGRAM}" -o "${luac_outfile}" ${SCRIPT_FILE}
-        WORKING_DIRECTORY "${SHUTTLESOCK_LUA_SCRIPTS_PATH}"
+        COMMAND "${LUAC_PROGRAM}" -o "${luac_outfile}" "${SHUTTLESOCK_LUA_SCRIPTS_PATH}/${SCRIPT_FILE}"
         RESULT_VARIABLE luac_res
         OUTPUT_VARIABLE luac_out
         ERROR_VARIABLE luac_err
@@ -116,7 +115,7 @@ function(pack_lua_scripts_finish)
       "  {\n"
       "    .name = \"${SCRIPT_NAME}\",\n"
       "    .module = ${SCRIPT_IS_MODULE},\n"
-      "    .filename = \"${SCRIPT_FILE}\",\n"
+      "    .filename = \"${SHUTTLESOCK_LUA_SCRIPTS_PATH}/${SCRIPT_FILE}\",\n"
       "    .${script_key} = \"${SCRIPT_STRING}\",\n"
       "    .${script_len_key} = ${SCRIPT_STRING_LENGTH}\n"
       "  },\n"

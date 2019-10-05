@@ -234,17 +234,19 @@ class Opts
   def system_echo(*args)
     echo = args.dup
     if Hash === echo[0]
-      
+      echo.shift
     end
+    puts yellow ">> #{echo.join " "}"
+    return system *args
   end
   
-  def in_dir(what, &block)
-    if what == :build
+  def in_dir(what, opt = nil, &block)
+    if what.to_sym == :build
       @in_build_dir = true
-      puts yellow ">> cd #{BUILD_DIR}"
+      puts yellow ">> cd #{BUILD_DIR}" unless opt == :quiet
       Dir.chdir BUILD_DIR
       yield
-      puts yellow ">> cd .."
+      puts yellow ">> cd .." unless opt == :quiet
       Dir.chdir BASE_DIR
     elsif what == :base
       prev = Dir.pwd
@@ -267,21 +269,48 @@ class Opts
       return false
     end
 
-    if @build_type == "DebugCoverage" && !@vars[:no_display_coverage]
-      puts green "Preparing coverage results..."
-      in_dir :build do
-        if @vars[:compiler] == "gcc"
-          system 'mkdir coverage-report 2>/dev/null'
-          system 'gcovr --root ../src --html-details -o coverage-report/index.html --gcov-ignore-parse-errors ./'
-          puts green "done"
-        elsif @vars[:compiler] == "clang"
-          system 'llvm-profdata merge -sparse *.profraw -o .profdata'
-          system 'llvm-cov show -format="html" -output-dir="coverage-report" -instr-profile=".profdata"  -ignore-filename-regex="test/.*" -ignore-filename-regex="lib/.*" "libshuttlesock.so" -object "shuso_test"'
+    if @build_type == "DebugCoverage"
+      system "mkdir coverage 2>/dev/null"
+      if File.exists? 'build/luacov.stats.out' then
+        puts green "Preparing Lua coverage reports..."
+        system "rm -Rf coverage/lua 2>/dev/null"
+        system "mkdir coverage/lua 2>/dev/null"
+        
+        if system_echo 'luacov'
           puts green "done"
         else
-          $stderr.puts red "don't know how to generate coverage reports for this compiler"
+          $stderr.puts red "luacov failed"
         end
-        system 'xdg-open', './coverage-report/index.html'
+      else
+        puts green "No luacov.stats.out, skipping Lua coverage"
+      end
+      
+      if !@vars[:no_display_coverage]
+        puts green "Preparing C coverage results..."
+        system "rm -Rf coverage/c 2>/dev/null"
+        system "mkdir coverage/c 2>/dev/null"
+        
+        ok = false
+        in_dir "build", :quiet do
+          if @vars[:compiler] == "gcc"
+            system 'mkdir coverage-report 2>/dev/null'
+            ok = system_echo 'gcovr --root ../src --html-details -o ../coverage/c/index.html --gcov-ignore-parse-errors ./'
+          elsif @vars[:compiler] == "clang"
+            system_echo 'llvm-profdata merge -sparse *.profraw -o .profdata'
+            ok = system_echo 'llvm-cov show -format="html" -output-dir="../coverage/c/" -instr-profile=".profdata"  -ignore-filename-regex="test/.*" -ignore-filename-regex="lib/.*" "libshuttlesock.so" -object "shuso_test"'
+          else
+            $stderr.puts red "don't know how to generate coverage reports with this compiler"
+          end
+        end
+        if ok then
+          puts green "done"
+        else
+          $stderr.puts red "failed"
+        end
+        if File.exist? 'coverage/lua/index.html'
+          system 'xdg-open', 'coverage/lua/index.html'
+        end
+        system 'xdg-open', 'coverage/c/index.html'
       end
     end
     self
@@ -360,11 +389,11 @@ rebuild = Opts.new do
   
   coverage :debug_flag,
     alt: ["clang_coverage"],
-    imply: [:clang, :test],
+    imply: [:clang, :test, :luacov],
     build: "DebugCoverage"
   
   gcc_coverage :debug_flag,
-    imply: [:gcc, :test],
+    imply: [:gcc, :test, :luacov],
     build: "DebugCoverage"
   
   no_display_coverage :debug_flag,
@@ -396,6 +425,11 @@ rebuild = Opts.new do
     alt: ["nopool"],
     cmake_define: {SHUTTLESOCK_DEBUG_STALLOC_NOPOOL: true}
 
+  luacov :debug_flag,
+    alt: ["lua_coverage"],
+    imply: [:clean],
+    cmake_define: {SHUTTLESOCK_DEBUG_LUACOV: true}
+  
   cmake_debug :debug_flag,
     cmake_opts: ["--debug-output"]
   
