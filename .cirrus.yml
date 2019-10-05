@@ -6,7 +6,10 @@ linux_task:
   setup_script:
     - apt-get update
     - apt-get install -y --no-install-recommends valgrind ccache clang cmake libev-dev zsh ruby lua5.3 liblua5.3-dev luarocks
-    - luarocks install luacov cluacov luacov-multiple luacheck
+    - luarocks install luacov
+    - luarocks install cluacov
+    - luarocks install luacov-multiple
+    - luarocks install luacheck
   test_basic_script:
     - ./rebuild.sh
     - ./test.sh
