@@ -14,9 +14,8 @@ linux_task:
     - ./rebuild.sh
     - ./test.sh
   codecov_script:
-    - ./rebuild.sh gcc-coverage no-display-coverage
-    - bash <(curl -s https://codecov.io/bash) -cF c
-    - bash <(curl -s https://codecov.io/bash) -cF lua
+    - ./rebuild.sh gcc-coverage luacov no-display-coverage
+    - bash <(curl -s https://codecov.io/bash)
   test_optimized_script:
     - ./rebuild.sh O3
     - ./test.sh
