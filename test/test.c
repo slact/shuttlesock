@@ -440,7 +440,9 @@ describe(stack_allocator) {
         assertneq(ptr[i], ptr[j], "those should be different allocations");
       }
     }
-    asserteq(st.allocd.last, NULL, "nothing allocd");
+#ifndef SHUTTLESOCK_STALLOC_NOPOOL
+    asserteq(st.allocd.last, NULL, "nothing should have been mallocd");
+#endif
   }
   
   test("some very large allocs") {
@@ -459,16 +461,25 @@ describe(stack_allocator) {
   
   test("a few pages' worth") {
     static char *chr[500];
-    size_t sz = st.page.size / 5;
+    size_t sz;
+    sz = st.page.size / 5;
+    if(sz == 0) sz = 10;
+    
     for(int i=0; i<500; i++) {
       chr[i] = shuso_stalloc(&st, sz);
       memset(chr[i], 0x12, sz);
       for(int j=0; j<i; j++) {
         assertneq((void *)chr[i], (void *)chr[j], "those should be different allocations");
       }
-      asserteq(st.allocd.last, NULL, "nothing allocd");
+#ifndef SHUTTLESOCK_STALLOC_NOPOOL
+      asserteq(st.allocd.last, NULL, "nothing should have been mallocd");
+#endif
     }
+#ifndef SHUTTLESOCK_STALLOC_NOPOOL
     assert(st.page.count>1, "should have more than 1 page");
+#else
+    assert(st.page.count == 0, "should have 0 pages in no-pool mode");
+#endif
   }
   subdesc(stack) {
     static test_stalloc_stats_t stats;

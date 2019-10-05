@@ -305,15 +305,21 @@ void fill_stalloc(shuso_stalloc_t *st, test_stalloc_stats_t *stats, size_t minsz
     }
     else {
       size_t sz = randrange(minsz, maxsz);
+#ifndef SHUTTLESOCK_STALLOC_NOPOOL
       assert(sz < st->page.size);
+#endif
       assert(sz > 0);
       chr = shuso_stalloc(st, sz);
       assert(chr != NULL);
       stats->used += sz;
       stats->count++;
+#ifndef SHUTTLESOCK_STALLOC_NOPOOL
       if(st->allocd.last) {
         assert(st->allocd.last->data != chr);
       }
+#else
+      assert(st->allocd.last->data == chr);
+#endif
     }
     if(stack_push_interval > 0 && i%stack_push_interval == 0) {
       int nextstack = shuso_stalloc_push(st);
