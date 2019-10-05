@@ -9,6 +9,7 @@ typedef struct shuso_lua_embedded_scripts_s {
   size_t      script_len;
   const char *compiled;
   size_t      compiled_len;
+  const char *filename;
 } shuso_lua_embedded_scripts_t;
 extern shuso_lua_embedded_scripts_t shuttlesock_lua_embedded_scripts[];
 /*

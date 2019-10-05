@@ -241,12 +241,15 @@ int luaS_do_embedded_script(lua_State *L) {
   for(script = &shuttlesock_lua_embedded_scripts[0]; script->name != NULL; script++) {
     if(strcmp(script->name, name) == 0) {
       int rc;
+      lua_pushfstring(L, "@%s", script->filename);
+      int fname_idx = lua_gettop(L);
       if(script->compiled) {
-        rc = luaL_loadbufferx(L, script->compiled, script->compiled_len, script->name, "b");
+        rc = luaL_loadbufferx(L, script->compiled, script->compiled_len, lua_tostring(L, -1), "b");
       }
       else {
-        rc = luaL_loadbuffer(L, script->script, script->script_len, script->name);
+        rc = luaL_loadbuffer(L, script->script, script->script_len, lua_tostring(L, -1));
       }
+      lua_remove(L, fname_idx);
       if(rc != LUA_OK) {
         lua_error(L);
         return 0;

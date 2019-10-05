@@ -116,6 +116,7 @@ function(pack_lua_scripts_finish)
       "  {\n"
       "    .name = \"${SCRIPT_NAME}\",\n"
       "    .module = ${SCRIPT_IS_MODULE},\n"
+      "    .filename = \"${SCRIPT_FILE}\",\n"
       "    .${script_key} = \"${SCRIPT_STRING}\",\n"
       "    .${script_len_key} = ${SCRIPT_STRING_LENGTH}\n"
       "  },\n"
