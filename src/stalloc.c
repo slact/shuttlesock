@@ -79,7 +79,7 @@ bool shuso_stalloc_init(shuso_stalloc_t *st, size_t pagesize) {
 }
 
 bool shuso_stalloc_init_clean(shuso_stalloc_t *st, size_t pagesize) {
-#if defined(SHUTTLESOCK_STALLOC_NOPOOL)
+#if defined(SHUTTLESOCK_DEBUG_STALLOC_NOPOOL)
   st->page.size = 0;
 #else
   st->page.size = pagesize > 0 ? pagesize : shuso_system.page_size;

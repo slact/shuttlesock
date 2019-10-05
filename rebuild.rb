@@ -394,7 +394,7 @@ rebuild = Opts.new do
   
   no_pool :debug_flag,
     alt: ["nopool"],
-    cmake_define: {SHUTTLESOCK_STALLOC_NOPOOL: true}
+    cmake_define: {SHUTTLESOCK_DEBUG_STALLOC_NOPOOL: true}
 
   cmake_debug :debug_flag,
     cmake_opts: ["--debug-output"]

@@ -440,7 +440,7 @@ describe(stack_allocator) {
         assertneq(ptr[i], ptr[j], "those should be different allocations");
       }
     }
-#ifndef SHUTTLESOCK_STALLOC_NOPOOL
+#ifndef SHUTTLESOCK_DEBUG_STALLOC_NOPOOL
     asserteq(st.allocd.last, NULL, "nothing should have been mallocd");
 #endif
   }
@@ -471,11 +471,11 @@ describe(stack_allocator) {
       for(int j=0; j<i; j++) {
         assertneq((void *)chr[i], (void *)chr[j], "those should be different allocations");
       }
-#ifndef SHUTTLESOCK_STALLOC_NOPOOL
+#ifndef SHUTTLESOCK_DEBUG_STALLOC_NOPOOL
       asserteq(st.allocd.last, NULL, "nothing should have been mallocd");
 #endif
     }
-#ifndef SHUTTLESOCK_STALLOC_NOPOOL
+#ifndef SHUTTLESOCK_DEBUG_STALLOC_NOPOOL
     assert(st.page.count>1, "should have more than 1 page");
 #else
     assert(st.page.count == 0, "should have 0 pages in no-pool mode");

@@ -305,7 +305,7 @@ void fill_stalloc(shuso_stalloc_t *st, test_stalloc_stats_t *stats, size_t minsz
     }
     else {
       size_t sz = randrange(minsz, maxsz);
-#ifndef SHUTTLESOCK_STALLOC_NOPOOL
+#ifndef SHUTTLESOCK_DEBUG_STALLOC_NOPOOL
       assert(sz < st->page.size);
 #endif
       assert(sz > 0);
@@ -313,7 +313,7 @@ void fill_stalloc(shuso_stalloc_t *st, test_stalloc_stats_t *stats, size_t minsz
       assert(chr != NULL);
       stats->used += sz;
       stats->count++;
-#ifndef SHUTTLESOCK_STALLOC_NOPOOL
+#ifndef SHUTTLESOCK_DEBUG_STALLOC_NOPOOL
       if(st->allocd.last) {
         assert(st->allocd.last->data != chr);
       }
