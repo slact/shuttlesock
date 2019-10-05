@@ -32,7 +32,7 @@ typedef struct shuso_stalloc_allocd_s {
 #ifdef SHUTTLESOCK_STALLOC_TRACK_SPACE
   size_t                       size;
 #endif
-#if defined(SHUTTLESOCK_SANITIZE) || defined(SHUTTLESOCK_DEBUG_VALGRIND)
+#if defined(SHUTTLESOCK_DEBUG_SANITIZE) || defined(SHUTTLESOCK_DEBUG_VALGRIND)
   void                        *data;
 #else
   char                         data[];

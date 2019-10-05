@@ -92,7 +92,7 @@ bool shuso_stalloc_init_clean(shuso_stalloc_t *st, size_t pagesize) {
 
 static void *plain_old_malloc(shuso_stalloc_t *st, size_t sz) {
   shuso_stalloc_allocd_t *cur;
-#if defined(SHUTTLESOCK_SANITIZE) || defined(SHUTTLESOCK_DEBUG_VALGRIND)
+#if defined(SHUTTLESOCK_DEBUG_SANITIZE) || defined(SHUTTLESOCK_DEBUG_VALGRIND)
   cur = malloc(sizeof(*cur));
   if(!cur) return NULL;
   cur->data = malloc(sz);
@@ -119,7 +119,7 @@ static void plain_old_free_last(shuso_stalloc_t *st) {
 #ifdef SHUTTLESOCK_STALLOC_TRACK_SPACE
   st->space.allocd -= cur->size;
 #endif
-#if defined(SHUTTLESOCK_SANITIZE) || defined(SHUTTLESOCK_DEBUG_VALGRIND)
+#if defined(SHUTTLESOCK_DEBUG_SANITIZE) || defined(SHUTTLESOCK_DEBUG_VALGRIND)
   free(cur->data);
 #endif
   free(cur);

@@ -127,7 +127,7 @@ class Opts
       SHUTTLESOCK_DEBUG_MODULE_SYSTEM: false,
       SHUTTLESOCK_STALLOC_TRACK_SPACE: false,
       SHUTTLESOCK_DEBUG_VALGRIND: false,
-      SHUTTLESOCK_SANITIZE: false,
+      SHUTTLESOCK_DEBUG_SANITIZE: false,
       DISABLE_CCACHE: false
     }.merge(@cmake_defines)
     
@@ -347,13 +347,13 @@ rebuild = Opts.new do
     info: 'build with the clang memory sanitizer',
     build: 'DebugMSan',
     imply: [:clang],
-    cmake_define: {SHUTTLESOCK_SANITIZE: true}
+    cmake_define: {SHUTTLESOCK_DEBUG_SANITIZE: true}
   
   sanitize_address :debug_flag,
     info: 'build with the clang address sanitizer',
     build: 'DebugASan',
     imply: [:clang],
-    cmake_define: {SHUTTLESOCK_SANITIZE: true}
+    cmake_define: {SHUTTLESOCK_DEBUG_SANITIZE: true}
   
   verbose :flag, alt: [:v],
     set: {verbose_build: true}

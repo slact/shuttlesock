@@ -9,7 +9,7 @@ typedef struct {
   char   data[];
 } aalloc_t;
 
-#if defined(SHUTTLESOCK_SANITIZE) || defined(SHUTTLESOCK_DEBUG_VALGRIND) || defined(__clang_analyzer__)
+#if defined(SHUTTLESOCK_DEBUG_SANITIZE) || defined(SHUTTLESOCK_DEBUG_VALGRIND) || defined(__clang_analyzer__)
 #define INIT_ARES_ALLOCS 1
 #endif
 
