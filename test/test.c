@@ -96,7 +96,7 @@ describe(init_and_shutdown) {
   static shuso_t          *S = NULL;
   static test_runcheck_t  *chk = NULL;
   before_each() {
-    S = shusoT_create(&chk, 5);
+    S = shusoT_create(&chk, 25);
   }
   after_each() {
     shusoT_destroy(S, &chk);
@@ -128,7 +128,7 @@ describe(config) {
   static test_runcheck_t  *chk = NULL;
   static shuso_t          *S = NULL;
   before_each() {
-    S = shusoT_create(&chk, 5);
+    S = shusoT_create(&chk, 25);
     test_module = (shuso_module_t ){
       .name = "tm",
       .version="0.0.0",
@@ -365,7 +365,7 @@ describe(ipc) {
     static ipc_check_t *ipc_check = NULL;
     
     before_each() {
-      S = shusoT_create(&chk, 15.0);
+      S = shusoT_create(&chk, 25.0);
       ipc_check = shmalloc(ipc_check);
       S->data = ipc_check;
     }
@@ -541,7 +541,7 @@ describe(resolver) {
   static shuso_t *S = NULL;
   static test_runcheck_t  *chk = NULL;
   before_each() {
-    S = shusoT_create(&chk, 10.0);
+    S = shusoT_create(&chk, 25.0);
   }
   after_each() {
     shusoT_destroy(S, &chk);
@@ -565,7 +565,7 @@ describe(shared_memory_allocator) {
   static shuso_shared_slab_t shm;
   static test_runcheck_t  *chk = NULL;
   before_each() {
-    S = shusoT_create(&chk, 10.0);
+    S = shusoT_create(&chk, 25.0);
   }
   after_each() {
     shusoT_destroy(S, &chk);
@@ -677,7 +677,7 @@ describe(listener_sockets) {
   static listener_port_test_t *pt = NULL;
   static test_runcheck_t  *chk = NULL;
   before_each() {
-    S = shusoT_create(&chk, 10.0);
+    S = shusoT_create(&chk, 25.0);
     pt = shmalloc(pt);
     pt->err = NULL;
     S->data = pt;
