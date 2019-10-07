@@ -11,20 +11,12 @@ static bool luaS_push_config_function(lua_State *L, const char *funcname) {
 }
 
 static bool luaS_config_pointer_ref(lua_State *L, const void *ptr) {
-  lua_getfield(L, LUA_REGISTRYINDEX, "shuttlesock.config.pointer_ref_table");
-  lua_pushlightuserdata(L, (void *)ptr);
-  lua_pushvalue(L, -3);
-  lua_settable(L, -3);
-  lua_pop(L, 2);
+  luaS_pointer_ref(L, "shuttlesock.config.pointer_ref_table", ptr);
   return true;
 }
 
 static bool luaS_config_pointer_unref(lua_State *L, const void *ptr) {
-  lua_getfield(L, LUA_REGISTRYINDEX, "shuttlesock.config.pointer_ref_table");
-  assert(lua_istable(L, -1));
-  lua_pushlightuserdata(L, (void *)ptr);
-  lua_gettable(L, -2);
-  lua_remove(L, -2);  
+  luaS_pointer_unref(L, "shuttlesock.config.pointer_ref_table", ptr);
   return lua_isnil(L, -1);
 }
 
@@ -88,9 +80,6 @@ bool shuso_config_register_setting(shuso_t *S, shuso_module_setting_t *setting, 
 bool shuso_config_system_initialize(shuso_t *S) {
   lua_State *L = S->lua.state;
   
-  lua_newtable(L);
-  lua_setfield(L, LUA_REGISTRYINDEX, "shuttlesock.config.pointer_ref_table");
-  
   shuso_config_module_ctx_t *ctx = shuso_stalloc(&S->stalloc, sizeof(*ctx));
   if(!ctx) {
     return shuso_set_error(S, "failed to allocate module context");
@@ -124,9 +113,6 @@ bool shuso_config_system_initialize_worker(shuso_t *S, shuso_t *Smanager) {
   lua_pop(Lm, 1);
 
   assert(lua_istable(L, -1));
-  
-  lua_newtable(L);
-  lua_setfield(L, LUA_REGISTRYINDEX, "shuttlesock.config.pointer_ref_table");
 
   luaS_config_pointer_ref(L, S->common->module_ctx.config);
   

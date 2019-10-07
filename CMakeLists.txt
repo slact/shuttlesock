@@ -27,7 +27,7 @@ set(libsrc
   src/config.c
   ${PROJECT_BINARY_DIR}/src/embedded_lua_scripts.c
   src/lua_binding.c
-  src/lua_bridge.c
+  src/lua_utils.c
 )
 
 add_library(shuttlesock SHARED ${libsrc})
@@ -186,11 +186,11 @@ if(NOT (SHUTTLESOCK_DEFAULT_LOGLEVEL IN_LIST SHUTTLESOCK_LOG_LEVELS))
 endif()
 
 include(PackLuaScripts)
-pack_lua_scripts_start(SCRIPTS_PATH src/lua SOURCE embedded_lua_scripts.c)
-pack_lua_scripts_add(NAME "argparse" SCRIPT modules/argparse/src/argparse.lua MODULE)
-pack_lua_scripts_add(NAME "binser" SCRIPT modules/binser/binser.lua MODULE)
-pack_lua_scripts_add(NAME "mm" SCRIPT modules/mm.lua MODULE)
-pack_lua_scripts_add(NAME "inspect" SCRIPT modules/inspect.lua MODULE)
+pack_lua_scripts_start(SCRIPTS_PATH src SOURCE embedded_lua_scripts.c)
+pack_lua_scripts_add(NAME "argparse" SCRIPT luarocks/argparse/src/argparse.lua MODULE)
+pack_lua_scripts_add(NAME "binser" SCRIPT luarocks/binser/binser.lua MODULE)
+pack_lua_scripts_add(NAME "mm" SCRIPT luarocks/mm.lua MODULE)
+pack_lua_scripts_add(NAME "inspect" SCRIPT luarocks/inspect.lua MODULE)
 pack_lua_scripts_add(NAME "shuttlesock.config" SCRIPT config.lua MODULE CHECK)
 pack_lua_scripts_add(NAME "shuttlesock.module" SCRIPT module.lua MODULE CHECK)
 pack_lua_scripts_finish()

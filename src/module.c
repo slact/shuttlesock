@@ -1,6 +1,5 @@
 #include <shuttlesock.h>
 #include <shuttlesock/embedded_lua_scripts.h>
-#include <shuttlesock/lua_bridge.h>
 #include <lauxlib.h>
 
 static bool Lua_push_module_function(lua_State *L, const char *funcname) {

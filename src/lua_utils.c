@@ -235,6 +235,18 @@ bool shuso_lua_create(shuso_t *S) {
   return true;
 }
 
+int luaS_table_concat(lua_State *L, const char *delimeter) {
+  luaL_checktype(L, -1, LUA_TTABLE);
+  lua_getglobal(L, "table");
+  lua_getfield(L, -1, "concat");
+  lua_remove(L, -2);
+  lua_pushvalue(L, -2);
+  lua_pushliteral(L, " ");
+  luaS_call(L, 2, 1);
+  lua_remove(L, -2);
+  return 1;
+}
+
 int luaS_do_embedded_script(lua_State *L) {
   const char *name = luaL_checkstring(L, -1);
   shuso_lua_embedded_scripts_t *script;
@@ -681,5 +693,3 @@ bool luaS_gxcopy(lua_State *Ls, lua_State *Ld) {
   luaL_unref(Ld, LUA_REGISTRYINDEX, dst_copies_ref);
   return ok;
 }
-
-

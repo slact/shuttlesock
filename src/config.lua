@@ -138,11 +138,6 @@ function Parser.new(name, string, opt)
   return self
 end
 
-function Parser.restore(data)
-  setmetatable(data, parser_mt)
-  return data
-end
-
 do --parser
   local function count_slashes_reverse(str, start, cur)
     local count = 0
@@ -637,14 +632,6 @@ function Config.new(name)
   end
   
   return config
-end
-
-function Config.restore(data)
-  setmetatable(data, config_mt)
-  for i, p in pairs(data.parsers) do
-    data.parsers[i]=Parser.restore(p)
-  end
-  return data
 end
 
 do --config

@@ -119,7 +119,7 @@ static void lua_getlib_field(lua_State *L, const char *lib, const char *field) {
 }
 
 //create a shuttlesock instance from inside Lua
-int Lua_shuso_create(lua_State *L) {
+static int Lua_shuso_create(lua_State *L) {
   if(shuso_state(L)) {
     return luaL_error(L, "shuttlesock instance already exists");
   }
@@ -134,7 +134,7 @@ int Lua_shuso_create(lua_State *L) {
   return 1;
 }
 
-int Lua_shuso_configure_file(lua_State *L) {
+static int Lua_shuso_configure_file(lua_State *L) {
   const char *path = luaL_checkstring(L, 1);
   shuso_t    *S = shuso_state(L);
   if(!shuso_configure_file(S, path)) {
@@ -143,8 +143,8 @@ int Lua_shuso_configure_file(lua_State *L) {
   lua_pushboolean(L, 1);
   return 1;
 }
-int Lua_shuso_configure_string(lua_State *L) {
-    const char *name = luaL_checkstring(L, 1);
+static int Lua_shuso_configure_string(lua_State *L) {
+  const char *name = luaL_checkstring(L, 1);
   const char *string = luaL_checkstring(L, 2);
   shuso_t    *S = shuso_state(L);
   if(!shuso_configure_string(S, name, string)) {
@@ -153,141 +153,72 @@ int Lua_shuso_configure_string(lua_State *L) {
   lua_pushboolean(L, 1);
   return 1;
 }
-/*
-typedef struct {
-  int ref;
-  struct {
-    const char   *data;
-    size_t        len;
-  }             handler_dump[2];
-} handlers_data_t;
 
-static void free_handlers_data(lua_State *L, void *pd) {
-  handlers_data_t *hd = pd;
-  if(hd->ref != LUA_NOREF && hd->ref != LUA_REFNIL) {
-    luaL_unref(L, LUA_REGISTRYINDEX, hd->ref);
-    hd->ref = LUA_NOREF;
-  }
-  for(int i=0; i<2; i++) {
-    if(hd->handler_dump[i].data) {
-      free((void *)hd->handler_dump[i].data);
-      hd->handler_dump[i].data = NULL;
+typedef struct {
+  struct {
+    int                   count;
+    shuso_module_event_t *array;
+    const char          **name;
+  }                     events;
+} shuso_lua_module_data_t;
+
+static bool lua_module_initialize_config(shuso_t *S, shuso_module_t *module, shuso_setting_block_t *block) {
+  return true;
+}
+
+static bool lua_module_initialize_events(shuso_t *S, shuso_module_t *module) {
+  shuso_lua_module_data_t *d = module->privdata;
+  int count = d->events.count;
+  for(int i=0; i<count; i++) {
+    if(!shuso_event_initialize(S, module, d->events.name[i], &d->events.array[i])) {
+      return false;
     }
   }
-  free(hd);
-}
-
-static bool lua_run_handler_function(lua_State *L, void *pd, const char *handler_name) {
-  handlers_data_t *hd = pd;
-  lua_rawgeti(L, LUA_REGISTRYINDEX, hd->ref);
-  lua_getfield(L, -1, handler_name);
-  if(lua_isnil(L, -1)) {
-    return false;
-  }
-  assert(lua_isfunction(L, -1));
-  lua_call(L, 0, 0);
-  lua_pop(L, 1);
   return true;
 }
 
-static bool lua_run_dumped_handler_function(lua_State *L, void *pd, const char *handler_name, int dump_index) {
-  handlers_data_t *hd = pd;
-  int rc = luaL_loadbufferx(L, hd->handler_dump[dump_index].data, hd->handler_dump[dump_index].len, handler_name, "b");
-  if(rc != LUA_OK) {
-    lua_error(L);
-  }
-  lua_call(L, 0, 0);
-  return true;
-}
-
-static int lua_function_dump_writer (lua_State *L, const void *b, size_t size, void *B) {
-  (void)L;
-  luaL_addlstring((luaL_Buffer *) B, (const char *)b, size);
-  return 0;
-}
-static int Lua_function_dump(lua_State *L) {
-  luaL_Buffer b;
-  int strip = lua_toboolean(L, 2);
-  luaL_checktype(L, 1, LUA_TFUNCTION);
-  lua_settop(L, 1);
-  luaL_buffinit(L,&b);
-  if (lua_dump(L, lua_function_dump_writer, &b, strip) != 0)
-    return luaL_error(L, "unable to dump given function");
-  luaL_pushresult(&b);
-  return 1;
-}
-
-
-static int Lua_shuso_configure_handlers(lua_State *L) {
-  shuso_t         *S = shuso_state(L);
-  handlers_data_t *hdata = shuso_stalloc(&S->stalloc, sizeof(*hdata));
-  if(!hdata) {
-    return luaL_error(L, "unable to allocate handler data");
-  }
+static int Lua_shuso_add_module(lua_State *L) {
+  shuso_t *S = shuso_state(L);
   
   luaL_checktype(L, 1, LUA_TTABLE);
+  shuso_module_t *m = shuso_stalloc(&S->stalloc, sizeof(*m));
+  shuso_lua_module_data_t *d = shuso_stalloc(&S->stalloc, sizeof(*d));
+  m->privdata = d;
   
-  lua_newtable(L);
+  lua_getfield(L, -1, "name");
+  m->name = lua_tostring(L, -1);
+  lua_pop(L, 1);
   
-  struct {
-    const char   *name;
-    int           dump_index;      
-  } handlers[] = {
-    {"start_master", -1},
-    {"stop_master", -1},
-    {"start_manager", -1},
-    {"stop_manager", -1},
-    {"start_worker", 0}, 
-    {"stop_worker", 1},
-    {NULL, -1}
-  };
+  lua_getfield(L, -1, "version");
+  m->version = lua_tostring(L, -1);
+  lua_pop(L, 1);
   
-  for(int i=0; handlers[i].name != NULL; i++) {
-    lua_getfield(L, 1, handlers[i].name);
-    if(!lua_isfunction(L, -1)) {
-      free_handlers_data(L, hdata);
-      return luaL_error(L, "handler %s must be a function", handlers[i].name);
-    }
-    if(handlers[i].dump_index < 0) {
-      lua_setfield(L, -2, handlers[i].name);
-    }
-    else {
-      Lua_function_dump(L);
-      size_t      len;
-      const char *str_src = lua_tolstring(L, -1, &len);
-      char       *str_dst = malloc(len);
-      if(!str_dst) {
-        free_handlers_data(L, hdata);
-        return luaL_error(L, "handler %s could not be dumped", handlers[i].name);
-      }
-      memcpy((void *)str_dst, str_src, len);
-      hdata->handler_dump[handlers[i].dump_index].len = len;
-      hdata->handler_dump[handlers[i].dump_index].data = str_dst;
-      
-      lua_pop(L, 2);
-    }
+  lua_getfield(L, -1, "parent_modules");
+  m->parent_modules = lua_tostring(L, -1);
+  lua_pop(L, 1);
+  
+  lua_getfield(L, -1, "subscribe");
+  if(lua_istable(L, -1)) {
+    luaS_table_concat(L, " ");
   }
+  m->subscribe = lua_tostring(L, -1);
+  lua_pop(L, 1);
   
-  hdata->ref = luaL_ref(L, LUA_REGISTRYINDEX);
-  shuso_runtime_handlers_t runtime_handlers = {
-    .start_master = start_master_lua_handler,
-    .stop_master = stop_master_lua_handler,
-    .start_manager = start_manager_lua_handler,
-    .stop_manager = stop_manager_lua_handler,
-    .start_worker = start_worker_lua_handler,
-    .stop_worker = stop_worker_lua_handler,
-    .privdata = hdata
-  };
-  
-  if(!shuso_configure_handlers(S, &runtime_handlers)) {
-    free_handlers_data(L, hdata);
-    return luaS_shuso_error(L);
+  lua_getfield(L, -1, "publish");
+  if(lua_istable(L, -1)) {
+    luaS_table_concat(L, " ");
   }
+  m->publish = lua_tostring(L, -1);
+  lua_pop(L, 1);
+  
+  m->initialize_config = lua_module_initialize_config;
+  m->initialize_events = lua_module_initialize_events;
+  
+  
   
   lua_pushboolean(L, 1);
   return 1;
 }
-*/
 
 static int Lua_shuso_configure_finish(lua_State *L) {
   shuso_t *S = shuso_state(L);
@@ -1529,53 +1460,54 @@ luaL_Reg shuttlesock_core_module_methods[] = {
   {"create", Lua_shuso_create},
 
 //configuration
-  {"configureFile", Lua_shuso_configure_file},
-  {"configureString", Lua_shuso_configure_string},
-  /*{"configureHandlers", Lua_shuso_configure_handlers},*/
-  {"configureFinish", Lua_shuso_configure_finish},
+  {"configure_file", Lua_shuso_configure_file},
+  {"configure_string", Lua_shuso_configure_string},
+  /*{"configure_handlers", Lua_shuso_configure_handlers},*/
+  {"add_module", Lua_shuso_add_module},
+  {"configure_finish", Lua_shuso_configure_finish},
   
   {"destroy", Lua_shuso_destroy},
   
   {"run", Lua_shuso_run},
   {"stop", Lua_shuso_stop},
   
-  {"spawnManager", Lua_shuso_spawn_manager},
-  {"stopManager", Lua_shuso_stop_manager},
+  {"spawn_manager", Lua_shuso_spawn_manager},
+  {"stop_manager", Lua_shuso_stop_manager},
   
-  {"spawnWorker", Lua_shuso_spawn_worker},
-  {"stopWorker", Lua_shuso_stop_worker},
+  {"spawn_worker", Lua_shuso_spawn_worker},
+  {"stop_worker", Lua_shuso_stop_worker},
   
-  {"setLogFile", Lua_shuso_set_log_fd},
+  {"set_log_file", Lua_shuso_set_log_fd},
   
-  {"setError", Lua_shuso_set_error},
+  {"set_error", Lua_shuso_set_error},
     
 //watchers
-  {"newWatcher", Lua_shuso_new_watcher},
+  {"new_watcher", Lua_shuso_new_watcher},
   
 //shared slab
-  {"sharedSlabAllocString", Lua_shuso_shared_slab_alloc_string},
-  {"sharedSlabFreeString", Lua_shuso_shared_slab_free_string},
+  {"shared_slab_alloc_string", Lua_shuso_shared_slab_alloc_string},
+  {"shared_slab_free_string", Lua_shuso_shared_slab_free_string},
 
 //resolver
   {"resolve", Lua_shuso_resolve_hostname},
   
 //logger
   {"log", Lua_shuso_log},
-  {"logDebug", Lua_shuso_log_debug},
-  {"logInfo", Lua_shuso_log_info},
-  {"logNotice", Lua_shuso_log_notice},
-  {"logWarning", Lua_shuso_log_warning},
-  {"logError", Lua_shuso_log_error},
-  {"logCritical", Lua_shuso_log_critical},
-  {"logFatal", Lua_shuso_log_fatal},
+  {"log_debug", Lua_shuso_log_debug},
+  {"log_info", Lua_shuso_log_info},
+  {"log_notice", Lua_shuso_log_notice},
+  {"log_warning", Lua_shuso_log_warning},
+  {"log_error", Lua_shuso_log_error},
+  {"log_critical", Lua_shuso_log_critical},
+  {"log_fatal", Lua_shuso_log_fatal},
 
 //ipc
-  {"sendFile", Lua_shuso_ipc_send_fd},
-  {"newFileReceiver", Lua_shuso_ipc_file_receiver_new},
-  {"openListenerSockets", Lua_shuso_ipc_open_listener_sockets},
-  {"addMessageHandler", Lua_shuso_ipc_add_handler},
-  {"sendMessage", Lua_shuso_ipc_send},
-  {"sendMessageToAllWorkers", Lua_shuso_ipc_send_workers},
+  {"send_file", Lua_shuso_ipc_send_fd},
+  {"new_file_receiver", Lua_shuso_ipc_file_receiver_new},
+  {"open_listener_sockets", Lua_shuso_ipc_open_listener_sockets},
+  {"add_message_handler", Lua_shuso_ipc_add_handler},
+  {"send_message", Lua_shuso_ipc_send},
+  {"send_message_to_all_workers", Lua_shuso_ipc_send_workers},
   
   {NULL, NULL}
 };
