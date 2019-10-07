@@ -23,10 +23,17 @@ int luaS_do_embedded_script(lua_State *L);
 
 //debug stuff
 char *luaS_dbgval(lua_State *L, int n);
-void luaS_printstack(lua_State *L);
 void luaS_mm(lua_State *L, int stack_index);
 void luaS_inspect(lua_State *L, int stack_index);
 void luaS_push_inspect_string(lua_State *L, int stack_index);
+
+/* macro wizardry to have variadic luaS_printstack() call */
+void luaS_printstack_named(lua_State *L, const char*);
+#define ___LUAS_PRINTSTACK_VARARG(_1,_2,NAME,...) NAME
+#define luaS_printstack(...) ___LUAS_PRINTSTACK_VARARG(__VA_ARGS__, LUAS_PRINTSTACK_2, LUAS_PRINTSTACK_1, ___END__VARARG__LIST__)(__VA_ARGS__)
+#define LUAS_PRINTSTACK_2(L, name) luaS_printstack_named(L, name)
+#define LUAS_PRINTSTACK_1(L) luaS_printstack_named(L, "")
+
 
 //running lua functions while being nice to shuttlesock
 void luaS_call(lua_State *L, int nargs, int nresults);

@@ -119,10 +119,10 @@ char *luaS_dbgval(lua_State *L, int n) {
   }
   return buf;
 }
-void luaS_printstack(lua_State *L) {
+void luaS_printstack_named(lua_State *L, const char *name) {
   int        top = lua_gettop(L);
   shuso_t   *S = shuso_state(L);
-  shuso_log_warning(S, "lua stack:");
+  shuso_log_warning(S, "lua stack %s:", name);
   for(int n=top; n>0; n--) {
     shuso_log_warning(S, "  [%-2i  %i]: %s", -(top-n+1), n, luaS_dbgval(L, n));
   }
