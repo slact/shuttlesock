@@ -193,7 +193,7 @@ static bool runcheck_module_initialize_events(shuso_t *S, shuso_module_t *self) 
   
   shuso_event_listen(S, "core:configure", runcheck_event_listener, self);
   shuso_event_listen(S, "core:configure.after", runcheck_event_listener, self);
-      
+  
   shuso_event_listen(S, "core:master.start", runcheck_event_listener, self);
   shuso_event_listen(S, "core:manager.start", runcheck_event_listener, self);
   shuso_event_listen(S, "core:worker.start.before", runcheck_event_listener, self);
@@ -336,6 +336,34 @@ void fill_stalloc(shuso_stalloc_t *st, test_stalloc_stats_t *stats, size_t minsz
     }
   }
   
+}
+
+static int open_required_module(lua_State *L) {
+  lua_getfield(L, LUA_REGISTRYINDEX, "__test_required_packages");
+  const char *name = luaL_checkstring(L, 1);
+  if(!lua_istable(L, -1)) {
+    return luaL_error(L, "module %s not found", name);
+  }
+  lua_getfield(L, -1, name);
+  if(lua_isnil(L, -1)) {
+    return luaL_error(L, "module %s not found", name);
+  }
+
+  return 1;
+}
+
+void lua_add_required_module(lua_State *L, const char *name, const char *code) {
+  lua_getfield(L, LUA_REGISTRYINDEX, "__test_required_packages");
+  if(!lua_istable(L, -1)) {
+    lua_newtable(L);
+    lua_pushvalue(L, -1);
+    lua_setfield(L, LUA_REGISTRYINDEX, "__test_required_packages");
+  }
+  
+  assert_luaL_dostring(L, code);
+  lua_setfield(L, -2, name);
+  
+  luaL_requiref(L, name, open_required_module, false);
 }
 
 bool allocd_ptr_value_correct(char *ptr, size_t sz) {

@@ -392,17 +392,46 @@ int luaS_function_dump(lua_State *L) {
 
 typedef struct {
   struct {
-    lua_State *state;
-    int        copies_ref;
+    lua_State       *state;
+    lua_reference_t  copies_ref;
+    lua_reference_t  modules_ref;
   }          src;
   struct {
-    lua_State *state;
-    int        copies_ref;
+    lua_State       *state;
+    lua_reference_t  copies_ref;
   }          dst;
 } gxcopy_state_t;
 
 
 static bool gxcopy_any(gxcopy_state_t *gxs);
+
+static bool gxcopy_package_loaded(gxcopy_state_t *gxs) {
+  lua_State *Ls = gxs->src.state, *Ld = gxs->dst.state;
+  luaL_checkstack(Ls, 2, NULL);
+  
+  lua_rawgeti(Ls, LUA_REGISTRYINDEX, gxs->src.modules_ref);
+  lua_pushvalue(Ls, -2);
+  lua_gettable(Ls, -2);
+  
+  if(lua_isnil(Ls, -1)) {
+    lua_pop(Ls, 2);
+    return false;
+  }
+  else if(!lua_isstring(Ls, -1)) {
+    assert(0); //how?..
+  }
+  
+  lua_remove(Ls, -2);
+  
+  luaL_checkstack(Ld, 3, NULL);
+  lua_getglobal(Ld, "require");
+  lua_pushstring(Ld, lua_tostring(Ls, -1));
+  lua_pop(Ls, 1);
+  lua_call(Ld, 1, 1);
+  
+  assert(lua_type(Ls, -1) == lua_type(Ld, -1));
+  return true;
+}
 
 static bool gxcopy_cache_load(gxcopy_state_t *gxs) {
   lua_State *Ls = gxs->src.state, *Ld = gxs->dst.state;
@@ -456,6 +485,12 @@ static bool gxcopy_metatable(gxcopy_state_t *gxs) {
     return true;
   }
   
+  if(gxcopy_package_loaded(gxs)) {
+    lua_pop(Ls, 1);
+    lua_setmetatable(Ld, -2);
+    return true;
+  }
+  
   if(lua_getfield(Ls, -1, "__gxcopy") == LUA_TTABLE) {
     const char *module_name = NULL;
     const char *module_key = NULL;
@@ -504,6 +539,11 @@ static bool gxcopy_metatable(gxcopy_state_t *gxs) {
 
 static bool gxcopy_table(gxcopy_state_t *gxs) {
   lua_State *Ls = gxs->src.state, *Ld = gxs->dst.state;
+  
+  if(gxcopy_package_loaded(gxs)) {
+    return true;
+  }
+  
   luaL_checkstack(Ls, 4, NULL);
   luaL_checkstack(Ld, 1, NULL);
   
@@ -554,6 +594,11 @@ static bool gxcopy_upvalues(gxcopy_state_t *gxs, int nups) {
 
 static bool gxcopy_function(gxcopy_state_t *gxs) {
   lua_State *Ls = gxs->src.state, *Ld = gxs->dst.state;
+  
+  if(gxcopy_package_loaded(gxs)) {
+    return true;
+  }
+  
   luaL_checkstack(Ls, 2, NULL);
   luaL_checkstack(Ld, 2, NULL);
   if(gxcopy_cache_load(gxs)) {
@@ -610,6 +655,10 @@ static bool gxcopy_function(gxcopy_state_t *gxs) {
 }
 
 static bool gxcopy_userdata(gxcopy_state_t *gxs) {
+  if(gxcopy_package_loaded(gxs)) {
+    return true;
+  }
+  
   return shuso_set_error(shuso_state(gxs->src.state), "failed to gxcopy userdata, don'tknow how to do that yet");
 
 }
@@ -684,12 +733,28 @@ bool luaS_gxcopy(lua_State *Ls, lua_State *Ld) {
   gxcopy_state_t gxs = {
     .src.state = Ls,
     .src.copies_ref = src_copies_ref,
+    .src.modules_ref = LUA_REFNIL,
     .dst.state = Ld,
     .dst.copies_ref = dst_copies_ref,
   };
   
+  lua_newtable(Ls);
+  //invert the package.loaded table
+  lua_getglobal(Ls, "package");
+  lua_getfield(Ls, -1, "loaded");
+  lua_remove(Ls, -2);
+  lua_pushnil(Ls);  /* first key */
+  while(lua_next(Ls, -2) != 0) {
+    lua_pushvalue(Ls, -2);
+    lua_settable(Ls, -5);
+  }
+  lua_pop(Ls, 1);
+  int src_modules_ref = luaL_ref(Ls, LUA_REGISTRYINDEX);
+  gxs.src.modules_ref = src_modules_ref;
+  
   bool ok = gxcopy_any(&gxs);
   luaL_unref(Ls, LUA_REGISTRYINDEX, src_copies_ref);
+  luaL_unref(Ls, LUA_REGISTRYINDEX, src_modules_ref);
   luaL_unref(Ld, LUA_REGISTRYINDEX, dst_copies_ref);
   return ok;
 }

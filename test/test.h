@@ -152,6 +152,15 @@ do { \
 
 #define skip(...) while(0)
 
+#define assert_luaL_dostring(L, str) do { \
+  if(luaL_loadstring(L, (str)) != LUA_OK) { \
+    snow_fail("%s", lua_tostring(L, -1)); \
+  } \
+  if(lua_pcall(L, 0, LUA_MULTRET, 0) != LUA_OK) { \
+    snow_fail("%s", lua_tostring(L, -1)); \
+  } \
+} while(0)
+
 typedef struct {
   size_t largesz;
   off_t  count;
@@ -164,5 +173,7 @@ typedef struct {
 void fill_stalloc(shuso_stalloc_t *st, test_stalloc_stats_t *stats, size_t minsz, size_t maxsz, int large_alloc_interval, int total_items, int stack_push_count);
 
 bool allocd_ptr_value_correct(char *ptr, size_t sz);
+
+void lua_add_required_module(lua_State *L, const char *name, const char *code);
 
 #endif //__SHUTTLESOCK_TEST_H

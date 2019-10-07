@@ -170,37 +170,78 @@ describe(config) {
 }
 
 describe(lua_bridge) {
-  test("luaS_gxcopy") {
-    shuso_t          *Ss = shuso_create(NULL);
-    shuso_t          *Sd = shuso_create(NULL);
-    //shuso_configure_finish(Ss);
-    //shuso_configure_finish(Sd);
-    lua_State *Ls = Ss->lua.state;
-    lua_State *Ld = Sd->lua.state;
+  subdesc(luaS_gxcopy) {
+    static shuso_t   *Ss;
+    static shuso_t   *Sd;
+    static lua_State *Ls;
+    static lua_State *Ld;
+    before_each() {
+      Ss = shuso_create(NULL);
+      Sd = shuso_create(NULL);
+      Ls = Ss->lua.state;
+      Ld = Sd->lua.state;
+      
+      assert(Ls);
+      assert(Ld);
+    }
+    after_each() {
+      if(Ss) shuso_destroy(Ss);
+      if(Sd) shuso_destroy(Sd);
+    }
     
-    assert(Ls);
-    assert(Ld);
+    test("required packages") {
+      lua_add_required_module(Ls, "foobar", "return {o='src'}");
+      assert_luaL_dostring(Ls,"\
+        local foobar = require 'foobar' \
+        return { \
+          foo1 = foobar, \
+          foo2 = foobar, \
+          math = require 'math', \
+          metafoo = setmetatable({1}, require 'foobar') \
+        }"
+      );
+      
+      lua_add_required_module(Ld, "foobar", "return {o='dst'}");
+      
+      luaS_gxcopy(Ls, Ld);
+      lua_setglobal(Ld, "copy");
+      
+      assert_luaL_dostring(Ld, "\
+        assert(copy.foo1 == require 'foobar', 'foo1 mismatch') \
+        assert(copy.foo2 == require 'foobar', 'foo2 mismatch') \
+        assert(copy.math == require 'math',  'math mismatch') \
+        assert(getmetatable(copy.metafoo) == require 'foobar', 'metafoo metatable mismatch') \
+        assert(require 'foobar'.o == 'dst', 'foobar module is wrong') \
+        return true"
+      );
+      
+      
+      if(lua_isnil(Ld, -1)) {
+        snow_fail("%s", lua_tostring(Ld, -2));
+      }
+    }
     
-    luaL_dostring(Ls,"\
-      local foo = require('shuttlesock.config').new() \
-      return foo \
-    ");
-    
-    luaS_gxcopy(Ls, Ld);
-    luaS_push_inspect_string(Ls, -1);
-    luaS_push_inspect_string(Ld, -1);
-    
-    const char *str_src = lua_tostring(Ls, -1), *str_dst = lua_tostring(Ld, -1);
-    asserteq_str(str_src, str_dst);
-    lua_pop(Ls, 1);
-    lua_pop(Ld, 1);
-    
-    lua_getmetatable(Ld, -1);
-    luaL_dostring(Ld, "return require('shuttlesock.config').metatable");
-    assert(lua_compare(Ld, -1, -2, LUA_OPEQ) == 1);
-    shuso_destroy(Ss);
-    shuso_destroy(Sd);
+    test("shuttlesock.config") {
+      luaL_dostring(Ls,"\
+        local foo = require('shuttlesock.config').new() \
+        return foo \
+      ");
+      
+      luaS_gxcopy(Ls, Ld);
+      luaS_push_inspect_string(Ls, -1);
+      luaS_push_inspect_string(Ld, -1);
+      
+      const char *str_src = lua_tostring(Ls, -1), *str_dst = lua_tostring(Ld, -1);
+      asserteq_str(str_src, str_dst);
+      lua_pop(Ls, 1);
+      lua_pop(Ld, 1);
+      
+      lua_getmetatable(Ld, -1);
+      luaL_dostring(Ld, "return require('shuttlesock.config').metatable");
+      assert(lua_compare(Ld, -1, -2, LUA_OPEQ) == 1);
+    }
   }
+  
 }
 
 #define IPC_ECHO 130
