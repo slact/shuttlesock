@@ -1,6 +1,6 @@
 
 local t = {
-  exclude = {"src/lua/modules/.*"},
+  exclude = {"src/luarocks/.*"},
   statsfile = "build/luacov.stats.out",
   reportfile = "coverage/lua/luacov.report.out",
 }
