@@ -243,8 +243,7 @@ describe(lua_bridge) {
     
     test("recursive function") {
       assert_luaL_dostring(Ls, "\
-        local foo \
-        foo = function(x, y) \
+        local function foo(x, y) \
           if x == 0 then return (y or 100) end \
           return foo(x-1, (y or 100)+1) \
         end \
