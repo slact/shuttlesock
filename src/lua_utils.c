@@ -20,8 +20,6 @@ static bool function_result_ok(lua_State *L, bool preserve_result) {
       const char *errstr = lua_tostring(L, -1);
       shuso_set_error(S, "%s", errstr);
     }
-    //luaS_printstack(L);
-    //raise(SIGABRT);
     lua_pop(L, 2);
     return false;
   }
@@ -82,9 +80,9 @@ void luaS_call(lua_State *L, int nargs, int nresults) {
     shuso_log_error(shuso_state(L), "Lua error: %s", lua_tostring(L, -1));
     lua_pop(L, 1);
     lua_gc(L, LUA_GCCOLLECT, 0);
-//#ifdef SHUTTLESOCK_CRASH_ON_LUA_ERROR
+#ifdef SHUTTLESOCK_DEBUG_CRASH_ON_LUA_ERROR
     raise(SIGABRT);
-//#endif
+#endif
   }
   lua_remove(L, 1);
 }
@@ -419,7 +417,7 @@ static bool gxcopy_package_loaded(gxcopy_state_t *gxs) {
     return false;
   }
   else if(!lua_isstring(Ls, -1)) {
-    assert(0); //how?..
+    raise(SIGABRT); //how?..
   }
   
   lua_remove(Ls, -2);
@@ -518,14 +516,6 @@ static bool gxcopy_metatable(gxcopy_state_t *gxs) {
 static bool gxcopy_table(gxcopy_state_t *gxs) {
   lua_State *Ls = gxs->src.state, *Ld = gxs->dst.state;
   
-  if(gxcopy_package_loaded(gxs)) {
-    return true;
-  }
-  
-  luaL_checkstack(Ls, 4, NULL);
-  luaL_checkstack(Ld, 1, NULL);
-  
-  int tindex = lua_absindex(Ls, -1);
   lua_rawgeti(Ls, LUA_REGISTRYINDEX, LUA_RIDX_GLOBALS);
   if(lua_compare(Ls, -1, -2, LUA_OPEQ)) {
     //it's the globals table
@@ -535,11 +525,22 @@ static bool gxcopy_table(gxcopy_state_t *gxs) {
   }
   lua_pop(Ls, 1);
   
-  if(gxcopy_cache_load(gxs)) {
+  if(gxcopy_package_loaded(gxs)) {
     return true;
   }
+  
+  if(gxcopy_cache_load(gxs)) {
+    //raise(SIGSTOP);
+    return true;
+  }
+  
+  luaL_checkstack(Ld, 1, NULL);
+  int tindex = lua_absindex(Ls, -1);
+  
   lua_newtable(Ld);
   gxcopy_cache_store(gxs);
+  
+  luaL_checkstack(Ls, 4, NULL);
   
   lua_pushnil(Ls);  /* first key */
   while(lua_next(Ls, tindex) != 0) {
@@ -561,7 +562,9 @@ static bool gxcopy_upvalues(gxcopy_state_t *gxs, int nups) {
   lua_State *Ls = gxs->src.state;
   luaL_checkstack(Ls, 1, NULL);
   for(int i=1; i<=nups; i++) {
-    assert(lua_getupvalue(Ls, -1, i));
+    if(lua_getupvalue(Ls, -1, i) == NULL) {
+      return false;
+    }
     if(!gxcopy_any(gxs)) {
       return false;
     }

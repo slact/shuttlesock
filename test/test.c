@@ -189,6 +189,43 @@ describe(lua_bridge) {
       if(Sd) shuso_destroy(Sd);
     }
     
+    test("self-referencing tables") {
+      assert_luaL_dostring(Ls,"\
+        local t={11,22,33,44,55} \
+        t[2] = t \
+        t[3] = t \
+        t[t] = t \
+        return t"
+      );
+      assert(luaS_gxcopy(Ls, Ld));
+      shuso_destroy(Ss);
+      Ss = NULL;
+      lua_setglobal(Ld, "copy");
+      assert_luaL_dostring(Ld, "\
+        assert(copy[copy] == copy, 'self-reference broken') \
+        assert(copy[1] == 11) \
+        assert(copy[2] == copy)"
+      );
+    }
+    
+    test("function with upvalues") {
+      lua_pushinteger(Ls, 500);
+      lua_pushinteger(Ld, 500);
+      
+      assert_luaL_dostring(Ls,"\
+        local x = 11 \
+        local y = 9 \
+        local z = 100 \
+        local function foo() \
+          return x+y+z \
+        end \
+        return foo"
+      );
+      luaS_gxcopy(Ls, Ld);
+      assert(lua_gettop(Ld) == 2);
+      assert(lua_gettop(Ls) == 2);
+    }
+    
     test("required packages") {
       lua_add_required_module(Ls, "foobar", "return {o='src'}");
       assert_luaL_dostring(Ls,"\

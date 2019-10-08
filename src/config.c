@@ -195,7 +195,7 @@ bool shuso_config_system_generate(shuso_t *S) {
   lua_pushlightuserdata(L, root_block);
   lua_setfield(L, -2, "ptr");
   
-  assert(luaS_config_pointer_ref(L, root_block)); //also pops the block table
+  luaS_config_pointer_ref(L, root_block); //also pops the block table
   
   shuso_setting_t *root_setting = shuso_stalloc(&S->stalloc, sizeof(*root_setting));
   if(!root_setting) {
@@ -292,7 +292,7 @@ bool shuso_config_system_generate(shuso_t *S) {
       lua_pushlightuserdata(L, block);
       lua_setfield(L, -2, "ptr");
       
-      assert(luaS_config_pointer_ref(L, block)); //also pops the block table
+      luaS_config_pointer_ref(L, block); //also pops the block table
       setting->block = block;
       block->setting = setting;
     }
@@ -391,7 +391,7 @@ shuso_setting_t *shuso_setting(shuso_t *S, const shuso_setting_block_t *block, c
   lua_State         *L = S->lua.state;
   shuso_setting_t   *setting;
   lua_pushstring(L, name);
-  assert(luaS_config_pointer_unref(L, block->setting));
+  luaS_config_pointer_unref(L, block->setting);
   if(!luaS_pcall_config_method(L, "find_setting", 2, true)) {
     return NULL;
   }
