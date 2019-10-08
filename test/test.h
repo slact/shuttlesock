@@ -161,6 +161,12 @@ do { \
   } \
 } while(0)
 
+#define assert_lua_call(L, in, out) do { \
+  if(lua_pcall(L, in, out, 0) != LUA_OK) { \
+    snow_fail("%s", lua_tostring(L, -1)); \
+  } \
+} while(0)
+
 typedef struct {
   size_t largesz;
   off_t  count;

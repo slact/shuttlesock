@@ -211,6 +211,8 @@ describe(lua_bridge) {
     test("function with upvalues") {
       lua_pushinteger(Ls, 500);
       lua_pushinteger(Ld, 500);
+      int stacksize_s = lua_gettop(Ls);
+      int stacksize_d = lua_gettop(Ld);
       
       assert_luaL_dostring(Ls,"\
         local x = 11 \
@@ -222,8 +224,14 @@ describe(lua_bridge) {
         return foo"
       );
       luaS_gxcopy(Ls, Ld);
-      assert(lua_gettop(Ld) == 2);
-      assert(lua_gettop(Ls) == 2);
+      assert(lua_gettop(Ls) == stacksize_s+1);
+      assert(lua_gettop(Ld) == stacksize_d+1);
+      
+      assert_lua_call(Ld, 0, 1);
+      assert_lua_call(Ls, 0, 1);
+      
+      assert(lua_tointeger(Ls, -1) == 120);
+      assert(lua_tointeger(Ld, -1) == 120);
     }
     
     test("required packages") {
