@@ -636,6 +636,7 @@ static bool gxcopy_function(gxcopy_state_t *gxs) {
   }
   lua_pop(Ls, 1);
   assert(lua_isfunction(Ld, -1));
+  gxcopy_cache_store(gxs);
   
   int funcidx = lua_absindex(Ld, -1);
   if(dbg.nups > 0) {
@@ -648,8 +649,6 @@ static bool gxcopy_function(gxcopy_state_t *gxs) {
       }
     }
   }
-  
-  gxcopy_cache_store(gxs);
   
   return true;
 }
