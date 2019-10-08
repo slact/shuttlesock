@@ -222,7 +222,7 @@ describe(lua_bridge) {
     }
     
     test("shuttlesock.config") {
-      luaL_dostring(Ls,"\
+      assert_luaL_dostring(Ls,"\
         local foo = require('shuttlesock.config').new() \
         return foo \
       ");
@@ -237,8 +237,26 @@ describe(lua_bridge) {
       lua_pop(Ld, 1);
       
       lua_getmetatable(Ld, -1);
-      luaL_dostring(Ld, "return require('shuttlesock.config').metatable");
+      assert_luaL_dostring(Ld, "return require('shuttlesock.config').metatable");
       assert(lua_compare(Ld, -1, -2, LUA_OPEQ) == 1);
+    }
+    
+    test("recursive function") {
+      assert_luaL_dostring(Ls, "\
+        local foo \
+        foo = function(x, y) \
+          if x == 0 then return (y or 100) end \
+          return foo(x-1, (y or 100)+1) \
+        end \
+        return foo \
+      ");
+      
+      assert(luaS_gxcopy(Ls, Ld));
+      lua_pushvalue(Ld, -1);
+      lua_pushinteger(Ld, 10);
+      lua_call(Ld, 1, 1);
+      assert(lua_tointeger(Ld, -1) == 110);
+      lua_pop(Ld, 1);
     }
   }
   
