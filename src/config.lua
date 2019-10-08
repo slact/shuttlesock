@@ -156,10 +156,9 @@ do --parser
   
   parser_mt = {
     __index = parser,
-    __gxcopy = {
-      module="shuttlesock.config",
-      module_key="parser_metatable"
-    }
+    __gxcopy = function()
+      return require("shuttlesock.config").parser_metatable
+    end
   }
   
   function parser:error(err, offset)
@@ -638,10 +637,9 @@ do --config
   local config = {}
   config_mt = {
     __index=config,
-    __gxcopy = {
-      module="shuttlesock.config",
-      module_key="metatable"
-    }
+    __gxcopy = function()
+      return require("shuttlesock.config").metatable
+    end
   }
   
   local function split_path(pathy_thing)

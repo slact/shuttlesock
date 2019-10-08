@@ -404,6 +404,7 @@ typedef struct {
 
 
 static bool gxcopy_any(gxcopy_state_t *gxs);
+static bool gxcopy_function(gxcopy_state_t *gxs, bool copy_upvalues);
 
 static bool gxcopy_package_loaded(gxcopy_state_t *gxs) {
   lua_State *Ls = gxs->src.state, *Ld = gxs->dst.state;
@@ -479,7 +480,6 @@ static bool gxcopy_metatable(gxcopy_state_t *gxs) {
   lua_State *Ls = gxs->src.state, *Ld = gxs->dst.state;
   luaL_checkstack(Ls, 3, NULL);
   luaL_checkstack(Ld, 3, NULL);
-  
   assert(lua_istable(Ls, -1));
   if(!lua_getmetatable(Ls, -1)) {
     return true;
@@ -491,39 +491,17 @@ static bool gxcopy_metatable(gxcopy_state_t *gxs) {
     return true;
   }
   
-  if(lua_getfield(Ls, -1, "__gxcopy") == LUA_TTABLE) {
-    const char *module_name = NULL;
-    const char *module_key = NULL;
-    
-    if(lua_getfield(Ls, -1, "module") == LUA_TSTRING) {
-      module_name = lua_tostring(Ls, -1);
+  if(lua_getfield(Ls, -1, "__gxcopy") == LUA_TFUNCTION) {
+    if(!gxcopy_function(gxs, false)) {
+      return shuso_set_error(shuso_state(Ls), "failed to gxcopy metatable __gxcopy function");
     }
-    lua_pop(Ls, 1);
-    
-    if(lua_getfield(Ls, -1, "module_key") == LUA_TSTRING) {
-      module_key = lua_tostring(Ls, -1);
-    }
-    lua_pop(Ls, 1);
-    
-    lua_pop(Ls, 2); //pop __gxcopy and metatable
-    
-    if(!module_key || !module_name) {
-      return shuso_set_error(shuso_state(Ls), "failed to gxcopy metatable, __gxcopy missing 'module' or 'module_key' field");
+    lua_pop(Ls, 2);
+    luaS_call(Ld, 0, 1);
+    if(lua_isnil(Ld, -1)) {
+      return shuso_set_error(shuso_state(Ls), "failed to gxcopy metatable, __gxcopy function returned nil");
     }
     
-    lua_getglobal(Ld, "require");
-    lua_pushstring(Ld, module_name);
-    if(lua_pcall(Ld, 1, 1, 0) != LUA_OK) {
-      return shuso_set_error(shuso_state(Ls), "failed to gxcopy metatable, __gxcopy 'module' %s is missing", module_name);
-    }
-    if(!lua_istable(Ld, -1)) {
-      return shuso_set_error(shuso_state(Ls), "failed to gxcopy metatable, __gxcopy 'module' %s is not a table", module_name);
-    }
-    if(lua_getfield(Ld, -1, module_key) != LUA_TTABLE) {
-      return shuso_set_error(shuso_state(Ls), "failed to gxcopy metatable, __gxcopy 'module' %s 'module_key' \"%s\" is not a table", module_name, module_key);
-    }
-    lua_setmetatable(Ld, -3);
-    lua_pop(Ld, 1);
+    lua_setmetatable(Ld, -2);
     return true;
   }
   lua_pop(Ls, 1);
@@ -592,7 +570,7 @@ static bool gxcopy_upvalues(gxcopy_state_t *gxs, int nups) {
   return true;
 }
 
-static bool gxcopy_function(gxcopy_state_t *gxs) {
+static bool gxcopy_function(gxcopy_state_t *gxs, bool copy_upvalues) {
   lua_State *Ls = gxs->src.state, *Ld = gxs->dst.state;
   
   if(gxcopy_package_loaded(gxs)) {
@@ -613,7 +591,7 @@ static bool gxcopy_function(gxcopy_state_t *gxs) {
   if(lua_iscfunction(Ls, -1)) {
     //this one's easy;
     lua_CFunction func = lua_tocfunction(Ls, -1);
-    if(dbg.nups > 0) {
+    if(copy_upvalues && dbg.nups > 0) {
       if(!gxcopy_upvalues(gxs, dbg.nups)) {
         return false;
       }
@@ -639,7 +617,7 @@ static bool gxcopy_function(gxcopy_state_t *gxs) {
   gxcopy_cache_store(gxs);
   
   int funcidx = lua_absindex(Ld, -1);
-  if(dbg.nups > 0) {
+  if(copy_upvalues && dbg.nups > 0) {
     if(!gxcopy_upvalues(gxs, dbg.nups)) {
       return false; 
     }
@@ -698,7 +676,7 @@ static bool gxcopy_any(gxcopy_state_t *gxs) {
       }
       break;
     case LUA_TFUNCTION:
-      if(!gxcopy_function(gxs)) {
+      if(!gxcopy_function(gxs, true)) {
         return false;
       }
       break;
