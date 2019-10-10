@@ -127,6 +127,7 @@ void luaS_printstack_named(lua_State *L, const char *name) {
 }
 
 void luaS_mm(lua_State *L, int stack_index) {
+  assert(lua_gettop(L) >= abs(stack_index));
   int absindex = lua_absindex(L, stack_index);
   lua_getglobal(L, "require");
   lua_pushliteral(L, "mm");
@@ -136,6 +137,7 @@ void luaS_mm(lua_State *L, int stack_index) {
 }
 
 void luaS_push_inspect_string(lua_State *L, int stack_index) {
+  assert(lua_gettop(L) >= abs(stack_index));
   int absindex = lua_absindex(L, stack_index);
   lua_getglobal(L, "require");
   lua_pushliteral(L, "inspect");
@@ -737,4 +739,17 @@ bool luaS_gxcopy(lua_State *Ls, lua_State *Ld) {
   luaL_unref(Ls, LUA_REGISTRYINDEX, src_modules_ref);
   luaL_unref(Ld, LUA_REGISTRYINDEX, dst_copies_ref);
   return ok;
+}
+
+int luaS_table_count(lua_State *L, int idx) {
+  int absidx = lua_absindex(L, idx);
+  luaL_checktype(L, absidx, LUA_TTABLE);
+  lua_pushnil(L);
+  int count = 0;
+  while(lua_next(L, absidx) != 0) {
+    //key at -2, value at -1
+    lua_pop(L, 1);
+    count++;
+  }
+  return count;
 }

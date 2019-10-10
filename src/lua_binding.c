@@ -154,71 +154,7 @@ static int Lua_shuso_configure_string(lua_State *L) {
   return 1;
 }
 
-typedef struct {
-  struct {
-    int                   count;
-    shuso_module_event_t *array;
-    const char          **name;
-  }                     events;
-} shuso_lua_module_data_t;
 
-static bool lua_module_initialize_config(shuso_t *S, shuso_module_t *module, shuso_setting_block_t *block) {
-  return true;
-}
-
-static bool lua_module_initialize_events(shuso_t *S, shuso_module_t *module) {
-  shuso_lua_module_data_t *d = module->privdata;
-  int count = d->events.count;
-  for(int i=0; i<count; i++) {
-    if(!shuso_event_initialize(S, module, d->events.name[i], &d->events.array[i])) {
-      return false;
-    }
-  }
-  return true;
-}
-
-static int Lua_shuso_add_module(lua_State *L) {
-  shuso_t *S = shuso_state(L);
-  
-  luaL_checktype(L, 1, LUA_TTABLE);
-  shuso_module_t *m = shuso_stalloc(&S->stalloc, sizeof(*m));
-  shuso_lua_module_data_t *d = shuso_stalloc(&S->stalloc, sizeof(*d));
-  m->privdata = d;
-  
-  lua_getfield(L, -1, "name");
-  m->name = lua_tostring(L, -1);
-  lua_pop(L, 1);
-  
-  lua_getfield(L, -1, "version");
-  m->version = lua_tostring(L, -1);
-  lua_pop(L, 1);
-  
-  lua_getfield(L, -1, "parent_modules");
-  m->parent_modules = lua_tostring(L, -1);
-  lua_pop(L, 1);
-  
-  lua_getfield(L, -1, "subscribe");
-  if(lua_istable(L, -1)) {
-    luaS_table_concat(L, " ");
-  }
-  m->subscribe = lua_tostring(L, -1);
-  lua_pop(L, 1);
-  
-  lua_getfield(L, -1, "publish");
-  if(lua_istable(L, -1)) {
-    luaS_table_concat(L, " ");
-  }
-  m->publish = lua_tostring(L, -1);
-  lua_pop(L, 1);
-  
-  m->initialize_config = lua_module_initialize_config;
-  m->initialize_events = lua_module_initialize_events;
-  
-  
-  
-  lua_pushboolean(L, 1);
-  return 1;
-}
 
 static int Lua_shuso_configure_finish(lua_State *L) {
   shuso_t *S = shuso_state(L);
@@ -1462,8 +1398,8 @@ luaL_Reg shuttlesock_core_module_methods[] = {
 //configuration
   {"configure_file", Lua_shuso_configure_file},
   {"configure_string", Lua_shuso_configure_string},
-  /*{"configure_handlers", Lua_shuso_configure_handlers},*/
-  {"add_module", Lua_shuso_add_module},
+  //{"configure_handlers", Lua_shuso_configure_handlers},
+  //{"add_module", Lua_shuso_add_module},
   {"configure_finish", Lua_shuso_configure_finish},
   
   {"destroy", Lua_shuso_destroy},
