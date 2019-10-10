@@ -15,8 +15,8 @@ static bool luaS_config_pointer_ref(lua_State *L, const void *ptr) {
   return true;
 }
 
-static bool luaS_config_pointer_unref(lua_State *L, const void *ptr) {
-  luaS_pointer_unref(L, "shuttlesock.config.pointer_ref_table", ptr);
+static bool luaS_get_config_pointer_ref(lua_State *L, const void *ptr) {
+  luaS_get_pointer_ref(L, "shuttlesock.config.pointer_ref_table", ptr);
   return lua_isnil(L, -1);
 }
 
@@ -25,7 +25,7 @@ static bool luaS_pcall_config_method(lua_State *L, const char *method_name, int 
   int                         argstart = lua_absindex(L, -nargs);
   shuso_config_module_ctx_t  *ctx = S->common->module_ctx.config;
   
-  luaS_config_pointer_unref(L, ctx);
+  luaS_get_config_pointer_ref(L, ctx);
   
   lua_getfield(L, -1, method_name);
   lua_insert(L, argstart);
@@ -105,7 +105,7 @@ bool shuso_config_system_initialize_worker(shuso_t *S, shuso_t *Smanager) {
   lua_State *L = S->lua.state;
   lua_State *Lm = Smanager->lua.state;
   
-  luaS_config_pointer_unref(Lm, Smanager->common->module_ctx.config);
+  luaS_get_config_pointer_ref(Lm, Smanager->common->module_ctx.config);
   
   if(!luaS_gxcopy(Lm, L)) {
     return false;
@@ -391,7 +391,7 @@ shuso_setting_t *shuso_setting(shuso_t *S, const shuso_setting_block_t *block, c
   lua_State         *L = S->lua.state;
   shuso_setting_t   *setting;
   lua_pushstring(L, name);
-  luaS_config_pointer_unref(L, block->setting);
+  luaS_get_config_pointer_ref(L, block->setting);
   if(!luaS_pcall_config_method(L, "find_setting", 2, true)) {
     return NULL;
   }

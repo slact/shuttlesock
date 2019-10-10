@@ -24,6 +24,7 @@ set(libsrc
   src/resolver.c
   src/shared_slab.c
   src/module.c
+  src/module_event.c
   src/config.c
   ${PROJECT_BINARY_DIR}/src/embedded_lua_scripts.c
   src/lua_binding.c

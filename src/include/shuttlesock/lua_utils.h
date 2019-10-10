@@ -46,6 +46,7 @@ bool luaS_function_pcall_result_ok(lua_State *L, int nargs, bool preserve_result
 bool luaS_gxcopy(lua_State *source, lua_State *destination);
 
 int luaS_table_concat(lua_State *L, const char *delimeter); //table.concat the table at the top of the stack, popping it and pushing the concatenated string
+int luaS_table_count(lua_State *L, int idx); //count all non-nil elements in table. O(n)
 
 #define luaS_pointer_ref(L, pointer_table_name, ptr) do { \
   lua_getfield(L, LUA_REGISTRYINDEX, pointer_table_name); \
@@ -63,7 +64,18 @@ int luaS_table_concat(lua_State *L, const char *delimeter); //table.concat the t
 
 #define luaS_pointer_unref(L, pointer_table_name, ptr) do { \
   lua_getfield(L, LUA_REGISTRYINDEX, pointer_table_name); \
+  if(!lua_isnil(L, -1)) { \
+    lua_pushlightuserdata(L, (void *)ptr); \
+    lua_pushnil(L); \
+    lua_settable(L, -3); \
+  } \
+  lua_pop(L, 1); \
+} while(0)
+
+#define luaS_get_pointer_ref(L, pointer_table_name, ptr) do { \
+  lua_getfield(L, LUA_REGISTRYINDEX, pointer_table_name); \
   if(!lua_istable(L, -1)) { \
+    lua_pop(L, 1); \
     lua_pushnil(L); \
   } \
   else { \

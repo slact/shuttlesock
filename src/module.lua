@@ -48,7 +48,12 @@ function Event.get(module_name, event_name)
 end
 do
   local event = {}
-  event_mt = {__index=event}
+  event_mt = {
+    __index=event,
+    __gxcopy = function()
+      return require("shuttlesock.module").event_metatable
+    end
+  }
   
   function event:get_module()
     return Module.find(self.module_name)
@@ -92,7 +97,7 @@ do
     return listener
   end
   
-  function event:initialize(init_ptr)
+  function event:initialize(init_ptr, data_type)
     assert(type(init_ptr) == "userdata")
     if self.initialized then
       return nil, "module "..self.module_name.." has already registered event "..self.name.." with a different event struct"
@@ -100,6 +105,7 @@ do
     self.module = assert(Module.find(self.module_name))
     self.initialized = true
     self.ptr = init_ptr
+    self.data_type = data_type
     return self
   end
 end
@@ -354,7 +360,7 @@ function Module.new_core_module(name, ...)
   return module
 end
 
-function Module.initialize_event(module_id, event_name, event_ptr)
+function Module.initialize_event(module_id, event_name, event_ptr, event_data_type)
   local module, event, err
   module, err = Module.find(module_id)
   if not module then return nil, err end
@@ -362,12 +368,17 @@ function Module.initialize_event(module_id, event_name, event_ptr)
   event, err = module:event(event_name)
   if not event then return nil, err end
   
-  return event:initialize(event_ptr)
+  return event:initialize(event_ptr, event_data_type)
 end
 
 do
   local module = {}
-  module_mt = {__index = module}
+  module_mt = {
+    __index = module,
+    __gxcopy = function()
+      return require("shuttlesock.module").metatable
+    end
+  }
   
   function module:finalize()
     if self.finalized then
@@ -453,4 +464,6 @@ do
   end
 end
 
+Module.metatable = module_mt
+Module.event_metatable = event_mt
 return Module
