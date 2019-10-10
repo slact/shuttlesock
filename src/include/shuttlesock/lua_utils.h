@@ -43,10 +43,15 @@ bool luaS_function_call_result_ok(lua_State *L, int nargs, bool preserve_result)
 bool luaS_function_pcall_result_ok(lua_State *L, int nargs, bool preserve_result);
 
 //copy value from one global state to another
+bool luaS_gxcopy_start(lua_State *source, lua_State *destination);
 bool luaS_gxcopy(lua_State *source, lua_State *destination);
+bool luaS_gxcopy_module_state(lua_State *source, lua_State *destination, const char *module_name);
+bool luaS_gxcopy_finish(lua_State *source, lua_State *destination);
 
 int luaS_table_concat(lua_State *L, const char *delimeter); //table.concat the table at the top of the stack, popping it and pushing the concatenated string
 int luaS_table_count(lua_State *L, int idx); //count all non-nil elements in table. O(n)
+
+bool luaS_push_lua_module_function(lua_State *L, const char *module_name, const char *function_name); //require(module_name)[function_name]
 
 #define luaS_pointer_ref(L, pointer_table_name, ptr) do { \
   lua_getfield(L, LUA_REGISTRYINDEX, pointer_table_name); \

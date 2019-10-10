@@ -1105,6 +1105,6 @@ end
 
 --needed in luaS_gxcopy
 Config.metatable = config_mt
-Config.parser_metatable = config_mt
+Config.parser_metatable = parser_mt
 
 return Config

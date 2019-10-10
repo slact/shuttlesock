@@ -9,7 +9,7 @@ static bool shuso_event_initialize(shuso_t *S, shuso_module_t *mod, const char *
   if(mod == NULL) {
     return shuso_set_error(S, "can't initialize event from outside a shuttlesock module");
   }
-  luaS_push_module_function(L, "initialize_event");
+  luaS_push_lua_module_function(L, "shuttlesock.module", "initialize_event");
   lua_pushlightuserdata(L, mod);
   lua_pushstring(L, name);
   lua_pushlightuserdata(L, mev);
@@ -36,7 +36,7 @@ bool shuso_event_listen(shuso_t *S, const char *name, shuso_module_event_fn *cal
   lua_State       *L = S->lua.state;
   shuso_module_t  *module;
   
-  luaS_push_module_function(L, "currently_initializing_module");
+  luaS_push_lua_module_function(L, "shuttlesock.module", "currently_initializing_module");
   if(!luaS_function_call_result_ok(L, 0, true)) {
     return false;
   }
@@ -45,7 +45,7 @@ bool shuso_event_listen(shuso_t *S, const char *name, shuso_module_event_fn *cal
   module = (void *)lua_topointer(L, -1);
   lua_pop(L, 2);
   
-  luaS_push_module_function(L, "find_event");
+  luaS_push_lua_module_function(L, "shuttlesock.module_event", "find");
   lua_pushstring(L, name);
   if(!luaS_function_call_result_ok(L, 1, true)) {
     return false;
@@ -56,6 +56,7 @@ bool shuso_event_listen(shuso_t *S, const char *name, shuso_module_event_fn *cal
   lua_pushlightuserdata(L, module);
   lua_pushlightuserdata(L, *((void **)&callback));
   lua_pushlightuserdata(L, pd);
+    
   if(!luaS_function_call_result_ok(L, 4, false)) {
     lua_pop(L, 1);
     return false;
@@ -80,14 +81,7 @@ bool shuso_event_publish(shuso_t *S, shuso_module_t *publisher_module, shuso_mod
   return true;
 }
 
-bool shuso_context_list_initialize(shuso_t *S, shuso_module_t *parent, shuso_module_context_list_t *context_list, shuso_stalloc_t *stalloc) {
-#ifdef SHUTTLESOCK_DEBUG_MODULE_SYSTEM
-  context_list->parent = parent;
-#endif
-  int n = parent->submodules.count;
-  context_list->context = shuso_stalloc(stalloc, sizeof(void *) * n);
-  if(!context_list->context) {
-    return shuso_set_error(S, "failed to allocate context_list");
-  }
+bool shuso_register_event_data_type(shuso_t *S, shuso_event_data_type_map_t *t) {
+  
   return true;
 }

@@ -1,10 +1,10 @@
 #ifndef SHUTTLESOCK_MODULE_EVENT_H
 #define SHUTTLESOCK_MODULE_EVENT_H
 
-struct shuso_event_data_type_map_s {
+typedef struct {
   bool (*wrap)(shuso_t *, void *);
   bool (*unwrap)(shuso_t *, void **);
-};
+} shuso_event_data_type_map_t;
 
 typedef struct {
   shuso_module_t  *module;

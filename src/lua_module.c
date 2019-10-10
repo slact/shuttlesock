@@ -11,6 +11,7 @@ static int luaS_find_module_table(lua_State *L, const char *name) {
   return 1;
 }
 
+/*
 static bool luaS_module_pointer_ref(lua_State *L, const void *ptr) {
   luaS_pointer_ref(L, "shuttlesock.lua_module_bridge.pointer_ref_table", ptr);
   return true;
@@ -20,7 +21,7 @@ static bool luaS_get_module_pointer_ref(lua_State *L, const void *ptr) {
   luaS_get_pointer_ref(L, "shuttlesock.lua_module_bridge.pointer_ref_table", ptr);
   return lua_isnil(L, -1);
 }
-
+*/
 static bool lua_module_initialize_config(shuso_t *S, shuso_module_t *module, shuso_setting_block_t *block) {
   return true;
 }
@@ -116,16 +117,16 @@ bool shuso_add_lua_module(shuso_t *S, int pos) {
 }
 
 
-static void worker_start_before_listener(shuso_t *S, shuso_event_state_t *es, intptr_t code, void *data, void *pd) {
+static void lua_module_gxcopy(shuso_t *S, shuso_event_state_t *es, intptr_t code, void *data, void *pd) {
   shuso_t *Sm = data;
   lua_State *L = S->lua.state;
   lua_State *Lm = Sm->lua.state;
   
-  
+  luaS_gxcopy_module_state(Lm, L, "shuttlesock.lua_module");
 }
 
 static bool lua_bridge_module_init_events(shuso_t *S, shuso_module_t *self) {
-  shuso_event_listen(S, "core:worker.start.before", worker_start_before_listener, self);
+  shuso_event_listen(S, "core:worker.start.before.lua_gxcopy", lua_module_gxcopy, self);
   
   return true;
 }
@@ -134,6 +135,6 @@ shuso_module_t shuso_lua_bridge_module = {
   .name = "lua_bridge",
   .version = "0.0.1",
   .subscribe = 
-   " core:worker.start.before",
+   " core:worker.start.before.lua_gxcopy",
   .initialize_events = lua_bridge_module_init_events
 };

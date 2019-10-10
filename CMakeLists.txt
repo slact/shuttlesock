@@ -195,6 +195,7 @@ pack_lua_scripts_add(NAME "mm" SCRIPT luarocks/mm.lua MODULE)
 pack_lua_scripts_add(NAME "inspect" SCRIPT luarocks/inspect.lua MODULE)
 pack_lua_scripts_add(NAME "shuttlesock.config" SCRIPT config.lua MODULE CHECK)
 pack_lua_scripts_add(NAME "shuttlesock.module" SCRIPT module.lua MODULE CHECK)
+pack_lua_scripts_add(NAME "shuttlesock.module_event" SCRIPT module_event.lua MODULE CHECK)
 pack_lua_scripts_finish()
 
 configure_file(src/include/shuttlesock/build_config.h.tmpl src/include/shuttlesock/build_config.h)

@@ -113,10 +113,10 @@ describe(modules) {
 }
 
 static void stop_shuttlesock(shuso_t *S, void *pd) {
-  shuso_log_notice(S, "STOP ME PLEAEEEEASE");
   intptr_t procnum = (intptr_t)pd;
   assert(S->procnum == procnum);
   shuso_stop(S, SHUSO_STOP_ASK);
+  
 }
 
 describe(init_and_shutdown) {
@@ -127,6 +127,11 @@ describe(init_and_shutdown) {
   }
   after_each() {
     shusoT_destroy(S, &chk);
+  }
+  test("lua stack doesn't grow") {  
+    assert(lua_gettop(S->lua.state) == 0);
+    shuso_configure_finish(S);
+    assert(lua_gettop(S->lua.state) == 0);
   }
   test("run loop, stop from manager") {
     shuso_configure_finish(S);
@@ -197,7 +202,7 @@ describe(config) {
 }
 
 describe(lua_bridge) {
-  subdesc(luaS_gxcopy) {
+  subdesc(gxcopy) {
     static shuso_t   *Ss;
     static shuso_t   *Sd;
     static lua_State *Ls;
@@ -224,7 +229,9 @@ describe(lua_bridge) {
         t[t] = t \
         return t"
       );
+      assert(luaS_gxcopy_start(Ls, Ld));
       assert(luaS_gxcopy(Ls, Ld));
+      assert(luaS_gxcopy_finish(Ls, Ld));
       shuso_destroy(Ss);
       Ss = NULL;
       lua_setglobal(Ld, "copy");
@@ -250,7 +257,9 @@ describe(lua_bridge) {
         end \
         return foo"
       );
-      luaS_gxcopy(Ls, Ld);
+      assert(luaS_gxcopy_start(Ls, Ld));
+      assert(luaS_gxcopy(Ls, Ld));
+      assert(luaS_gxcopy_finish(Ls, Ld));
       assert(lua_gettop(Ls) == stacksize_s+1);
       assert(lua_gettop(Ld) == stacksize_d+1);
       
@@ -275,7 +284,9 @@ describe(lua_bridge) {
       
       lua_add_required_module(Ld, "foobar", "return {o='dst'}");
       
-      luaS_gxcopy(Ls, Ld);
+      assert(luaS_gxcopy_start(Ls, Ld));
+      assert(luaS_gxcopy(Ls, Ld));
+      assert(luaS_gxcopy_finish(Ls, Ld));
       lua_setglobal(Ld, "copy");
       
       assert_luaL_dostring(Ld, "\
@@ -299,7 +310,9 @@ describe(lua_bridge) {
         return foo \
       ");
       
-      luaS_gxcopy(Ls, Ld);
+      assert(luaS_gxcopy_start(Ls, Ld));
+      assert(luaS_gxcopy(Ls, Ld));
+      assert(luaS_gxcopy_finish(Ls, Ld));
       luaS_push_inspect_string(Ls, -1);
       luaS_push_inspect_string(Ld, -1);
       
@@ -322,12 +335,66 @@ describe(lua_bridge) {
         return foo \
       ");
       
+      assert(luaS_gxcopy_start(Ls, Ld));
       assert(luaS_gxcopy(Ls, Ld));
+      assert(luaS_gxcopy_finish(Ls, Ld));
       lua_pushvalue(Ld, -1);
       lua_pushinteger(Ld, 10);
       lua_call(Ld, 1, 1);
       assert(lua_tointeger(Ld, -1) == 110);
       lua_pop(Ld, 1);
+    }
+    
+    test("multi-value, separate") {
+      
+      const char *str = "\
+        local common = {common='common'} \
+        local t1 = {x=1, common=common} \
+        local t2 = {x=2, common=common} \
+        return t1, t2 \
+      ";
+      
+      assert_luaL_dostring(Ls, str);
+      
+      //copy the two values in separate gxcopy sessions
+      assert(luaS_gxcopy_start(Ls, Ld));
+      assert(luaS_gxcopy(Ls, Ld));
+      assert(luaS_gxcopy_finish(Ls, Ld));
+      lua_pop(Ls, 1);
+      
+      assert(luaS_gxcopy_start(Ls, Ld));
+      assert(luaS_gxcopy(Ls, Ld));
+      assert(luaS_gxcopy_finish(Ls, Ld));
+      lua_pop(Ls, 1);
+      
+      lua_setglobal(Ld, "copy1");
+      lua_setglobal(Ld, "copy2");
+      
+      
+      assert_luaL_dostring(Ld, "\
+        assert(copy1 ~= copy2, 'copy1 should not be same as copy2') \n\
+        assert(copy1.x == 1, 'copy1.x == ' .. copy1.x) \n\
+        assert(copy2.x == 2, 'copy2.x == ' .. copy2.x) \n\
+        assert(copy1.common ~= copy2.common, 'common table should be a copy') \n\
+      ");
+      
+      //and now copy the two values in the same gxcopy session
+      assert_luaL_dostring(Ls, str);
+      assert(luaS_gxcopy_start(Ls, Ld));
+      assert(luaS_gxcopy(Ls, Ld));
+      lua_pop(Ls, 1);
+      assert(luaS_gxcopy(Ls, Ld));
+      lua_pop(Ls, 1);
+      assert(luaS_gxcopy_finish(Ls, Ld));
+      lua_setglobal(Ld, "copy1");
+      lua_setglobal(Ld, "copy2");
+      
+      assert_luaL_dostring(Ld, "\
+        assert(copy1 ~= copy2, 'copy1 should not be same as copy2') \
+        assert(copy1.x == 1, 'copy1.x == ' .. copy1.x) \
+        assert(copy2.x == 2, 'copy2.x == ' .. copy2.x) \
+        assert(copy1.common == copy2.common, 'common table should be the same') \
+      ");
     }
   }
   

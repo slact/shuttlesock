@@ -2,15 +2,6 @@
 #include <shuttlesock/embedded_lua_scripts.h>
 #include <lauxlib.h>
 
-bool luaS_push_module_function(lua_State *L, const char *funcname) {
-  lua_getglobal(L, "require");
-  lua_pushliteral(L, "shuttlesock.module");
-  lua_call(L, 1, 1);
-  lua_getfield(L, -1, funcname);
-  lua_remove(L, -2);
-  return true;
-}
-
 bool shuso_module_system_initialize(shuso_t *S, shuso_module_t *core_module) {
   return shuso_set_core_module(S, core_module);
 }
@@ -20,7 +11,7 @@ static bool add_module(shuso_t *S, shuso_module_t *module, const char *adding_fu
     return false;
   }
   lua_State *L = S->lua.state;
-  luaS_push_module_function(L, adding_function_name);
+  luaS_push_lua_module_function(L, "shuttlesock.module", adding_function_name);
   if(!module->name) {
     return shuso_set_error(S, "module name missing");
   }
@@ -88,7 +79,7 @@ bool shuso_initialize_added_modules(shuso_t *S) {
   }
   for(unsigned i=0; i<S->common->modules.count; i++) {
     shuso_module_t *module = S->common->modules.array[i];
-    luaS_push_module_function(L, "start_initializing_module");
+    luaS_push_lua_module_function(L, "shuttlesock.module", "start_initializing_module");
     lua_pushstring(L, module->name);
     if(!luaS_function_call_result_ok(L, 1, false)) {
       return false;
@@ -105,13 +96,12 @@ bool shuso_initialize_added_modules(shuso_t *S) {
         return false;
       }
     }
-    luaS_push_module_function(L, "finish_initializing_module");
+    luaS_push_lua_module_function(L, "shuttlesock.module", "finish_initializing_module");
     lua_pushstring(L, module->name);
     if(!luaS_function_call_result_ok(L, 1, false)) {
       return false;
     }
   }
-  
   for(unsigned i=0; i<S->common->modules.count; i++) {
     shuso_module_t *module = S->common->modules.array[i];
     if(!shuso_module_finalize(S, module)) {
@@ -130,7 +120,7 @@ bool shuso_module_finalize(shuso_t *S, shuso_module_t *mod) {
     return shuso_set_error(S, "can't freeze module from outside a shuttlesock module");
   }
   
-  luaS_push_module_function(L, "find");
+  luaS_push_lua_module_function(L, "shuttlesock.module", "find");
   lua_pushlightuserdata(L, mod);
   if(!luaS_function_call_result_ok(L, 1, true)) {
     return false;
@@ -157,7 +147,7 @@ bool shuso_module_finalize(shuso_t *S, shuso_module_t *mod) {
   mod->submodules.count = n;
   
 #ifdef SHUTTLESOCK_DEBUG_MODULE_SYSTEM
-  luaS_push_module_function(L, "count");
+  luaS_push_lua_module_function(L, "shuttlesock.module", "count");
   if(!luaS_function_call_result_ok(L, 1, true)) {
     return false;
   }
@@ -224,6 +214,10 @@ bool shuso_module_finalize(shuso_t *S, shuso_module_t *mod) {
     event->name = lua_tostring(L, -1);
     lua_pop(L, 1);
     
+    lua_getfield(L, -1, "data_type");
+    event->data_type = lua_tostring(L, -1);
+    lua_pop(L, 1);
+    
     lua_getfield(L, -1, "listeners");
     int listeners_count = luaL_len(L, -1);
     
@@ -251,7 +245,7 @@ bool shuso_module_finalize(shuso_t *S, shuso_module_t *mod) {
       
       lua_pop(L, 1);
       
-      luaS_push_module_function(L, "dependency_index");
+      luaS_push_lua_module_function(L, "shuttlesock.module", "dependency_index");
       lua_pushstring(L, mod->name);
       lua_pushstring(L, cur->module->name);
       if(!luaS_function_call_result_ok(L, 2, true)) {
@@ -268,12 +262,23 @@ bool shuso_module_finalize(shuso_t *S, shuso_module_t *mod) {
     event->listeners = listeners;
     lua_pop(L, 2);
   }
-  lua_pop(L, 1);
+  lua_pop(L, 2);
   
   lua_pop(L, 1); //pop module
   return true;
 }
 
+bool shuso_context_list_initialize(shuso_t *S, shuso_module_t *parent, shuso_module_context_list_t *context_list, shuso_stalloc_t *stalloc) {
+#ifdef SHUTTLESOCK_DEBUG_MODULE_SYSTEM
+  context_list->parent = parent;
+#endif
+  int n = parent->submodules.count;
+  context_list->context = shuso_stalloc(stalloc, sizeof(void *) * n);
+  if(!context_list->context) {
+    return shuso_set_error(S, "failed to allocate context_list");
+  }
+  return true;
+}
 
 void *shuso_context(shuso_t *S, shuso_module_t *parent, shuso_module_t *module, shuso_module_context_list_t *context_list) {
 #ifdef SHUTTLESOCK_DEBUG_MODULE_SYSTEM
@@ -287,7 +292,7 @@ void *shuso_context(shuso_t *S, shuso_module_t *parent, shuso_module_t *module, 
 shuso_module_t *shuso_get_module(shuso_t *S, const char *name) {
   lua_State         *L = S->lua.state;
   shuso_module_t    *module;
-  luaS_push_module_function(L, "find");
+  luaS_push_lua_module_function(L, "shuttlesock.module", "find");
   lua_pushstring(L, name);
   if(!luaS_function_call_result_ok(L, 1, true)) {
     return NULL;
@@ -315,6 +320,15 @@ bool shuso_core_module_event_publish(shuso_t *S, const char *name, intptr_t code
   return shuso_set_error(S, "failed to publish core event %s: no such event", name);
 }
 
+static void core_gxcopy(shuso_t *S, shuso_event_state_t *evs, intptr_t status, void *data, void *pd) {
+  lua_State     *L = S->lua.state;
+  shuso_t       *Sm = data;
+  lua_State     *Lm = Sm->lua.state;
+  
+  luaS_gxcopy_module_state(Lm, L, "shuttlesock.module_event");
+  luaS_gxcopy_module_state(Lm, L, "shuttlesock.module");  
+}
+
 static bool core_module_init_events(shuso_t *S, shuso_module_t *self) {
   shuso_core_module_events_t *events = shuso_stalloc(&S->stalloc, sizeof(*events));
   shuso_events_initialize(S, self, events, (shuso_event_init_t[]){
@@ -324,6 +338,7 @@ static bool core_module_init_events(shuso_t *S, shuso_module_t *self) {
     {"master.start",    &events->start_master,      NULL},
     {"manager.start",   &events->start_manager,     NULL},
     {"worker.start",    &events->start_worker,      NULL},
+    {"worker.start.before.lua_gxcopy",&events->start_worker_before_lua_gxcopy, "shuttlesock_state"},
     {"worker.start.before",&events->start_worker_before, "shuttlesock_state"},
     
     {"master.stop",     &events->stop_master,       NULL},
@@ -337,6 +352,8 @@ static bool core_module_init_events(shuso_t *S, shuso_module_t *self) {
     {"master.manager_exited",     &events->manager_exited,              NULL},
     {NULL, NULL, NULL}
   });
+  
+  shuso_event_listen(S, "core:worker.start.before.lua_gxcopy", core_gxcopy, self);
   
   //shuso_context_list_initialize(S, self, &ctx->context_list, &S->stalloc);
   //S->common->module_ctx.core = ctx;
@@ -352,6 +369,7 @@ shuso_module_t shuso_core_module = {
    " master.start"
    " manager.start"
    " worker.start.before" //worker state created, but pthread not yet started
+   " worker.start.before.lua_gxcopy" //worker state created, but pthread not yet started, luaS_gxcopy started
    " worker.start"
    
    " master.stop"
@@ -363,6 +381,9 @@ shuso_module_t shuso_core_module = {
    " worker.workers_started"
    " manager.worker_exited"
    " master.manager_exited"
+  ,
+  .subscribe = 
+   " core:worker.start.before.lua_gxcopy"
   ,
   .initialize_events = core_module_init_events
 };

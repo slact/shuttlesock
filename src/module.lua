@@ -5,113 +5,10 @@ local Module = {
   index_counter = 0,
   max_module_count = 255
 }
-local Event = {
-  by_name = {}
-}
-
-local event_mt
-function Event.find(module_name, event_name)
-  if type(module_name)=="string" and not event_name then
-    module_name, event_name = module_name:match("^([%w%_]+):([%w%_%.]+)$")
-    if not module_name or not event_name then
-      return nil, "invalid event name"
-    end
-  end
-  assert(type(module_name) == "string")
-  assert(type(event_name) == "string")
-  
-  local event = Event.by_name[module_name..":"..event_name]
-  if not event then
-    return nil, "event "..module_name..":"..event_name.." not found"
-  end
-  return event
-end
-
-function Event.get(module_name, event_name)
-  if type(module_name)=="string" and not event_name then
-    module_name, event_name = module_name:match(Event.MODULE_EVENT_NAME_PATTERN)
-  end
-  local event = Event.find(module_name, event_name)
-  if event then
-    return event
-  end
-  
-  event = {
-    name = event_name,
-    module_name = module_name,
-    listeners = {}
-  }
-  setmetatable(event, event_mt)
-  
-  Event.by_name[module_name..":"..event_name] = event
-  return event
-end
-do
-  local event = {}
-  event_mt = {
-    __index=event,
-    __gxcopy = function()
-      return require("shuttlesock.module").event_metatable
-    end
-  }
-  
-  function event:get_module()
-    return Module.find(self.module_name)
-  end
-  
-  function event:full_name()
-    return self.module_name..":"..self.name
-  end
-  
-  function event:add_listener(dst_module_ptr, listener_ptr, privdata_ptr)
-    assert(type(dst_module_ptr) == "userdata")
-    assert(type(listener_ptr) == "userdata")
-    assert(type(privdata_ptr) == "userdata")
-    
-    local subscriber_module = Module.find(dst_module_ptr)
-    if not subscriber_module then
-      return nil, "unknown receiver module"
-    end
-    
-    if not self.module then
-      return nil, "module "..subscriber_module.name.." tried to listen to nonexistent event "..self:full_name()
-    end
-    
-    if self.module.finalized then
-      return nil, "module "..self.module.name.." has already been finalized"
-    end
-    if subscriber_module.finalized then
-      return nil, "module "..subscriber_module.name.." has already been finalized"
-    end
-    if not subscriber_module:subscribes_to_event(self:full_name()) then
-      return nil, "module ".. subscriber_module.name.." has not declared event ".. self:full_name() .. " in its 'subscribe' list, so it cannot be used."
-    end
-    
-    local listener = {
-      module = subscriber_module,
-      listener = listener_ptr,
-      privdata = privdata_ptr
-    }
-    
-    table.insert(self.listeners, listener)
-    return listener
-  end
-  
-  function event:initialize(init_ptr, data_type)
-    assert(type(init_ptr) == "userdata")
-    if self.initialized then
-      return nil, "module "..self.module_name.." has already registered event "..self.name.." with a different event struct"
-    end
-    self.module = assert(Module.find(self.module_name))
-    self.initialized = true
-    self.ptr = init_ptr
-    self.data_type = data_type
-    return self
-  end
-end
 
 
 local function split_subscribe_list_string(str)
+  local Event = require "shuttlesock.module_event"
   local events = {}
   local badchar = str:match("[^%s%w%_%.%:]")
   if badchar then
@@ -128,12 +25,14 @@ local function split_subscribe_list_string(str)
     if events[mevname] then
       return nil, "duplicate value \""..mevname.."\" in subscribe string"
     end
+    
     events[mevname]=Event.get(modname, evname)
   end
   return events
 end
 
 local function split_publish_list_string(modname, str)
+  local Event = require "shuttlesock.module_event"
   local events = {}
   local badchar = str:match("[^%s%w%_%.%:]")
   if badchar then
@@ -249,8 +148,6 @@ function Module.count()
   return Module.index_counter
 end
 
-Module.find_event = Event.find
-
 function Module.find(id)
   if type(id)=="userdata" then
     if not Module.by_ptr[id] then
@@ -319,6 +216,10 @@ function Module.new(name, ptr, version, subscribe_string, publish_string, parent
     return nil, ("failed to add module %s: %s"):format(name, err)
   end
   
+  for _, event in pairs(self.events.subscribe) do
+    Module.add_dependency(event.module_name, self.name);
+  end
+  
   self.events.publish, err = split_publish_list_string(name, publish_string)
   if not self.events.publish then
     return nil, ("failed to add module %s: %s"):format(name, err)
@@ -374,6 +275,7 @@ end
 do
   local module = {}
   module_mt = {
+    __name = "module",
     __index = module,
     __gxcopy = function()
       return require("shuttlesock.module").metatable
@@ -464,6 +366,25 @@ do
   end
 end
 
+setmetatable(Module, {
+  __gxcopy_save_state = function()
+    return {
+      core = Module.core,
+      by_name = Module.by_name,
+      by_ptr = Module.by_ptr,
+      index_counter = Module.index_counter,
+      max_module_count = Module.max_module_count
+    }
+  end,
+  __gxcopy_load_state = function(state)
+    Module.core = state.core
+    Module.by_name = assert(state.by_name)
+    Module.by_ptr = assert(state.by_ptr)
+    Module.index_counter = assert(state.index_counter)
+    Module.max_module_count = assert(state.max_module_count)
+    return true
+  end
+})
+
 Module.metatable = module_mt
-Module.event_metatable = event_mt
 return Module

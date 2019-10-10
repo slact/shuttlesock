@@ -101,24 +101,6 @@ bool shuso_config_system_initialize(shuso_t *S) {
   return true;
 }
 
-bool shuso_config_system_initialize_worker(shuso_t *S, shuso_t *Smanager) {
-  lua_State *L = S->lua.state;
-  lua_State *Lm = Smanager->lua.state;
-  
-  luaS_get_config_pointer_ref(Lm, Smanager->common->module_ctx.config);
-  
-  if(!luaS_gxcopy(Lm, L)) {
-    return false;
-  }
-  lua_pop(Lm, 1);
-
-  assert(lua_istable(L, -1));
-
-  luaS_config_pointer_ref(L, S->common->module_ctx.config);
-  
-  return true;
-}
-
 static shuso_setting_values_t  *lua_setting_values_to_c_struct(lua_State *L, shuso_stalloc_t *st) {
   shuso_t                 *S = shuso_state(L);
   int                      values_count = luaL_len(L, -1);
@@ -183,7 +165,6 @@ bool shuso_config_system_generate(shuso_t *S) {
   if(!luaS_pcall_config_method(L, "get_root", 0, true)) {
     return false;
   }
-  
   shuso_setting_block_t *root_block = shuso_stalloc(&S->stalloc, sizeof(*root_block));
   if(root_block == NULL) {
     return shuso_set_error(S, "failed to allocate memory for config root block");
@@ -299,12 +280,12 @@ bool shuso_config_system_generate(shuso_t *S) {
     
     luaS_config_pointer_ref(L, setting); //pops the setting table too
   }
+  lua_pop(L, 1);
   
   //walk the blocks again, and let the modules set their settings for each block
   if(!luaS_pcall_config_method(L, "all_blocks", 0, true)) {
     return false;
   }
-  
   lua_pushnil(L);
   while(lua_next(L, -2)) {
     shuso_setting_block_t      *block;
@@ -351,7 +332,7 @@ bool shuso_config_system_generate(shuso_t *S) {
   lua_getfield(L, -1, "ptr");
   ctx->blocks.root = lua_topointer(L, -1);
   assert(ctx->blocks.root);
-  lua_pop(L, 1);
+  lua_pop(L, 2);
   
   if(!luaS_pcall_config_method(L, "all_blocks", 0, true)) {
     return false;
@@ -380,7 +361,7 @@ bool shuso_config_string_parse(shuso_t *S, const char *config) {
   shuso_config_module_ctx_t  *ctx = S->common->module_ctx.config;
   lua_State *L = S->lua.state;
   lua_pushstring(L, config);
-  if(!luaS_pcall_config_method(L, "parse", 1, true)) {
+  if(!luaS_pcall_config_method(L, "parse", 1, false)) {
     return false;
   }
   ctx->parsed = true;
@@ -456,13 +437,41 @@ bool shuso_setting_check_string(shuso_t *S, const shuso_setting_block_t *block, 
   return true;
 }
 
-static bool config_init_config(shuso_t *S, shuso_module_t *self, shuso_setting_block_t *block){
+
+static void config_worker_gxcopy(shuso_t *S, shuso_event_state_t *evs, intptr_t code, void *data, void *pd) {
+  assert(strcmp(evs->data_type, "shuttlesock_state") == 0);
+  shuso_t         *Smanager = data;
+  lua_State       *Lworker = S->lua.state;
+  lua_State       *Lmanager = Smanager->lua.state;
   
+  luaS_get_config_pointer_ref(Lmanager, Smanager->common->module_ctx.config);
+  if(!luaS_gxcopy(Lmanager, Lworker)) {
+    shuso_set_error(S, "failed to copy Lua config stuff");
+    lua_pop(Lmanager, 1);
+    return;
+  }
+  lua_pop(Lmanager, 1);
+
+  assert(lua_istable(Lworker, -1));
+
+  luaS_config_pointer_ref(Lworker, S->common->module_ctx.config);
+  
+  return;
+}
+
+static bool config_init_events(shuso_t *S, shuso_module_t *self) {
+  shuso_event_listen(S, "core:worker.start.before.lua_gxcopy", config_worker_gxcopy, self);
+  return true;
+}
+
+static bool config_init_config(shuso_t *S, shuso_module_t *self, shuso_setting_block_t *block){
   return true;
 }
 
 shuso_module_t shuso_config_module = {
   .name = "config",
   .version = "0.0.1",
-  .initialize_config = config_init_config
+  .subscribe = "core:worker.start.before.lua_gxcopy",
+  .initialize_config = config_init_config,
+  .initialize_events = config_init_events
 };

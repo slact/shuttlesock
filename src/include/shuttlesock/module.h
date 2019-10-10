@@ -65,6 +65,7 @@ typedef struct {
   shuso_module_event_t start_manager;
   shuso_module_event_t start_worker;
   shuso_module_event_t start_worker_before;
+  shuso_module_event_t start_worker_before_lua_gxcopy;
   
   shuso_module_event_t stop_master;
   shuso_module_event_t stop_manager;
@@ -101,6 +102,5 @@ bool shuso_core_module_event_publish(shuso_t *S, const char *name, intptr_t code
 
 // internal stuff
 bool shuso_module_system_initialize(shuso_t *S, shuso_module_t *core_module);
-bool luaS_push_module_function(lua_State *L, const char *funcname);
 
 #endif //SHUTTLESOCK_MODULE_H

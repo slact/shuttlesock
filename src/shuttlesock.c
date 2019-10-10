@@ -228,7 +228,7 @@ bool shuso_configure_finish(shuso_t *S) {
   if(!test_features(S, &errmsg)) {
     goto fail;
   }
-  
+
   if(!shuso_initialize_added_modules(S)) {
     goto fail;
   }
@@ -634,16 +634,10 @@ bool shuso_spawn_worker(shuso_t *S, shuso_process_t *proc) {
     err = "failed to initialize Lua";
     goto fail;
   }
-  if(!shuso_config_system_initialize_worker(wS, S)) {
-    err = "failed to initialize config system";
-    goto fail;
-  }
   
 #ifdef SHUTTLESOCK_DEBUG_NO_WORKER_THREADS
   wS->ev.loop = S->ev.loop;
   assert(wS->ev.loop == ev_default_loop(0));
-  shuso_core_module_event_publish(wS, "worker.start.before", SHUSO_OK, S);
-  shuso_run_worker(wS);
 #else
   pthread_attr_t    pthread_attr;
   
@@ -652,13 +646,22 @@ bool shuso_spawn_worker(shuso_t *S, shuso_process_t *proc) {
     goto fail;
   }
   pthread_attr_setdetachstate(&pthread_attr, PTHREAD_CREATE_DETACHED);
+#endif
+  
+  luaS_gxcopy_start(S->lua.state, wS->lua.state);
+  shuso_core_module_event_publish(wS, "worker.start.before.lua_gxcopy", SHUSO_OK, S);
+  luaS_gxcopy_finish(S->lua.state, wS->lua.state);
+  
   shuso_core_module_event_publish(wS, "worker.start.before", SHUSO_OK, S);
+  
+#ifdef SHUTTLESOCK_DEBUG_NO_WORKER_THREADS
+  shuso_run_worker(wS);
+#else
   if(pthread_create(&proc->tid, &pthread_attr, shuso_run_worker, wS) != 0) {
     err = "failed to create thread";
     goto fail;
   }
 #endif
-  
   return true;
   
 fail:
