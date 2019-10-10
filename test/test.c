@@ -83,6 +83,33 @@ describe(modules) {
       assert_shuso_error(S, "module .+ has %d+ uninitialized events");
     }
   }
+  subdesc(lua) {
+    before_each() {
+      S = shuso_create(NULL);
+      if(!test_config.verbose) {
+        shuso_set_log_fd(S, dev_null);
+      }
+    }
+    after_each() {
+      if(S) shuso_destroy(S);
+    }
+    test("a lua module") {
+      lua_State *L = S->lua.state;
+      assert_luaL_dostring(L,"\
+        return { \
+          name='luatest', \
+          version='0.0.0', \
+          publish={'foo', 'bar'}, \
+          subscribe={'core:worker.workers_started', 'core:worker.stop'} \
+        }"
+      );
+      assert_shuso(S, shuso_add_lua_module(S, -1));
+      assert_shuso(S, shuso_configure_finish(S));
+      
+      assert_luaL_dostring(L, "require 'shuttlesock.module'.find('luatest')");
+    }
+    
+  }
 }
 
 static void stop_shuttlesock(shuso_t *S, void *pd) {
@@ -104,18 +131,18 @@ describe(init_and_shutdown) {
   test("run loop, stop from manager") {
     shuso_configure_finish(S);
     shusoT_run_test(S, SHUTTLESOCK_MANAGER, stop_shuttlesock, NULL, (void *)(intptr_t)SHUTTLESOCK_MANAGER);
-    assert_shuso_ok(S);
+    assert_shuso_ran_ok(S);
   }
   
   test("stop from master") {
     shuso_configure_finish(S);
     shusoT_run_test(S, SHUTTLESOCK_MASTER, stop_shuttlesock, NULL, (void *)(intptr_t)SHUTTLESOCK_MASTER);
-    assert_shuso_ok(S);
+    assert_shuso_ran_ok(S);
   }
   test("stop from worker") {
     shuso_configure_finish(S);
     shusoT_run_test(S, 0, stop_shuttlesock, NULL, (void *)(intptr_t)0);
-    assert_shuso_ok(S);
+    assert_shuso_ran_ok(S);
   }
 }
 
@@ -165,7 +192,7 @@ describe(config) {
     ");
     shuso_configure_finish(S);
     shusoT_run_test(S, SHUTTLESOCK_MANAGER, stop_shuttlesock, NULL, (void *)(intptr_t)SHUTTLESOCK_MANAGER);
-    assert_shuso_ok(S);
+    assert_shuso_ran_ok(S);
   }
 }
 
@@ -486,7 +513,7 @@ describe(ipc) {
       shuso_ipc_add_handler(S, "echo", IPC_ECHO, ipc_echo_receive, ipc_echo_cancel);
       shuso_configure_finish(S);
       shusoT_run_test(S, SHUTTLESOCK_MASTER, ipc_load_test, ipc_load_test_verify, ipc_check);
-      assert_shuso_ok(S);
+      assert_shuso_ran_ok(S);
     }
     
     test("one-sided round-trip (250:1)") {
@@ -499,7 +526,7 @@ describe(ipc) {
       shuso_ipc_add_handler(S, "echo", IPC_ECHO, ipc_echo_receive, ipc_echo_cancel);
       shuso_configure_finish(S);
       shusoT_run_test(S, SHUTTLESOCK_MASTER, ipc_load_test, ipc_load_test_verify, ipc_check);
-      assert_shuso_ok(S);
+      assert_shuso_ran_ok(S);
     }
     
     test("buffer fill (500:1)") {
@@ -513,7 +540,7 @@ describe(ipc) {
       shuso_ipc_add_handler(S, "echo", IPC_ECHO, ipc_echo_receive, ipc_echo_cancel);
       shuso_configure_finish(S);
       shusoT_run_test(S, SHUTTLESOCK_MASTER, ipc_load_test, ipc_load_test_verify, ipc_check);
-      assert_shuso_ok(S);
+      assert_shuso_ran_ok(S);
     }
   }
 }
@@ -653,7 +680,7 @@ describe(resolver) {
   test("resolve using system") {
     shuso_configure_finish(S);
     shusoT_run_test(S, SHUTTLESOCK_MANAGER, resolver_test, NULL, NULL);
-    assert_shuso_ok(S);
+    assert_shuso_ran_ok(S);
   }
 }
 
@@ -793,7 +820,7 @@ describe(listener_sockets) {
     pt->port = 34241;
     shuso_configure_finish(S);
     shusoT_run_test(S, SHUTTLESOCK_MANAGER, listener_port_test, NULL, pt);
-    assert_shuso_ok(S);
+    assert_shuso_ran_ok(S);
     if(pt->err) {
       snow_fail("error: %s", pt->err);
     }

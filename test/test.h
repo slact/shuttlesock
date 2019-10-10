@@ -116,6 +116,7 @@ bool ___runcheck(shuso_t *S, char **err);
 
 #define assert_shuso_error(S, errmsg) \
 do { \
+  snow_fail_update(); \
   if(!shuso_last_error(S)) { \
     snow_fail("expected to have error matching \"%s\", but there was no error", errmsg); \
   } \
@@ -124,8 +125,18 @@ do { \
   } \
 } while(0)
 
+#define assert_shuso(S, cmd) do { \
+  snow_fail_update(); \
+  int ___nerr = shuso_error_count(S); \
+  cmd; \
+  if(shuso_error_count(S) != ___nerr) { \
+    snow_fail("error running %s: %s", #cmd, shuso_last_error(S)); \
+  } \
+} while(0)
+  
 
-#define assert_shuso_ok(S) \
+
+#define assert_shuso_ran_ok(S) \
 do { \
   snow_fail_update(); \
   if(shuso_is_forked_manager(S)) { \
