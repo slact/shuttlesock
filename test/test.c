@@ -397,7 +397,26 @@ describe(lua_bridge) {
       ");
     }
   }
-  
+  subdesc(printstack) {
+    static shuso_t   *S;
+    static lua_State *L; 
+    before_each() {
+      S = shuso_create(NULL);
+      L = S->lua.state;
+    }
+    after_each() {
+      if(S) shuso_destroy(S);
+    }
+    test("informative table information") {
+      assert_luaL_dostring(L, "\
+        _G['foobar'] = {} \
+        _G['what'] = setmetatable({11}, {__name='beep'}) \
+        return 1, 1.01, {'foo'} , foobar, what, _G, require('shuttlesock.module') \
+      ");
+      luaS_printstack(L);
+    }
+    
+  }
 }
 
 #define IPC_ECHO 130
