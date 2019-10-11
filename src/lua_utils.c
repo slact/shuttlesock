@@ -126,7 +126,7 @@ char *luaS_dbgval(lua_State *L, int n) {
       lua_rawgeti(L, LUA_REGISTRYINDEX, LUA_RIDX_GLOBALS);
       if(lua_compare(L, -1, n, LUA_OPEQ)) {
         //it's the globals table
-        cur += sprintf(cur, "%s", " _G");
+        sprintf(cur, "%s", " _G");
         lua_pop(L, 1);
         break;
       }
@@ -151,7 +151,7 @@ char *luaS_dbgval(lua_State *L, int n) {
         
         if(lua_compare(L, -1, n, LUA_OPEQ)) {
         //it's the globals table
-          cur += sprintf(cur, " module \"%s\"", lua_tostring(L, -2));
+          sprintf(cur, " module \"%s\"", lua_tostring(L, -2));
           lua_pop(L, 1);
           break;
         }
@@ -159,18 +159,6 @@ char *luaS_dbgval(lua_State *L, int n) {
       }
       lua_pop(L, 1);
       
-      /*
-      //is there a metatable.__name?
-      lua_getmetatable(L, n);
-      if(!lua_isnil(L, -1)) {
-        lua_getfield(L, -1, "__name");
-        if(lua_isstring(L, -1)) {
-          cur += sprintf(cur, " mt.__name=\"%s\"", lua_tostring(L, -1));
-        }
-        lua_pop(L, 1);
-      }
-      lua_pop(L, 1);
-      */
       break;
       
     default:

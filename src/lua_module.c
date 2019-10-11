@@ -38,6 +38,7 @@ static bool lua_module_initialize_events(shuso_t *S, shuso_module_t *module) {
     shuso_module_event_t *events = shuso_stalloc(&S->stalloc, sizeof(*events) * npub);
     shuso_event_init_t *events_init = malloc(sizeof(*events_init) * (npub + 1));
     if(events == NULL || events_init == NULL) {
+      if(events_init) free(events_init);
       return shuso_set_error(S, "failed to allocate lua module published events array");
     }
     lua_pushnil(L);
