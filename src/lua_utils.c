@@ -14,7 +14,8 @@ static bool function_result_ok(lua_State *L, bool preserve_result) {
   if(lua_isnil(L, -2)) {
     shuso_t *S = shuso_state(L);
     if(!lua_isstring(L, -1)) {
-      shuso_set_error(S, "lua function returned nil with no error message");      
+      shuso_set_error(S, "lua function returned nil with no error message");
+      raise(SIGABRT);
     }
     else {
       const char *errstr = lua_tostring(L, -1);
@@ -369,7 +370,7 @@ bool shuso_lua_initialize(shuso_t *S) {
  
   //lua doesn't come with a glob, and config needs it when including files
   lua_getglobal(L, "require");
-  lua_pushliteral(L, "shuttlesock.config");
+  lua_pushliteral(L, "shuttlesock.core.config");
   lua_call(L, 1, 1);
   
   S->config.index = luaL_ref(L, LUA_REGISTRYINDEX);
@@ -430,11 +431,11 @@ int luaS_shuso_error(lua_State *L) {
   return luaL_error(L, "%s", errmsg == NULL ? "(unknown error)" : errmsg);
 }
 
-bool luaS_push_lua_module_function(lua_State *L, const char *module_name, const char *function_name) {
+bool luaS_push_lua_module_field(lua_State *L, const char *module_name, const char *key_name) {
   lua_getglobal(L, "require");
   lua_pushstring(L, module_name);
   lua_call(L, 1, 1);
-  lua_getfield(L, -1, function_name);
+  lua_getfield(L, -1, key_name);
   lua_remove(L, -2);
   return true;
 }

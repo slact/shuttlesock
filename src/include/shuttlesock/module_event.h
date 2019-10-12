@@ -28,6 +28,12 @@ typedef struct {
   const char           *data_type;
 }shuso_event_init_t;
 
+struct shuso_event_state_s {
+  const shuso_module_t *publisher;
+  const shuso_module_t *module;
+  const char           *name;
+  const char           *data_type;
+}; //shuso_event_state_t
 //event stuff
 void *shuso_events(shuso_t *S, shuso_module_t *module);
 bool shuso_events_initialize(shuso_t *S, shuso_module_t *module,  void *events_struct, shuso_event_init_t *events_init);

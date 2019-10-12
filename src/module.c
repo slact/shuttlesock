@@ -11,7 +11,7 @@ static bool add_module(shuso_t *S, shuso_module_t *module, const char *adding_fu
     return false;
   }
   lua_State *L = S->lua.state;
-  luaS_push_lua_module_function(L, "shuttlesock.module", adding_function_name);
+  luaS_push_lua_module_field(L, "shuttlesock.core.module", adding_function_name);
   if(!module->name) {
     return shuso_set_error(S, "module name missing");
   }
@@ -79,7 +79,7 @@ bool shuso_initialize_added_modules(shuso_t *S) {
   }
   for(unsigned i=0; i<S->common->modules.count; i++) {
     shuso_module_t *module = S->common->modules.array[i];
-    luaS_push_lua_module_function(L, "shuttlesock.module", "start_initializing_module");
+    luaS_push_lua_module_field(L, "shuttlesock.core.module", "start_initializing_module");
     lua_pushstring(L, module->name);
     if(!luaS_function_call_result_ok(L, 1, false)) {
       return false;
@@ -96,7 +96,7 @@ bool shuso_initialize_added_modules(shuso_t *S) {
         return false;
       }
     }
-    luaS_push_lua_module_function(L, "shuttlesock.module", "finish_initializing_module");
+    luaS_push_lua_module_field(L, "shuttlesock.core.module", "finish_initializing_module");
     lua_pushstring(L, module->name);
     if(!luaS_function_call_result_ok(L, 1, false)) {
       return false;
@@ -120,7 +120,7 @@ bool shuso_module_finalize(shuso_t *S, shuso_module_t *mod) {
     return shuso_set_error(S, "can't freeze module from outside a shuttlesock module");
   }
   
-  luaS_push_lua_module_function(L, "shuttlesock.module", "find");
+  luaS_push_lua_module_field(L, "shuttlesock.core.module", "find");
   lua_pushlightuserdata(L, mod);
   if(!luaS_function_call_result_ok(L, 1, true)) {
     return false;
@@ -147,7 +147,7 @@ bool shuso_module_finalize(shuso_t *S, shuso_module_t *mod) {
   mod->submodules.count = n;
   
 #ifdef SHUTTLESOCK_DEBUG_MODULE_SYSTEM
-  luaS_push_lua_module_function(L, "shuttlesock.module", "count");
+  luaS_push_lua_module_field(L, "shuttlesock.core.module", "count");
   if(!luaS_function_call_result_ok(L, 1, true)) {
     return false;
   }
@@ -245,7 +245,7 @@ bool shuso_module_finalize(shuso_t *S, shuso_module_t *mod) {
       
       lua_pop(L, 1);
       
-      luaS_push_lua_module_function(L, "shuttlesock.module", "dependency_index");
+      luaS_push_lua_module_field(L, "shuttlesock.core.module", "dependency_index");
       lua_pushstring(L, mod->name);
       lua_pushstring(L, cur->module->name);
       if(!luaS_function_call_result_ok(L, 2, true)) {
@@ -292,7 +292,7 @@ void *shuso_context(shuso_t *S, shuso_module_t *parent, shuso_module_t *module, 
 shuso_module_t *shuso_get_module(shuso_t *S, const char *name) {
   lua_State         *L = S->lua.state;
   shuso_module_t    *module;
-  luaS_push_lua_module_function(L, "shuttlesock.module", "find");
+  luaS_push_lua_module_field(L, "shuttlesock.core.module", "find");
   lua_pushstring(L, name);
   if(!luaS_function_call_result_ok(L, 1, true)) {
     return NULL;
@@ -325,8 +325,8 @@ static void core_gxcopy(shuso_t *S, shuso_event_state_t *evs, intptr_t status, v
   shuso_t       *Sm = data;
   lua_State     *Lm = Sm->lua.state;
   
-  luaS_gxcopy_module_state(Lm, L, "shuttlesock.module_event");
-  luaS_gxcopy_module_state(Lm, L, "shuttlesock.module");  
+  luaS_gxcopy_module_state(Lm, L, "shuttlesock.core.module_event");
+  luaS_gxcopy_module_state(Lm, L, "shuttlesock.core.module");  
 }
 
 static bool core_module_init_events(shuso_t *S, shuso_module_t *self) {

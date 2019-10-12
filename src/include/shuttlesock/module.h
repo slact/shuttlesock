@@ -49,14 +49,6 @@ struct shuso_module_context_list_s {
   void          **context;
 }; //shuso_module_context_list_t
 
-
-
-struct shuso_event_state_s {
-  const shuso_module_t *publisher;
-  const char           *name;
-  const char           *data_type;
-}; //shuso_event_state_t
-
 typedef struct {
   shuso_module_event_t configure;
   shuso_module_event_t configure_after;

@@ -6,9 +6,10 @@ local Event = {
 local event_mt
 function Event.find(module_name, event_name)
   if type(module_name)=="string" and not event_name then
-    module_name, event_name = module_name:match("^([%w%_]+):([%w%_%.]+)$")
+    local str = module_name
+    module_name, event_name = str:match("^([%w%_]+):([%w%_%.]+)$")
     if not module_name or not event_name then
-      return nil, "invalid event name"
+      return nil, ("invalid event name \"%s\""):format(str)
     end
   end
   assert(type(module_name) == "string")
@@ -46,12 +47,12 @@ do
     __name = "event",
     __index=event,
     __gxcopy = function()
-      return require("shuttlesock.module_event").metatable
+      return require("shuttlesock.core.module_event").metatable
     end
   }
   
   function event:get_module()
-    local Module = require "shuttlesock.module"
+    local Module = require "shuttlesock.core.module"
     return Module.find(self.module_name)
   end
   
@@ -63,7 +64,7 @@ do
     assert(type(dst_module_ptr) == "userdata")
     assert(type(listener_ptr) == "userdata")
     assert(type(privdata_ptr) == "userdata")
-    local Module = require "shuttlesock.module"
+    local Module = require "shuttlesock.core.module"
     
     local subscriber_module = Module.find(dst_module_ptr)
     if not subscriber_module then
@@ -95,7 +96,7 @@ do
   end
   
   function event:initialize(init_ptr, data_type)
-    local Module = require "shuttlesock.module"
+    local Module = require "shuttlesock.core.module"
     assert(type(init_ptr) == "userdata")
     if self.initialized then
       return nil, "module "..self.module_name.." has already registered event "..self.name.." with a different event struct"

@@ -3,7 +3,7 @@
 
 static bool luaS_push_config_function(lua_State *L, const char *funcname) {
   lua_getglobal(L, "require");
-  lua_pushliteral(L, "shuttlesock.config");
+  lua_pushliteral(L, "shuttlesock.core.config");
   lua_call(L, 1, 1);
   lua_getfield(L, -1, funcname);
   lua_remove(L, -2);

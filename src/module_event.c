@@ -9,7 +9,7 @@ static bool shuso_event_initialize(shuso_t *S, shuso_module_t *mod, const char *
   if(mod == NULL) {
     return shuso_set_error(S, "can't initialize event from outside a shuttlesock module");
   }
-  luaS_push_lua_module_function(L, "shuttlesock.module", "initialize_event");
+  luaS_push_lua_module_field(L, "shuttlesock.core.module", "initialize_event");
   lua_pushlightuserdata(L, mod);
   lua_pushstring(L, name);
   lua_pushlightuserdata(L, mev);
@@ -36,7 +36,7 @@ bool shuso_event_listen(shuso_t *S, const char *name, shuso_module_event_fn *cal
   lua_State       *L = S->lua.state;
   shuso_module_t  *module;
   
-  luaS_push_lua_module_function(L, "shuttlesock.module", "currently_initializing_module");
+  luaS_push_lua_module_field(L, "shuttlesock.core.module", "currently_initializing_module");
   if(!luaS_function_call_result_ok(L, 0, true)) {
     return false;
   }
@@ -45,7 +45,7 @@ bool shuso_event_listen(shuso_t *S, const char *name, shuso_module_event_fn *cal
   module = (void *)lua_topointer(L, -1);
   lua_pop(L, 2);
   
-  luaS_push_lua_module_function(L, "shuttlesock.module_event", "find");
+  luaS_push_lua_module_field(L, "shuttlesock.core.module_event", "find");
   lua_pushstring(L, name);
   if(!luaS_function_call_result_ok(L, 1, true)) {
     return false;
@@ -73,6 +73,7 @@ bool shuso_event_publish(shuso_t *S, shuso_module_t *publisher_module, shuso_mod
     .data_type = event->data_type
   };
   for(shuso_module_event_listener_t *cur = &event->listeners[0]; cur->fn != NULL; cur++) {
+    evstate.module = cur->module;
     cur->fn(S, &evstate, code, data, cur->pd);
   }
 #ifdef SHUTTLESOCK_DEBUG_MODULE_SYSTEM

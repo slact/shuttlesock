@@ -136,6 +136,10 @@ shuso_t *shuso_create_with_lua(lua_State *lua, const char **err) {
     goto fail;
   }
   
+  if(!shuso_add_module(S, &shuso_lua_bridge_module)) {
+    errmsg = "failed to add lua bridge module";
+  }
+  
   return S;
   
 fail:

@@ -96,17 +96,17 @@ describe(modules) {
     test("a lua module") {
       lua_State *L = S->lua.state;
       assert_luaL_dostring(L,"\
-        return { \
+        local Module = require 'shuttlesock.module' \
+        return Module.add{ \
           name='luatest', \
           version='0.0.0', \
           publish={'foo', 'bar'}, \
           subscribe={'core:worker.workers_started', 'core:worker.stop'} \
         }"
       );
-      assert_shuso(S, shuso_add_lua_module(S, -1));
-      assert_shuso(S, shuso_configure_finish(S));
+      //assert_shuso(S, shuso_configure_finish(S));
       
-      assert_luaL_dostring(L, "require 'shuttlesock.module'.find('luatest')");
+      //assert_luaL_dostring(L, "require 'shuttlesock.module'.find('luatest')");
     }
     
   }
@@ -304,9 +304,9 @@ describe(lua_bridge) {
       }
     }
     
-    test("shuttlesock.config") {
+    test("shuttlesock.core.config") {
       assert_luaL_dostring(Ls,"\
-        local foo = require('shuttlesock.config').new() \
+        local foo = require('shuttlesock.core.config').new() \
         return foo \
       ");
       
@@ -322,7 +322,7 @@ describe(lua_bridge) {
       lua_pop(Ld, 1);
       
       lua_getmetatable(Ld, -1);
-      assert_luaL_dostring(Ld, "return require('shuttlesock.config').metatable");
+      assert_luaL_dostring(Ld, "return require('shuttlesock.core.config').metatable");
       assert(lua_compare(Ld, -1, -2, LUA_OPEQ) == 1);
     }
     
@@ -403,6 +403,9 @@ describe(lua_bridge) {
     before_each() {
       S = shuso_create(NULL);
       L = S->lua.state;
+      if(!test_config.verbose) {
+        shuso_set_log_fd(S, dev_null);
+      }
     }
     after_each() {
       if(S) shuso_destroy(S);

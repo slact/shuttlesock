@@ -24,7 +24,6 @@
 #include <shuttlesock/config.h>
 #include <shuttlesock/module.h>
 #include <shuttlesock/module_event.h>
-#include <shuttlesock/lua_module.h>
 
 struct shuso_process_s {
   pid_t                             pid;

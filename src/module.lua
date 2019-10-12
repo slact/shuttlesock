@@ -8,7 +8,7 @@ local Module = {
 
 
 local function split_subscribe_list_string(str)
-  local Event = require "shuttlesock.module_event"
+  local Event = require "shuttlesock.core.module_event"
   local events = {}
   local badchar = str:match("[^%s%w%_%.%:]")
   if badchar then
@@ -32,7 +32,7 @@ local function split_subscribe_list_string(str)
 end
 
 local function split_publish_list_string(modname, str)
-  local Event = require "shuttlesock.module_event"
+  local Event = require "shuttlesock.core.module_event"
   local events = {}
   local badchar = str:match("[^%s%w%_%.%:]")
   if badchar then
@@ -278,7 +278,7 @@ do
     __name = "module",
     __index = module,
     __gxcopy = function()
-      return require("shuttlesock.module").metatable
+      return require("shuttlesock.core.module").metatable
     end
   }
   

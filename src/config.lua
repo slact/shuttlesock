@@ -157,7 +157,7 @@ do --parser
   parser_mt = {
     __index = parser,
     __gxcopy = function()
-      return require("shuttlesock.config").parser_metatable
+      return require("shuttlesock.core.config").parser_metatable
     end
   }
   
@@ -638,7 +638,7 @@ do --config
   config_mt = {
     __index=config,
     __gxcopy = function()
-      return require("shuttlesock.config").metatable
+      return require("shuttlesock.core.config").metatable
     end
   }
   

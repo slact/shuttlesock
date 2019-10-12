@@ -164,6 +164,7 @@ do { \
 #define skip(...) while(0)
 
 #define assert_luaL_dostring(L, str) do { \
+  snow_fail_update(); \
   if(luaL_loadstring(L, (str)) != LUA_OK) { \
     snow_fail("%s", lua_tostring(L, -1)); \
   } \

@@ -1391,6 +1391,207 @@ int Lua_shuso_ipc_send_workers(lua_State *L) {
 }
 
 
+//lua modules
+static int luaS_find_module_table(lua_State *L, const char *name) {
+  lua_getglobal(L, "require");
+  lua_pushliteral(L, "shuttlesock.core.module");
+  lua_call(L, 1, 1);
+  lua_getfield(L, -1, "find");
+  lua_remove(L, -2);
+  lua_pushstring(L, name);
+  lua_call(L, 1, 1);
+  return 1;
+}
+
+/*
+static bool luaS_module_pointer_ref(lua_State *L, const void *ptr) {
+  luaS_pointer_ref(L, "shuttlesock.lua_module_bridge.pointer_ref_table", ptr);
+  return true;
+}
+
+static bool luaS_get_module_pointer_ref(lua_State *L, const void *ptr) {
+  luaS_get_pointer_ref(L, "shuttlesock.lua_module_bridge.pointer_ref_table", ptr);
+  return lua_isnil(L, -1);
+}
+*/
+static bool lua_module_initialize_config(shuso_t *S, shuso_module_t *module, shuso_setting_block_t *block) {
+  return true;
+}
+
+static void lua_module_event_listener(shuso_t *S, shuso_event_state_t *evs, intptr_t code, void *data, void *pd) {
+  lua_State *L = S->lua.state;
+  if(evs->data_type) {
+    const shuso_event_data_type_map_t     *map;
+    luaS_push_lua_module_field(L, "shuttlesock.core.module_event", "data_type_map");
+    lua_pushliteral(L, "lua");
+    lua_pushstring(L, evs->data_type);
+    if(!luaS_function_call_result_ok(L, 2, true)) {
+      shuso_set_error(S, "failed to map data type %s for event %s to Lua: %s", evs->data_type, evs->name, shuso_last_error(S));
+      return;
+    }
+    map = lua_topointer(L, -1);
+    lua_pop(L, 1);
+    assert(map);
+    if(!map->wrap(S, data)) {
+      shuso_set_error(S, "failed to map data type %s for event %s to Lua", evs->data_type, evs->name);
+      return;
+    } 
+  }
+  else {
+    lua_pushnil(L);
+  }
+  
+  luaS_push_lua_module_field(L, "shuttlesock.core.lua_module", "receive_event");
+  
+  lua_pushstring(L, evs->module->name);
+  lua_pushstring(L, evs->name);
+  
+  lua_pushnil(L); //TODO: push module
+  
+  lua_pushvalue(L, -5);
+  lua_remove(L, -6);
+  
+  luaS_function_call_result_ok(L, 4, false);
+  return;
+}
+
+static bool lua_module_initialize_events(shuso_t *S, shuso_module_t *module) {
+  lua_State *L = S->lua.state;
+  luaS_find_module_table(L, module->name);
+  
+  lua_getfield(L, -1, "events");
+  lua_getfield(L, -1, "publish");
+  
+  int npub = luaS_table_count(L, -1);
+  if(npub > 0) {
+    shuso_module_event_t *events = shuso_stalloc(&S->stalloc, sizeof(*events) * npub);
+    shuso_event_init_t *events_init = malloc(sizeof(*events_init) * (npub + 1));
+    if(events == NULL || events_init == NULL) {
+      if(events_init) free(events_init);
+      return shuso_set_error(S, "failed to allocate lua module published events array");
+    }
+    lua_pushnil(L);
+    for(int i=0; lua_next(L, -2) != 0; i++) {
+      assert(i<npub);
+      lua_pop(L, 1);
+      events_init[i]=(shuso_event_init_t ){
+        .name = lua_tostring(L, -1),
+        .event = &events[i]
+      };
+      
+    }
+    events_init[npub]=(shuso_event_init_t ){.name = NULL, .event = NULL};
+    if(!shuso_events_initialize(S, module, events, events_init)) {
+      free(events_init);
+      return false;
+    }
+    free(events_init);
+  }
+  lua_pop(L, 1);
+  lua_getfield(L, -1, "subscribe");
+  lua_pushnil(L);
+  while(lua_next(L, -2)) {
+    shuso_event_listen(S, lua_tostring(L, -2), lua_module_event_listener, NULL);
+    lua_pop(L, 1);
+  }
+  lua_pop(L, 2);
+  
+  bool ok = true;
+  
+  luaS_push_lua_module_field(L, "shuttlesock.core.lua_module", "find");
+  lua_pushstring(L, module->name);
+  if (!luaS_function_call_result_ok(L, 1, true)) {
+    lua_pop(L, 1);
+    return shuso_set_error(S, "failed to find Lua shuttlesock module '%s'", module->name);
+  }
+  assert(lua_istable(L, -1));
+  lua_getfield(L, -1, "initialize");
+  if(lua_isfunction(L, -1)) {
+    lua_pushvalue(L, -2);
+    ok = luaS_function_pcall_result_ok(L, 1, false);
+  }
+  lua_pop(L, 2);
+  
+  return ok;
+}
+
+
+
+static int Lua_shuso_add_module(lua_State *L) {
+  shuso_t *S = shuso_state(L);
+  if(!(shuso_runstate_check(S, SHUSO_STATE_CONFIGURING, "add module"))) {
+    lua_pushnil(L);
+    lua_pushstring(L, shuso_last_error(S));
+    return 2;
+  }
+  luaL_checktype(L, 1, LUA_TTABLE);
+  shuso_module_t *m = shuso_stalloc(&S->stalloc, sizeof(*m));
+  if(m == NULL) {
+    lua_pushnil(L);
+    lua_pushliteral(L, "failed to allocate lua module struct");
+    return 2;
+  }
+  memset(m, '\0', sizeof(*m));
+  //shuso_lua_module_data_t *d = shuso_stalloc(&S->stalloc, sizeof(*d));
+  //m->privdata = d;
+  
+  lua_getfield(L, 1, "name");
+  m->name = lua_tostring(L, -1);
+  lua_pop(L, 1);
+  
+  lua_getfield(L, 1, "version");
+  m->version = lua_tostring(L, -1);
+  lua_pop(L, 1);
+  
+  lua_getfield(L, 1, "parent_modules");
+  m->parent_modules = lua_tostring(L, -1);
+  lua_pop(L, 1);
+  
+  lua_getfield(L, 1, "subscribe");
+  if(lua_istable(L, -1)) {
+    luaS_table_concat(L, " ");
+  }
+  m->subscribe = lua_tostring(L, -1);
+  lua_pop(L, 1);
+  
+  lua_getfield(L, 1, "publish");
+  if(lua_istable(L, -1)) {
+    luaS_table_concat(L, " ");
+  }
+  m->publish = lua_tostring(L, -1);
+  lua_pop(L, 1);
+  
+  m->initialize_config = lua_module_initialize_config;
+  m->initialize_events = lua_module_initialize_events;
+  
+  if(!shuso_add_module(S, m)) {
+    lua_pushnil(L);
+    lua_pushfstring(L, "failed to add module: %s", shuso_last_error(S));
+    return 2;
+  }
+  
+  
+  
+  lua_pop(L, 1);
+  lua_pushboolean(L, 1);
+  return 1;
+}
+
+
+static void lua_module_gxcopy(shuso_t *S, shuso_event_state_t *es, intptr_t code, void *data, void *pd) {
+  shuso_t *Sm = data;
+  lua_State *L = S->lua.state;
+  lua_State *Lm = Sm->lua.state;
+  
+  luaS_gxcopy_module_state(Lm, L, "shuttlesock.core.lua_module");
+}
+
+static bool lua_bridge_module_init_events(shuso_t *S, shuso_module_t *self) {
+  shuso_event_listen(S, "core:worker.start.before.lua_gxcopy", lua_module_gxcopy, self);
+  
+  return true;
+}
+
 luaL_Reg shuttlesock_core_module_methods[] = {
 // creation
   {"create", Lua_shuso_create},
@@ -1437,6 +1638,9 @@ luaL_Reg shuttlesock_core_module_methods[] = {
   {"log_critical", Lua_shuso_log_critical},
   {"log_fatal", Lua_shuso_log_fatal},
 
+//modules
+  {"add_module", Lua_shuso_add_module},
+  
 //ipc
   {"send_file", Lua_shuso_ipc_send_fd},
   {"new_file_receiver", Lua_shuso_ipc_file_receiver_new},
@@ -1464,3 +1668,11 @@ int luaS_push_system_module(lua_State *L) {
   luaL_newlib(L, shuttlesock_system_module_methods);
   return 1;
 }
+
+shuso_module_t shuso_lua_bridge_module = {
+  .name = "lua_bridge",
+  .version = "0.0.1",
+  .subscribe = 
+   " core:worker.start.before.lua_gxcopy",
+  .initialize_events = lua_bridge_module_init_events
+};
