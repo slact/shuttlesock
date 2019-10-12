@@ -97,12 +97,13 @@ describe(modules) {
       lua_State *L = S->lua.state;
       assert_luaL_dostring(L,"\
         local Module = require 'shuttlesock.module' \
-        return Module.add{ \
+        local m = assert(Module.new{ \
           name='luatest', \
           version='0.0.0', \
           publish={'foo', 'bar'}, \
           subscribe={'core:worker.workers_started', 'core:worker.stop'} \
-        }"
+        }) \
+        assert(m:add())"
       );
       //assert_shuso(S, shuso_configure_finish(S));
       

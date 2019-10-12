@@ -195,7 +195,6 @@ pack_lua_scripts_add(NAME "inspect" SCRIPT luarocks/inspect.lua MODULE)
 pack_lua_scripts_add(NAME "shuttlesock.core.config" SCRIPT config.lua MODULE CHECK)
 pack_lua_scripts_add(NAME "shuttlesock.core.module" SCRIPT module.lua MODULE CHECK)
 pack_lua_scripts_add(NAME "shuttlesock.core.module_event" SCRIPT module_event.lua MODULE CHECK)
-pack_lua_scripts_add(NAME "shuttlesock.core.lua_module" SCRIPT lua_module.lua MODULE CHECK)
 
 #API for Lua modules
 pack_lua_scripts_add(NAME "shuttlesock.module" SCRIPT lua_api/module.lua MODULE CHECK)

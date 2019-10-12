@@ -1548,16 +1548,10 @@ static int Lua_shuso_add_module(lua_State *L) {
   lua_pop(L, 1);
   
   lua_getfield(L, 1, "subscribe");
-  if(lua_istable(L, -1)) {
-    luaS_table_concat(L, " ");
-  }
   m->subscribe = lua_tostring(L, -1);
   lua_pop(L, 1);
   
   lua_getfield(L, 1, "publish");
-  if(lua_istable(L, -1)) {
-    luaS_table_concat(L, " ");
-  }
   m->publish = lua_tostring(L, -1);
   lua_pop(L, 1);
   
@@ -1570,8 +1564,6 @@ static int Lua_shuso_add_module(lua_State *L) {
     return 2;
   }
   
-  
-  
   lua_pop(L, 1);
   lua_pushboolean(L, 1);
   return 1;
@@ -1583,7 +1575,26 @@ static void lua_module_gxcopy(shuso_t *S, shuso_event_state_t *es, intptr_t code
   lua_State *L = S->lua.state;
   lua_State *Lm = Sm->lua.state;
   
-  luaS_gxcopy_module_state(Lm, L, "shuttlesock.core.lua_module");
+  //copy over all required modules that have a metatable and __gxcopy
+  lua_getglobal(Lm, "package");
+  lua_getfield(Lm, -1, "loaded");
+  lua_remove(Lm, -2);
+  lua_pushnil(Lm);  /* first key */
+  while(lua_next(Lm, -2) != 0) {
+    if(!lua_getmetatable(Lm, -1)) {
+      lua_pop(Lm, 1);
+      continue;
+    }
+    lua_getfield(Lm, -1, "__gxcopy_save_state");
+    if(lua_isnil(Lm, -1)) {
+      lua_pop(Lm, 3);
+      continue;
+    }
+    lua_pop(Lm, 3);
+    
+    luaS_gxcopy_module_state(Lm, L, lua_tostring(Lm, -1));
+  }
+  lua_pop(Lm, 1);
 }
 
 static bool lua_bridge_module_init_events(shuso_t *S, shuso_module_t *self) {

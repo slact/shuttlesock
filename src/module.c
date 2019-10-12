@@ -321,12 +321,7 @@ bool shuso_core_module_event_publish(shuso_t *S, const char *name, intptr_t code
 }
 
 static void core_gxcopy(shuso_t *S, shuso_event_state_t *evs, intptr_t status, void *data, void *pd) {
-  lua_State     *L = S->lua.state;
-  shuso_t       *Sm = data;
-  lua_State     *Lm = Sm->lua.state;
-  
-  luaS_gxcopy_module_state(Lm, L, "shuttlesock.core.module_event");
-  luaS_gxcopy_module_state(Lm, L, "shuttlesock.core.module");  
+  //do nothing, all modules are copied over by the lua_bridge_module
 }
 
 static bool core_module_init_events(shuso_t *S, shuso_module_t *self) {

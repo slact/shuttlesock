@@ -65,27 +65,35 @@ static int luaS_traceback(lua_State *L) {
   return 1;
 }
 
-void luaS_call(lua_State *L, int nargs, int nresults) {
-  int rc;
+bool luaS_pcall(lua_State *L, int nargs, int nresults) {
+#ifndef NDEBUG
   if(!lua_isfunction(L, -(nargs+1))) {
     luaS_printstack(L);
     shuso_log_error(shuso_state(L), "nargs: %i", nargs);
     assert(lua_isfunction(L, -(nargs+1)));
   }
-  
+#endif  
   lua_pushcfunction(L, luaS_traceback);
   lua_insert(L, 1);
   
-  rc = lua_pcall(L, nargs, nresults, 1);
-  if (rc != 0) {
-    shuso_log_error(shuso_state(L), "Lua error: %s", lua_tostring(L, -1));
+  int rc = lua_pcall(L, nargs, nresults, 1);
+  if (rc != LUA_OK) {
+    shuso_set_error(shuso_state(L), "Lua error: %s", lua_tostring(L, -1));
     lua_pop(L, 1);
     lua_gc(L, LUA_GCCOLLECT, 0);
-#ifdef SHUTTLESOCK_DEBUG_CRASH_ON_LUA_ERROR
-    raise(SIGABRT);
-#endif
   }
   lua_remove(L, 1);
+  return rc == LUA_OK;
+}
+
+void luaS_call(lua_State *L, int nargs, int nresults) {
+#ifdef SHUTTLESOCK_DEBUG_CRASH_ON_LUA_ERROR
+  luaS_pcall(L, nargs, nresults);
+#else
+  if(!luaS_pcall(L, nargs, nresults)) {
+    raise(SIGABRT);
+  }
+#endif
 }
 
 char *luaS_dbgval(lua_State *L, int n) {
@@ -114,7 +122,7 @@ char *luaS_dbgval(lua_State *L, int n) {
       break;
     case LUA_TSTRING:
       str = lua_tostring(L, n);
-      sprintf(cur, "%s: %.50s%s", typename, str, strlen(str) > 50 ? "..." : "");
+      sprintf(cur, "%s: \"%.50s%s\"", typename, str, strlen(str) > 50 ? "..." : "");
       break;
     case LUA_TTABLE:
       lua_getglobal(L, "tostring");
@@ -122,6 +130,7 @@ char *luaS_dbgval(lua_State *L, int n) {
       lua_call(L, 1, 1);
       str = lua_tostring(L, -1);
       cur += sprintf(cur, "%s", str);
+      lua_pop(L, 1);
       
       //is it a global?
       lua_rawgeti(L, LUA_REGISTRYINDEX, LUA_RIDX_GLOBALS);
@@ -131,35 +140,33 @@ char *luaS_dbgval(lua_State *L, int n) {
         lua_pop(L, 1);
         break;
       }
-      
       lua_pushnil(L);
       while(lua_next(L, -2)) {
         if(lua_compare(L, -1, n, LUA_OPEQ)) {
           cur += sprintf(cur, " _G[\"%s\"]", lua_tostring(L, -2));
-          lua_pop(L, 1);
-          break;
-        }
-        lua_pop(L, 1);
-      }
-      lua_pop(L, 2);
-      
-      //is it a loaded module?
-      lua_getglobal(L, "package");
-      lua_getfield(L, -1, "loaded");
-      lua_remove(L, -2);
-      lua_pushnil(L);  /* first key */
-      while(lua_next(L, -2) != 0) {
-        
-        if(lua_compare(L, -1, n, LUA_OPEQ)) {
-        //it's the globals table
-          sprintf(cur, " module \"%s\"", lua_tostring(L, -2));
-          lua_pop(L, 1);
+          lua_pop(L, 2);
           break;
         }
         lua_pop(L, 1);
       }
       lua_pop(L, 1);
       
+      //is it a loaded module?
+      lua_getglobal(L, "package");
+      lua_getfield(L, -1, "loaded");
+      lua_remove(L, -2);
+      lua_pushnil(L);  // first key
+      while(lua_next(L, -2) != 0) {
+        
+        if(lua_compare(L, -1, n, LUA_OPEQ)) {
+        //it's the globals table
+          sprintf(cur, " module \"%s\"", lua_tostring(L, -2));
+          lua_pop(L, 2);
+          break;
+        }
+        lua_pop(L, 1);
+      }
+      lua_pop(L, 1);
       break;
       
     default:
@@ -892,14 +899,15 @@ bool luaS_gxcopy_module_state(lua_State *Ls, lua_State *Ld, const char *module_n
     return shuso_set_error(shuso_state(Ls), "gxcopy_module_state error: Lua module '%s' has no __gxcopy_load_state metatable field in destination Lua state", module_name);
   }
   
+  //__gxcopy_save_state() -> table
   if(!luaS_function_pcall_result_ok(Ls, 0, true)) {
+    return shuso_set_error(shuso_state(Ls), "gxcopy_module_state error: %s", module_name, shuso_last_error(shuso_state(Ls)));
     return false;
   }
   
   luaS_gxcopy(Ls, Ld);
   lua_pop(Ls, 3);
-  
-  if(!luaS_function_pcall_result_ok(Ld, 1, false)) {
+  if(!luaS_pcall(Ld, 1, 0)) {
     return shuso_set_error(shuso_state(Ls), "gxcopy_module_state error: Lua module '%s' __gxcopy_load_state failed: %s", module_name, shuso_last_error(shuso_state(Ld)));
   }
   return true;

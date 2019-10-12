@@ -382,7 +382,6 @@ setmetatable(Module, {
     Module.by_ptr = assert(state.by_ptr)
     Module.index_counter = assert(state.index_counter)
     Module.max_module_count = assert(state.max_module_count)
-    return true
   end
 })
 

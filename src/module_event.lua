@@ -153,7 +153,6 @@ setmetatable(Event, {
   __gxcopy_load_state = function(state)
     Event.by_name = assert(state.by_name, "by_name missing from global Event state")
     Event.data_type_map = assert(state.data_type_map, "data_type_map missing from global Event state")
-    return true
   end
 })
 
