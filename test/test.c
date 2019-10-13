@@ -105,9 +105,9 @@ describe(modules) {
         }) \
         assert(m:add())"
       );
-      //assert_shuso(S, shuso_configure_finish(S));
+      assert_shuso(S, shuso_configure_finish(S));
       
-      //assert_luaL_dostring(L, "require 'shuttlesock.module'.find('luatest')");
+      assert_luaL_dostring(L, "require 'shuttlesock.module'.find('luatest')");
     }
     
   }

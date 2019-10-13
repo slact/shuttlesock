@@ -1,8 +1,10 @@
 local Core = require "shuttlesock.core"
+local Log = require "shuttlesock.log"
 
 local lua_modules = {}
 local lua_module_subscribers = setmetatable({}, {__mode = "k"})
 local lua_module_publish = {}
+local any_module_subscribes_to_event = {}
     
 local Module = {}
 
@@ -26,6 +28,45 @@ function Module.new(mod, version)
   lua_module_subscribers[mod]={}
   lua_module_publish[mod]={}
   return mod
+end
+
+function Module.find(name)
+  local found
+  local t = type(name)
+  if t == "string" then
+    found = lua_modules[name]
+  elseif t == "table" and t.name then
+    found = lua_modules[t.name]
+  else
+    error("expected a module name string, got " .. t)
+  end
+  if not found then
+    return nil, "module '"..tostring(name).."' not found"
+  end
+  return found
+end
+
+function Module.receive_event(modname, publisher_module, event_name, data)
+  if not any_module_subscribes_to_event[event_name] then
+    return true
+  end
+  local self = assert(lua_modules[modname])
+  
+  local subscribers = rawget(rawget(lua_module_subscribers, self), event_name)
+  if not subscribers or #subscribers == 0 then
+    return true
+  end
+  
+  local publisher = Module.wrap(publisher_module)
+  local ok, err
+  for _, subscriber in ipairs(subscribers) do
+    ok, err = pcall(subscriber, self, data, event_name, publisher)
+    if not ok then
+      Log.error("Error receiving module event %s for module %s: %s", event_name, self.name or "?",  err or "?")
+    end
+  end
+  
+  return true
 end
 
 function module:add()
@@ -67,17 +108,29 @@ function module:add()
     module_table.parent_modules = table.concat(parent_modules)
   end
   
+  lua_modules[self.name]=self
+  
   ok, err = Core.add_module(module_table)
   if not ok then return nil, err end
   return self
 end
 
-function module:type()
-  if Module.modules[self] then
-    return "lua"
-  else
-    return "native"
+function module:subscribe(event_name, listener_function)
+  if Core.runstate() ~= "configuring" then
+    error("can't subscribe to module events while " .. Core.runstate())
   end
+  assert(type(event_name) == "string", "event name must be a string")
+  assert(type(listener_function) == "function", "listener function must a function in case that's not perfectly clear")
+  if not lua_module_subscribers[self][event_name] then
+    lua_module_subscribers[self][event_name] = {}
+  end
+  table.insert(lua_module_subscribers[self][event_name], listener_function)
+  any_module_subscribes_to_event[event_name] = true
+  return self
+end
+
+function module:type()
+  return "lua"
 end
 
 Module.metatable = module_mt
@@ -86,13 +139,15 @@ setmetatable(Module, {
     return {
       lua_modules = lua_modules,
       lua_module_subscribers = lua_module_subscribers,
-      lua_module_publish = lua_module_publish
+      lua_module_publish = lua_module_publish,
+      any_module_subscribes_to_event = any_module_subscribes_to_event
     }
   end,
   __gxcopy_load_state = function(state)
     lua_modules = state.lua_modules
     lua_module_subscribers = state.lua_module_subscribers
     lua_module_publish = state.lua_module_publish
+    any_module_subscribes_to_event = state.any_module_subscribes_to_event
   end
 })
 return Module

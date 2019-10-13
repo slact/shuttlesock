@@ -925,3 +925,38 @@ int luaS_table_count(lua_State *L, int idx) {
   }
   return count;
 }
+
+void luaS_push_runstate(lua_State *L, shuso_runstate_t state) {
+  switch(state) {
+    case SHUSO_STATE_DEAD:
+      lua_pushliteral(L, "dead");
+      return;
+    case SHUSO_STATE_STOPPED:
+      lua_pushliteral(L, "stopped");
+      return;
+    case SHUSO_STATE_MISCONFIGURED:
+      lua_pushliteral(L, "misconfigured");
+      return;
+    case SHUSO_STATE_CONFIGURING:
+      lua_pushliteral(L, "configuring");
+      return;
+    case SHUSO_STATE_CONFIGURED:
+      lua_pushliteral(L, "configured");
+      return;
+    case SHUSO_STATE_NIL:
+      lua_pushnil(L);
+      return;
+    case SHUSO_STATE_STARTING:
+      lua_pushliteral(L, "starting");
+      return;
+    case SHUSO_STATE_RUNNING:
+      lua_pushliteral(L, "running");
+      return;
+    case SHUSO_STATE_STOPPING:
+      lua_pushliteral(L, "stopping");
+      return;
+  }
+  shuso_set_error(shuso_state(L), "unknown runstate, can't push onto Lua stack");
+  lua_pushnil(L);
+  return;
+}

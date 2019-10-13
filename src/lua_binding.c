@@ -215,6 +215,66 @@ static int Lua_shuso_stop(lua_State *L) {
   return 1;
 }
 
+static int Lua_shuso_runstate(lua_State *L) {
+  shuso_t *S = shuso_state(L);
+  luaS_push_runstate(L, S->common->state);
+  return 1;
+}
+static int Lua_shuso_process_runstate(lua_State *L) {
+  shuso_t *S = shuso_state(L);
+  if(lua_gettop(L) == 0) {
+    luaS_push_runstate(L, *S->process->state);
+    return 1;
+  }
+  if(lua_isstring(L, 1)) {
+    const char *str = lua_tostring(L, 1);
+    if(strcmp(str, "master") == 0) {
+      lua_pop(L, 1);
+      lua_pushinteger(L, SHUTTLESOCK_MASTER);
+    }
+    else if(strcmp(str, "manager") == 0) {
+      lua_pop(L, 1);
+      lua_pushinteger(L, SHUTTLESOCK_MANAGER);
+    }
+    else {
+      lua_pushnil(L);
+      lua_pushfstring(L, "unknown process \"%s\"", str);
+      return 2;
+    }
+  }
+  if(!lua_isinteger(L, 1)) {
+    //not an int or string
+    lua_getglobal(L, "tostring");
+    lua_pushvalue(L, 1);
+    lua_pcall(L, 1, 1, 0);
+    lua_pushnil(L);
+    lua_pushfstring(L, "invalid process %s", lua_tostring(L, -2));
+    return 2;
+  }
+  int procnum = lua_tointeger(L, 1);
+  switch(procnum) {
+    case SHUTTLESOCK_MASTER:
+      luaS_push_runstate(L, *S->common->process.master.state);
+      return 1;
+    case SHUTTLESOCK_MANAGER:
+      luaS_push_runstate(L, *S->common->process.master.state);
+      return 1;
+    default:
+      if(procnum < SHUTTLESOCK_MASTER) {
+        lua_pushnil(L);
+        lua_pushfstring(L, "invalid process number %d", procnum);
+        return 2;
+      }
+      if(procnum > SHUTTLESOCK_MANAGER && (procnum < S->common->process.workers_start || procnum > S->common->process.workers_end)) {
+        lua_pushnil(L);
+        lua_pushfstring(L, "inactive worker number %d", procnum);
+        return 2;
+      }
+      luaS_push_runstate(L, *S->common->process.worker[procnum].state);
+      return 1;
+  }
+}
+/*
 static int Lua_shuso_spawn_manager(lua_State *L) {
   shuso_t *S = shuso_state(L);
   if(!shuso_spawn_manager(S)) {
@@ -256,7 +316,7 @@ static int Lua_shuso_stop_worker(lua_State *L) {
   S->common->process.workers_end++;
   lua_pushboolean(L, 1);
   return 1;
-}
+}*/
 
 static int Lua_shuso_set_log_fd(lua_State *L) {
   shuso_t       *S = shuso_state(L);
@@ -1403,17 +1463,6 @@ static int luaS_find_module_table(lua_State *L, const char *name) {
   return 1;
 }
 
-/*
-static bool luaS_module_pointer_ref(lua_State *L, const void *ptr) {
-  luaS_pointer_ref(L, "shuttlesock.lua_module_bridge.pointer_ref_table", ptr);
-  return true;
-}
-
-static bool luaS_get_module_pointer_ref(lua_State *L, const void *ptr) {
-  luaS_get_pointer_ref(L, "shuttlesock.lua_module_bridge.pointer_ref_table", ptr);
-  return lua_isnil(L, -1);
-}
-*/
 static bool lua_module_initialize_config(shuso_t *S, shuso_module_t *module, shuso_setting_block_t *block) {
   return true;
 }
@@ -1441,7 +1490,7 @@ static void lua_module_event_listener(shuso_t *S, shuso_event_state_t *evs, intp
     lua_pushnil(L);
   }
   
-  luaS_push_lua_module_field(L, "shuttlesock.core.lua_module", "receive_event");
+  luaS_push_lua_module_field(L, "shuttlesock.module", "receive_event");
   
   lua_pushstring(L, evs->module->name);
   lua_pushstring(L, evs->name);
@@ -1498,7 +1547,7 @@ static bool lua_module_initialize_events(shuso_t *S, shuso_module_t *module) {
   
   bool ok = true;
   
-  luaS_push_lua_module_field(L, "shuttlesock.core.lua_module", "find");
+  luaS_push_lua_module_field(L, "shuttlesock.module", "find");
   lua_pushstring(L, module->name);
   if (!luaS_function_call_result_ok(L, 1, true)) {
     lua_pop(L, 1);
@@ -1604,8 +1653,9 @@ static bool lua_bridge_module_init_events(shuso_t *S, shuso_module_t *self) {
 }
 
 luaL_Reg shuttlesock_core_module_methods[] = {
-// creation
+// creation, destruction
   {"create", Lua_shuso_create},
+  {"destroy", Lua_shuso_destroy},
 
 //configuration
   {"configure_file", Lua_shuso_configure_file},
@@ -1614,21 +1664,15 @@ luaL_Reg shuttlesock_core_module_methods[] = {
   //{"add_module", Lua_shuso_add_module},
   {"configure_finish", Lua_shuso_configure_finish},
   
-  {"destroy", Lua_shuso_destroy},
-  
+//state 
   {"run", Lua_shuso_run},
   {"stop", Lua_shuso_stop},
-  
-  {"spawn_manager", Lua_shuso_spawn_manager},
-  {"stop_manager", Lua_shuso_stop_manager},
-  
-  {"spawn_worker", Lua_shuso_spawn_worker},
-  {"stop_worker", Lua_shuso_stop_worker},
-  
+  {"runstate", Lua_shuso_runstate},
+  {"process_runstate", Lua_shuso_process_runstate},
+
   {"set_log_file", Lua_shuso_set_log_fd},
-  
   {"set_error", Lua_shuso_set_error},
-    
+
 //watchers
   {"new_watcher", Lua_shuso_new_watcher},
   

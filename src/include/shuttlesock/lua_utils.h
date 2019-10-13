@@ -102,4 +102,5 @@ int luaS_glob(lua_State *L); //glob(); pop 1 string, push glob table of strings 
 //errorsmithing
 int luaS_shuso_error(lua_State *L);
 
+void luaS_push_runstate(lua_State *L, shuso_runstate_t state);
 #endif //SHUTTLESOCK_LUA_BRIDGE_H
