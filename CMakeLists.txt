@@ -34,8 +34,8 @@ set(libsrc
 add_library(shuttlesock SHARED ${libsrc})
 set_property(TARGET shuttlesock PROPERTY C_STANDARD 11)
 
-target_include_directories(shuttlesock PUBLIC src/include)
 target_include_directories(shuttlesock PUBLIC ${PROJECT_BINARY_DIR}/src/include)
+target_include_directories(shuttlesock PUBLIC src/include)
 target_include_directories(shuttlesock PRIVATE src)
 
 #typeof() check
