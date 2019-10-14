@@ -1648,8 +1648,123 @@ static void lua_module_gxcopy(shuso_t *S, shuso_event_state_t *es, intptr_t code
 
 static bool lua_bridge_module_init_events(shuso_t *S, shuso_module_t *self) {
   shuso_event_listen(S, "core:worker.start.before.lua_gxcopy", lua_module_gxcopy, self);
-  
   return true;
+}
+
+static int Lua_shuso_block_setting_pointer(lua_State *L) {
+  luaL_checktype(L, 1, LUA_TLIGHTUSERDATA);
+  const shuso_setting_block_t *block = lua_topointer(L, 1);
+  lua_pushlightuserdata(L, block->setting);
+  return 1;
+}
+
+static int Lua_shuso_setting_block_pointer(lua_State *L) {
+  luaL_checktype(L, 1, LUA_TLIGHTUSERDATA);
+  const shuso_setting_t *setting = lua_topointer(L, 1);
+  if(setting->block) {
+    lua_pushnil(L);
+  }
+  else {
+    lua_pushlightuserdata(L, setting->block);
+  }
+  return 1;
+}
+
+static const shuso_setting_values_t *setting_values_type(lua_State *L, const shuso_setting_t     *setting, int nindex) {
+  lua_pushliteral(L, "merged");
+  if(nindex == 0 || lua_compare(L, nindex, -1, LUA_OPEQ)) {
+    lua_pop(L, 1);
+    return setting->values.merged;
+  }
+  lua_pop(L, 1);
+  
+  lua_pushliteral(L, "local");
+  if(lua_compare(L, nindex, -1, LUA_OPEQ)) {
+    lua_pop(L, 1);
+    return setting->values.local;
+  }
+  lua_pop(L, 1);
+  
+  lua_pushliteral(L, "inherited");
+  if(lua_compare(L, nindex, -1, LUA_OPEQ)) {
+    lua_pop(L, 1);
+    return setting->values.inherited;
+  }
+  lua_pop(L, 1);
+  
+  lua_pushliteral(L, "default");
+  lua_pushliteral(L, "defaults");
+  if(lua_compare(L, nindex, -1, LUA_OPEQ) || lua_compare(L, nindex, -2, LUA_OPEQ)) {
+    lua_pop(L, 2);
+    return setting->values.defaults;
+  }
+  lua_pop(L, 2);
+  
+  lua_getglobal(L, "tostring");
+  lua_pushvalue(L, nindex);
+  lua_call(L, 1, 1);
+  luaL_error(L, "invalid setting value type '%d', must be 'merged', 'local', 'inherited', or 'default'", lua_tostring(L, -1));
+  return NULL;
+}
+
+static int Lua_shuso_setting_values_count(lua_State *L) {
+  luaL_checktype(L, 1, LUA_TLIGHTUSERDATA);
+  
+  const shuso_setting_t         *setting = lua_topointer(L, 1);
+  const shuso_setting_values_t  *vals = NULL;
+  
+  vals = setting_values_type(L, setting, lua_gettop(L) < 2 ? 0 : 2);
+  assert(vals != NULL);
+  
+  lua_pushinteger(L, vals->count);
+  return 1;
+}
+
+static int Lua_shuso_setting_value(lua_State *L) {
+  luaL_checktype(L, 1, LUA_TLIGHTUSERDATA);
+  int n = luaL_checkinteger(L, 2);
+  
+  const shuso_setting_t        *setting = lua_topointer(L, 1);
+  const shuso_setting_values_t *vals = NULL;
+  
+  vals = setting_values_type(L, setting, lua_gettop(L) < 3 ? 0 : 3);
+  assert(vals != NULL);
+  
+  if(n < 1) {
+    lua_pushnil(L);
+    lua_pushfstring(L, "invalid value index %d (as in lua, the indices start at 1, not 0)", n);
+    return 2;
+  }
+  else if(vals->count > n) {
+    lua_pushnil(L);
+    lua_pushfstring(L, "no value at index %d", n);
+    return 2;
+  }
+  
+  const shuso_setting_value_t *val = &vals->array[n-1];
+  
+  lua_createtable(L, 0, 5);
+  if(val->valid.boolean) {
+    lua_pushboolean(L, val->boolean);
+    lua_setfield(L, -2, "boolean");
+  }
+  if(val->valid.integer) {
+    lua_pushinteger(L, val->integer);
+    lua_setfield(L, -2, "integer");
+  }
+  if(val->valid.number) {
+    lua_pushnumber(L, val->number);
+    lua_setfield(L, -2, "number");
+  }
+  if(val->valid.string) {
+    lua_pushlstring(L, val->string, val->string_len);
+    lua_setfield(L, -2, "string");
+  }
+  
+  lua_pushlstring(L, val->raw, val->raw_len);
+  lua_setfield(L, -2, "raw");
+  
+  return 1;
 }
 
 luaL_Reg shuttlesock_core_module_methods[] = {
@@ -1672,6 +1787,12 @@ luaL_Reg shuttlesock_core_module_methods[] = {
 
   {"set_log_file", Lua_shuso_set_log_fd},
   {"set_error", Lua_shuso_set_error},
+
+//config
+  {"block_setting_pointer", Lua_shuso_block_setting_pointer},
+  {"setting_block_pointer", Lua_shuso_setting_block_pointer},
+  {"setting_value", Lua_shuso_setting_value},
+  {"setting_values_count", Lua_shuso_setting_values_count},
 
 //watchers
   {"new_watcher", Lua_shuso_new_watcher},
