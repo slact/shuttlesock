@@ -160,7 +160,8 @@ int Lua_lazy_atomics_value_increment(lua_State *L) {
   luaL_checktype(L, 1, LUA_TLIGHTUSERDATA);
   luaL_checktype(L, 2, LUA_TNUMBER);
   shuso_lua_lazy_atomic_value_t *atomicval = (void *)lua_topointer(L, 1);
-  switch(atomicval->type) {
+  int type = atomicval->type;
+  switch(type) {
     case SHUSO_LUA_SHATOMIC_INTEGER: {
       int old = atomic_fetch_add(&atomicval->integer, lua_tointeger(L, 2));
       lua_pushinteger(L, old);
