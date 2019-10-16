@@ -3,6 +3,7 @@
 #include <lualib.h>
 #include <lauxlib.h>
 #include <shuttlesock/embedded_lua_scripts.h>
+#include "lua_api/lazy_atomics.h"
 
 #include <glob.h>
 
@@ -365,6 +366,9 @@ bool shuso_lua_initialize(shuso_t *S) {
   lua_pop(L, 1);
   
   luaL_requiref(L, "shuttlesock.system", luaS_push_system_module, 0);
+  lua_pop(L, 1);
+  
+  luaL_requiref(L, "shuttlesock.core.lazy_atomics", luaS_push_lazy_atomics_module, 0);
   lua_pop(L, 1);
   
   for(shuso_lua_embedded_scripts_t *script = &shuttlesock_lua_embedded_scripts[0]; script->name != NULL; script++) {

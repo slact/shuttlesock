@@ -73,6 +73,10 @@ void shuso_shared_slab_sizes_init(void);
 bool shuso_shared_slab_create(shuso_t *S, shuso_shared_slab_t *shm, size_t sz, const char *name);
 bool shuso_shared_slab_destroy(shuso_t *S, shuso_shared_slab_t *shm);
 
+
+void shuso_shared_slab_lock(shuso_shared_slab_t *shm);
+void shuso_shared_slab_unlock(shuso_shared_slab_t *shm);
+
 void *shuso_shared_slab_alloc(shuso_shared_slab_t *shm, size_t size);
 void *shuso_shared_slab_alloc_locked(shuso_shared_slab_t *shm, size_t size);
 void *shuso_shared_slab_calloc(shuso_shared_slab_t *shm, size_t size);

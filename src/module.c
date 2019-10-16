@@ -2,6 +2,9 @@
 #include <shuttlesock/embedded_lua_scripts.h>
 #include <lauxlib.h>
 
+static bool shuso_module_freeze(shuso_t *S, shuso_module_t *mod);
+static bool shuso_module_finalize(shuso_t *S, shuso_module_t *mod);
+
 bool shuso_module_system_initialize(shuso_t *S, shuso_module_t *core_module) {
   return shuso_set_core_module(S, core_module);
 }
@@ -77,6 +80,14 @@ bool shuso_initialize_added_modules(shuso_t *S) {
   if(S->common->modules.events == NULL) {
     return shuso_set_error(S, "failed to allocate memory for modules' events array");
   }
+  
+  for(unsigned i=0; i<S->common->modules.count; i++) {
+    shuso_module_t *module = S->common->modules.array[i];
+    if(!shuso_module_freeze(S, module)) {
+      return false;
+    }
+  }
+  
   for(unsigned i=0; i<S->common->modules.count; i++) {
     shuso_module_t *module = S->common->modules.array[i];
     luaS_push_lua_module_field(L, "shuttlesock.core.module", "start_initializing_module");
@@ -84,9 +95,9 @@ bool shuso_initialize_added_modules(shuso_t *S) {
     if(!luaS_function_call_result_ok(L, 1, false)) {
       return false;
     }
-    if(module->initialize_events) {
+    if(module->initialize) {
       int errcount = shuso_error_count(S);
-      if(!module->initialize_events(S, module)) {
+      if(!module->initialize(S, module)) {
         if(shuso_last_error(S) == NULL) {
           return shuso_set_error(S, "module %s failed to initialize, but reported no error", module->name);
         }
@@ -111,11 +122,8 @@ bool shuso_initialize_added_modules(shuso_t *S) {
   return true;
 }
 
-
-
-bool shuso_module_finalize(shuso_t *S, shuso_module_t *mod) {
+static bool shuso_module_freeze(shuso_t *S, shuso_module_t *mod) {
   lua_State      *L = S->lua.state;
-  int             n;
   if(mod == NULL) {
     return shuso_set_error(S, "can't freeze module from outside a shuttlesock module");
   }
@@ -126,17 +134,30 @@ bool shuso_module_finalize(shuso_t *S, shuso_module_t *mod) {
     return false;
   }
   
-  lua_getfield(L, -1, "all_events_initialized");
+  lua_getfield(L, -1, "freeze");
   lua_pushvalue(L, -2);
   if(!luaS_function_call_result_ok(L, 1, false)) {
     return false;
   }
   
-  lua_getfield(L, -1, "finalize");
+  //we need parent module index maps for locating contexts, which modules might do during initialization
+  lua_getfield(L, -1, "create_parent_modules_index_map");
   lua_pushvalue(L, -2);
-  if(!luaS_function_call_result_ok(L, 1, false)) {
+  if(!luaS_function_call_result_ok(L, 1, true)) {
     return false;
   }
+  int n = luaL_len(L, -1);
+  mod->parent_modules_index_map = shuso_stalloc(&S->stalloc, sizeof(*mod->parent_modules_index_map) * n);
+  if(mod->parent_modules_index_map == NULL) {
+    return shuso_set_error(S, "failed to allocate parent_modules_index_map");
+  }
+  for(int i=0; i<n; i++) {
+    lua_rawgeti(L, -1, i+1);
+    mod->parent_modules_index_map[i]=lua_tointeger(L, -1) - 1; //-1 for lua-to-C index conversion
+    lua_pop(L, 1);
+  }
+  lua_pop(L, 1);
+  
   
   lua_getfield(L, -1, "dependent_modules");
   lua_pushvalue(L, -2);
@@ -182,22 +203,27 @@ bool shuso_module_finalize(shuso_t *S, shuso_module_t *mod) {
   }
   lua_pop(L, 1);
   
-  lua_getfield(L, -1, "create_parent_modules_index_map");
-  lua_pushvalue(L, -2);
+  lua_pop(L, 1); //pop module
+  return true;
+}
+
+static bool shuso_module_finalize(shuso_t *S, shuso_module_t *mod) {
+  lua_State      *L = S->lua.state;
+  if(mod == NULL) {
+    return shuso_set_error(S, "can't freeze module from outside a shuttlesock module");
+  }
+  
+  luaS_push_lua_module_field(L, "shuttlesock.core.module", "find");
+  lua_pushlightuserdata(L, mod);
   if(!luaS_function_call_result_ok(L, 1, true)) {
     return false;
   }
-  n = luaL_len(L, -1);
-  mod->parent_modules_index_map = shuso_stalloc(&S->stalloc, sizeof(*mod->parent_modules_index_map) * n);
-  if(mod->parent_modules_index_map == NULL) {
-    return shuso_set_error(S, "failed to allocate parent_modules_index_map");
+  
+  lua_getfield(L, -1, "all_events_initialized");
+  lua_pushvalue(L, -2);
+  if(!luaS_function_call_result_ok(L, 1, false)) {
+    return false;
   }
-  for(int i=0; i<n; i++) {
-    lua_rawgeti(L, -1, i+1);
-    mod->parent_modules_index_map[i]=lua_tointeger(L, -1) - 1; //-1 for lua-to-C index conversion
-    lua_pop(L, 1);
-  }
-  lua_pop(L, 1);
   
   lua_getfield(L, -1, "events");
   lua_getfield(L, -1, "publish");
@@ -222,7 +248,7 @@ bool shuso_module_finalize(shuso_t *S, shuso_module_t *mod) {
     int listeners_count = luaL_len(L, -1);
     
     shuso_module_event_listener_t *cur;
-    shuso_module_event_listener_t *listeners = shuso_stalloc(&S->stalloc, sizeof(*listeners) * (n+1));
+    shuso_module_event_listener_t *listeners = shuso_stalloc(&S->stalloc, sizeof(*listeners) * (mod->submodules.count+1));
     if(listeners == NULL) {
       return shuso_set_error(S, "failed to allocate memory for event listeners");
     }
@@ -269,14 +295,24 @@ bool shuso_module_finalize(shuso_t *S, shuso_module_t *mod) {
 }
 
 bool shuso_context_list_initialize(shuso_t *S, shuso_module_t *parent, shuso_module_context_list_t *context_list, shuso_stalloc_t *stalloc) {
+  if(parent == NULL) {
+    parent = &shuso_core_module;
+  }
 #ifdef SHUTTLESOCK_DEBUG_MODULE_SYSTEM
   context_list->parent = parent;
 #endif
   int n = parent->submodules.count;
-  context_list->context = shuso_stalloc(stalloc, sizeof(void *) * n);
-  if(!context_list->context) {
-    return shuso_set_error(S, "failed to allocate context_list");
+  if(n > 0) {
+    context_list->context = shuso_stalloc(stalloc, sizeof(void *) * n);
+    if(!context_list->context) {
+      return shuso_set_error(S, "failed to allocate context_list");
+    }
   }
+#ifdef SHUTTLESOCK_DEBUG_MODULE_SYSTEM
+  else {
+    context_list->context = NULL;
+  }
+#endif
   return true;
 }
 
@@ -287,6 +323,24 @@ void *shuso_context(shuso_t *S, shuso_module_t *parent, shuso_module_t *module, 
 #endif
   int offset = module->parent_modules_index_map[parent->index];
   return context_list->context[offset];
+}
+
+bool shuso_set_context(shuso_t *S, shuso_module_t *parent, shuso_module_t *module, void *ctx, shuso_module_context_list_t *context_list) {
+#ifdef SHUTTLESOCK_DEBUG_MODULE_SYSTEM
+  assert(context_list->parent == parent);
+  assert(parent->submodules.submodule_presence_map[module->index] == 1);
+#endif
+  int offset = module->parent_modules_index_map[parent->index];
+  context_list->context[offset] = ctx;
+  return true;
+}
+
+bool shuso_set_core_context(shuso_t *S, shuso_module_t *module, void *ctx) {
+  return shuso_set_context(S, &shuso_core_module, module, ctx, &S->common->module_ctx.core->context_list);
+}
+
+void *shuso_core_context(shuso_t *S, shuso_module_t *module) {
+  return shuso_context(S, &shuso_core_module, module, &S->common->module_ctx.core->context_list);
 }
 
 shuso_module_t *shuso_get_module(shuso_t *S, const char *name) {
@@ -324,7 +378,7 @@ static void core_gxcopy(shuso_t *S, shuso_event_state_t *evs, intptr_t status, v
   //do nothing, all modules are copied over by the lua_bridge_module
 }
 
-static bool core_module_init_events(shuso_t *S, shuso_module_t *self) {
+static bool core_module_initialize(shuso_t *S, shuso_module_t *self) {
   shuso_core_module_events_t *events = shuso_stalloc(&S->stalloc, sizeof(*events));
   shuso_events_initialize(S, self, events, (shuso_event_init_t[]){
     {"configure",       &events->configure,         NULL},
@@ -350,8 +404,12 @@ static bool core_module_init_events(shuso_t *S, shuso_module_t *self) {
   
   shuso_event_listen(S, "core:worker.start.before.lua_gxcopy", core_gxcopy, self);
   
-  //shuso_context_list_initialize(S, self, &ctx->context_list, &S->stalloc);
-  //S->common->module_ctx.core = ctx;
+  shuso_core_module_ctx_t *ctx = shuso_stalloc(&S->stalloc, sizeof(*ctx));
+  assert(ctx);
+  shuso_context_list_initialize(S, self, &ctx->context_list, &S->stalloc);
+  
+  S->common->module_ctx.core = ctx;
+  
   return true;
 }
 shuso_module_t shuso_core_module = {
@@ -380,5 +438,5 @@ shuso_module_t shuso_core_module = {
   .subscribe = 
    " core:worker.start.before.lua_gxcopy"
   ,
-  .initialize_events = core_module_init_events
+  .initialize = core_module_initialize
 };

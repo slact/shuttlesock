@@ -1504,7 +1504,7 @@ static void lua_module_event_listener(shuso_t *S, shuso_event_state_t *evs, intp
   return;
 }
 
-static bool lua_module_initialize_events(shuso_t *S, shuso_module_t *module) {
+static bool lua_module_initialize(shuso_t *S, shuso_module_t *module) {
   lua_State *L = S->lua.state;
   luaS_find_module_table(L, module->name);
   
@@ -1605,7 +1605,7 @@ static int Lua_shuso_add_module(lua_State *L) {
   lua_pop(L, 1);
   
   m->initialize_config = lua_module_initialize_config;
-  m->initialize_events = lua_module_initialize_events;
+  m->initialize = lua_module_initialize;
   
   if(!shuso_add_module(S, m)) {
     lua_pushnil(L);
@@ -1618,6 +1618,41 @@ static int Lua_shuso_add_module(lua_State *L) {
   return 1;
 }
 
+static int Lua_shuso_module_name(lua_State *L) {
+  luaL_checktype(L, 1, LUA_TLIGHTUSERDATA);
+  const shuso_module_t *module = lua_topointer(L, 1);
+  lua_pushstring(L, module->name);
+  return 1;
+}
+static int Lua_shuso_module_pointer(lua_State *L) {
+  luaL_checkstring(L, 1);
+  const shuso_module_t *module = shuso_get_module(shuso_state(L), lua_tostring(L, 1));
+  lua_pushstring(L, module->name);
+  return 1;
+}
+
+static int Lua_shuso_module_version(lua_State *L) {
+  int lt = lua_type(L, 1);
+  const shuso_module_t *module;
+  if(lt == LUA_TLIGHTUSERDATA) {
+    module = lua_topointer(L, 1);
+  }
+  else if(lt == LUA_TSTRING) {
+    module = shuso_get_module(shuso_state(L), lua_tostring(L, 1));
+    if(!module) {
+      lua_pushnil(L);
+      lua_pushliteral(L, "no such module");
+      return 2;
+    }
+  }
+  else {
+    lua_pushnil(L);
+    lua_pushliteral(L, "module_version argument must be a light userdata or string");
+    return 2;
+  }
+  lua_pushstring(L, module->version);
+  return 1;
+}
 
 static void lua_module_gxcopy(shuso_t *S, shuso_event_state_t *es, intptr_t code, void *data, void *pd) {
   shuso_t *Sm = data;
@@ -1646,12 +1681,43 @@ static void lua_module_gxcopy(shuso_t *S, shuso_event_state_t *es, intptr_t code
   lua_pop(Lm, 1);
 }
 
-static bool lua_bridge_module_init_events(shuso_t *S, shuso_module_t *self) {
+typedef struct {
+  int           placeholder;
+} lua_bridge_module_ctx_t;
+
+/*
+static void *lua_shared_allocator(void *ud, void *ptr, size_t osize, size_t nsize) {
+  shuso_shared_slab_t *shm = ud;
+  if (nsize == 0) {
+    shuso_shared_slab_free(shm, ptr);
+    return NULL;
+  }
+  else if(ptr == NULL || osize == 0) {
+    return shuso_shared_slab_alloc_locked(shm, nsize);
+  }
+  else {
+    void *newptr = shuso_shared_slab_alloc_locked(shm, nsize);
+    if(newptr == NULL) {
+      return NULL;
+    }
+    memcpy(newptr, ptr, nsize < osize ? nsize : osize);
+    shuso_shared_slab_free_locked(shm, ptr);
+    return newptr;
+  }
+}
+*/
+
+static bool lua_bridge_module_initialize(shuso_t *S, shuso_module_t *self) {
   shuso_event_listen(S, "core:worker.start.before.lua_gxcopy", lua_module_gxcopy, self);
+  
+  lua_bridge_module_ctx_t *ctx = shuso_stalloc(&S->stalloc, sizeof(*ctx));
+  
+  shuso_set_core_context(S, self, ctx);
+  
   return true;
 }
 
-static int Lua_shuso_block_setting_pointer(lua_State *L) {
+static int Lua_shuso_block_parent_setting_pointer(lua_State *L) {
   luaL_checktype(L, 1, LUA_TLIGHTUSERDATA);
   const shuso_setting_block_t *block = lua_topointer(L, 1);
   lua_pushlightuserdata(L, block->setting);
@@ -1767,6 +1833,25 @@ static int Lua_shuso_setting_value(lua_State *L) {
   return 1;
 }
 
+static int Lua_shuso_setting_name(lua_State *L) {
+  luaL_checktype(L, 1, LUA_TLIGHTUSERDATA);
+  const shuso_setting_t        *setting = lua_topointer(L, 1);
+  lua_pushstring(L, setting->name);
+  return 1;
+}
+static int Lua_shuso_setting_raw_name(lua_State *L) {
+  luaL_checktype(L, 1, LUA_TLIGHTUSERDATA);
+  const shuso_setting_t        *setting = lua_topointer(L, 1);
+  lua_pushstring(L, setting->raw_name);
+  return 1;
+}
+static int Lua_shuso_setting_module_name(lua_State *L) {
+  luaL_checktype(L, 1, LUA_TLIGHTUSERDATA);
+  const shuso_setting_t        *setting = lua_topointer(L, 1);
+  lua_pushstring(L, setting->module);
+  return 1;
+}
+
 luaL_Reg shuttlesock_core_module_methods[] = {
 // creation, destruction
   {"create", Lua_shuso_create},
@@ -1789,10 +1874,13 @@ luaL_Reg shuttlesock_core_module_methods[] = {
   {"set_error", Lua_shuso_set_error},
 
 //config
-  {"block_setting_pointer", Lua_shuso_block_setting_pointer},
-  {"setting_block_pointer", Lua_shuso_setting_block_pointer},
-  {"setting_value", Lua_shuso_setting_value},
-  {"setting_values_count", Lua_shuso_setting_values_count},
+  {"config_block_parent_setting_pointer", Lua_shuso_block_parent_setting_pointer},
+  {"config_setting_block_pointer", Lua_shuso_setting_block_pointer},
+  {"config_setting_value", Lua_shuso_setting_value},
+  {"config_setting_name", Lua_shuso_setting_name},
+  {"config_setting_raw_name", Lua_shuso_setting_raw_name},
+  {"config_setting_module_name", Lua_shuso_setting_module_name},
+  {"config_setting_values_count", Lua_shuso_setting_values_count},
 
 //watchers
   {"new_watcher", Lua_shuso_new_watcher},
@@ -1816,6 +1904,9 @@ luaL_Reg shuttlesock_core_module_methods[] = {
 
 //modules
   {"add_module", Lua_shuso_add_module},
+  {"module_pointer", Lua_shuso_module_pointer},
+  {"module_name", Lua_shuso_module_name},
+  {"module_version", Lua_shuso_module_version},
   
 //ipc
   {"send_file", Lua_shuso_ipc_send_fd},
@@ -1850,5 +1941,5 @@ shuso_module_t shuso_lua_bridge_module = {
   .version = "0.0.1",
   .subscribe = 
    " core:worker.start.before.lua_gxcopy",
-  .initialize_events = lua_bridge_module_init_events
+  .initialize = lua_bridge_module_initialize
 };

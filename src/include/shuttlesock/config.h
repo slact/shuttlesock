@@ -7,8 +7,8 @@ extern shuso_module_t shuso_config_module;
 #define SHUSO_SETTING_BLOCK_OPTIONAL 2
 
 struct shuso_setting_block_s {
-  const char     *name;   //this is for debugging mostly
-  shuso_setting_t *setting;
+  shuso_setting_t             *setting;
+  shuso_module_context_list_t context_list;
 }; // shuso_setting_block_t
 
 typedef struct {
@@ -45,6 +45,8 @@ struct shuso_setting_values_s {
 
 struct shuso_setting_s {
   const char             *name;
+  const char             *module;
+  const char             *raw_name;
   struct {
     shuso_setting_values_t *merged;
     shuso_setting_values_t *local;

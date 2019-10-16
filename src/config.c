@@ -171,8 +171,11 @@ bool shuso_config_system_generate(shuso_t *S) {
   }
   lua_getfield(L, -1, "block");
   *root_block = (shuso_setting_block_t ) {
-    .name = "::ROOT"
+    .setting = NULL
   };
+  if(!shuso_context_list_initialize(S, NULL, &root_block->context_list, &S->stalloc)) {
+    return shuso_set_error(S, "unable to initialize root block module context list");
+  }
   lua_pushlightuserdata(L, root_block);
   lua_setfield(L, -2, "ptr");
   
@@ -266,7 +269,6 @@ bool shuso_config_system_generate(shuso_t *S) {
       if(block == NULL) {
         return shuso_set_error(S, "failed to allocate memory for config block");
       }
-      block->name = setting->name;
       lua_getfield(L, -1, "ptr");
       assert(lua_isnil(L, -1));
       lua_pop(L, 1);
@@ -276,6 +278,9 @@ bool shuso_config_system_generate(shuso_t *S) {
       luaS_config_pointer_ref(L, block); //also pops the block table
       setting->block = block;
       block->setting = setting;
+      if(!shuso_context_list_initialize(S, NULL, &block->context_list, &S->stalloc)) {
+        return shuso_set_error(S, "unable to initialize config block module context list");
+      }
     }
     
     luaS_config_pointer_ref(L, setting); //pops the setting table too
@@ -459,7 +464,7 @@ static void config_worker_gxcopy(shuso_t *S, shuso_event_state_t *evs, intptr_t 
   return;
 }
 
-static bool config_init_events(shuso_t *S, shuso_module_t *self) {
+static bool config_initialize(shuso_t *S, shuso_module_t *self) {
   shuso_event_listen(S, "core:worker.start.before.lua_gxcopy", config_worker_gxcopy, self);
   return true;
 }
@@ -472,6 +477,6 @@ shuso_module_t shuso_config_module = {
   .name = "config",
   .version = "0.0.1",
   .subscribe = "core:worker.start.before.lua_gxcopy",
+  .initialize = config_initialize,
   .initialize_config = config_init_config,
-  .initialize_events = config_init_events
 };

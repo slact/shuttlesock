@@ -911,4 +911,11 @@ void shuso_shared_slab_free_locked(shuso_shared_slab_t *shm, void *p) {
   ngx_slab_free_locked(shm->pool, p);
 }
 
+void shuso_shared_slab_lock(shuso_shared_slab_t *shm) {
+  ngx_shmtx_lock(&shm->pool->mutex);
+}
+void shuso_shared_slab_unlock(shuso_shared_slab_t *shm) {
+  ngx_shmtx_unlock(&shm->pool->mutex);
+}
+
 #endif

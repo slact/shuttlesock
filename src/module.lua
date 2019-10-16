@@ -224,9 +224,6 @@ function Module.new(name, ptr, version, subscribe_string, publish_string, parent
   if not self.events.publish then
     return nil, ("failed to add module %s: %s"):format(name, err)
   end
-  for _, event in ipairs(self.events.publish) do
-    event.module = self
-  end
   Module.by_name[name]=self
   Module.by_ptr[ptr]=self
   Module.index_counter = Module.index_counter + 1
@@ -282,33 +279,42 @@ do
     end
   }
   
-  function module:finalize()
-    if self.finalized then
-      return nil, "module "..self.name.." has already been finalized"
+  function module:freeze()
+    if self.frozen then
+      return true
     end
+    local parent_modules_unique = {}
     self.parent_modules = {}
-    for i, modname in ipairs(self.parent_module_names) do
+    for _, modname in ipairs(self.parent_module_names) do
       local parent = Module.find(modname)
       if not parent then
         return nil, "module "..self.name.." requires parent module "..modname..", which was not found"
       end
-      self.parent_modules[i]=parent
+      if not parent_modules_unique[parent] then
+        parent_modules_unique[parent]=true
+        table.insert(self.parent_modules, parent)
+      end
     end
     for event_name, event in pairs(self.events.subscribe) do
-      if not event.module then
-        if Module.find(event.module_name) then
-          return nil, ("module %s depends on event %s, but module %s does not publish such an event"):format(self.name, event_name, event.module_name)
-        else
-          return nil, ("module %s depends on event %s, but module %s was not found"):format(self.name, event_name, event.module_name)
-        end
+      local publishing_module = Module.find(event.module_name)
+      if not publishing_module then
+        return nil, ("module %s depends on event %s, but module %s was not found"):format(self.name, event_name, event.module_name)
+      end
+      if not publishing_module:event(event.name) then
+        return nil, ("module %s depends on event %s, but module %s does not publish such an event"):format(self.name, event_name, event.module_name)
+      end
+      if not parent_modules_unique[publishing_module] then
+        parent_modules_unique[publishing_module]=true
+        table.insert(self.parent_modules, publishing_module)
       end
     end
     
-    self.finalized = true;
+    self.frozen = true
     return true
   end
   
   function module:create_parent_modules_index_map()
+    assert(self.frozen)
     local map = {}
     for i=1, Module.count() do
       map[i]=0

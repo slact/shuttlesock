@@ -12,15 +12,65 @@ local block_mt = {
   end,
   __name="config.block"
 }
+
+local block_context_mt = {
+  __mode="k",
+  __gxcopy = function()
+    return require("shuttlesock.config").block_context_metatable
+  end,
+  __newindex = function(t, k)
+    local ctx = {}
+    rawset(t, k, ctx)
+    return ctx
+  end
+}
+
 function Config.block(ptr)
   assert(type(ptr) == "userdata")
   local self = rawget(block_cache, ptr)
   if self then return self end
   self = setmetatable({ptr=ptr}, block_mt)
   block_cache[ptr]=self
-  self.setting = Config.setting(Core.block_setting_pointer(ptr))
+  self.parent_setting_ptr = Core.config_block_parent_setting_pointer(ptr)
+  self.settings = {}
+  self.contexts = setmetatable({}, block_context_mt)
   return self
 end
+
+function block:setting(name)
+  local setting = self.settings[name]
+  if setting then
+    return setting
+  elseif setting == false then
+    return nil
+  end
+  
+  local setting_ptr = Core.block_setting_pointer(self.ptr, name)
+  if not setting_ptr then
+    self.settings[name] = false
+    return nil
+  end
+  setting = Config.setting(setting_ptr)
+  self.settings[name] = setting
+  return setting
+end
+
+function block:context(module_name)
+  if type(module_name) == "table" then
+    module_name = module_name.name
+  end
+  return self.contexts[module_name]
+end
+
+function block:setting_value(name, n, data_type, value_type)
+  local setting = block:setting(name)
+  if not setting then
+    return nil
+  end
+  return setting:value(n, data_type, value_type)
+end
+
+
 
 local setting_cache = {}
 local setting = {}
@@ -31,22 +81,25 @@ local setting_mt = {
   end,
   __name="config.setting"
 }
-function Config.setting(ptr, name, handling_module_name)
+function Config.setting(ptr)
   assert(type(ptr) == "userdata")
-  assert(type(name) == "string")
   local setting = rawget(setting_cache, ptr)
   if self then return self end
-  self = setmetatable({ptr=ptr}, block_mt)
+  self = setmetatable({
+    name = Core.config_setting_name(ptr)
+    raw_name = Core.config_setting_raw_name(ptr)
+    module_name = Core.setting.config_module_name(ptr)
+    ptr=ptr
+  }, block_mt)
   self.name = name
-  self.module_name = handling_module_name
   setting_cache[ptr]=self
   
   self.values = {}
   for _, vtype in ipairs{"merged", "local", "inherited", "default"} do
     local values = {}
-    local valcount = Core.setting_values_count(ptr, vtype)
+    local valcount = Core.config_setting_values_count(ptr, vtype)
     for i=1,valcount do
-      table.insert(values, Core.setting_value(ptr, i, vtype))
+      table.insert(values, Core.config_setting_value(ptr, i, vtype))
     end
     self.values[vtype] = values
   end
@@ -54,8 +107,6 @@ function Config.setting(ptr, name, handling_module_name)
   return self
 end
 
-
-local possible_value_types = {merged=1, ["local"]=1, inherited=1, default=1,defaults=1}
 
 function setting:value(n, data_type, value_type)
   assert(n, "value index is missing")
@@ -88,5 +139,6 @@ function setting:value(n, data_type, value_type)
 end
 
 Config.block_metatable = block_mt
+Config.block_context_metatable = block_context_mt
 Config.setting_metatable = setting_mt
 return Config

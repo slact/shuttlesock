@@ -76,10 +76,10 @@ do
     end
     
     if self.module.finalized then
-      return nil, "module "..self.module.name.." has already been finalized"
+      return nil, ("module %s can't add event listener for event '%s': module %s has already been finalized"):format(subscriber_module.name, self:full_name(), self.module.name)
     end
     if subscriber_module.finalized then
-      return nil, "module "..subscriber_module.name.." has already been finalized"
+      return nil, ("module %s can't add event listener for event '%s': module %s has already been finalized"):format(subscriber_module.name, self:full_name(), subscriber_module.name)
     end
     if not subscriber_module:subscribes_to_event(self:full_name()) then
       return nil, "module ".. subscriber_module.name.." has not declared event ".. self:full_name() .. " in its 'subscribe' list, so it cannot be used."

@@ -1,6 +1,7 @@
 local Core = require "shuttlesock.core"
 local Log = require "shuttlesock.log"
 
+local wrapped_modules = {}
 local lua_modules = {}
 local lua_module_subscribers = setmetatable({}, {__mode = "k"})
 local lua_module_publish = {}
@@ -16,6 +17,15 @@ local module_mt = {
     return require("shuttlesock.module").metatable
   end
 }
+
+function Module.wrap(module_name, module_ptr)
+  local self = wrapped_modules[module_name]
+  if not self then
+    self = {ptr = module_ptr, name=module_name}
+    wrapped_modules[module_name] = self
+  end
+  return self
+end
 
 function Module.new(mod, version)
   if type(mod) == "string" then
@@ -46,7 +56,7 @@ function Module.find(name)
   return found
 end
 
-function Module.receive_event(modname, publisher_module, event_name, data)
+function Module.receive_event(modname, publisher_module_name, event_name, data)
   if not any_module_subscribes_to_event[event_name] then
     return true
   end
@@ -57,7 +67,11 @@ function Module.receive_event(modname, publisher_module, event_name, data)
     return true
   end
   
-  local publisher = Module.wrap(publisher_module)
+  local publisher = Module.find(publisher_module_name)
+  if not publisher then
+    publisher = Module.wrap(publisher_module_name)
+  end
+  
   local ok, err
   for _, subscriber in ipairs(subscribers) do
     ok, err = pcall(subscriber, self, data, event_name, publisher)
@@ -112,6 +126,7 @@ function module:add()
   
   ok, err = Core.add_module(module_table)
   if not ok then return nil, err end
+  self.ptr = Core.module_pointer(self.name)
   return self
 end
 
@@ -140,7 +155,8 @@ setmetatable(Module, {
       lua_modules = lua_modules,
       lua_module_subscribers = lua_module_subscribers,
       lua_module_publish = lua_module_publish,
-      any_module_subscribes_to_event = any_module_subscribes_to_event
+      any_module_subscribes_to_event = any_module_subscribes_to_event,
+      wrapped_modules = wrapped_modules
     }
   end,
   __gxcopy_load_state = function(state)
@@ -148,6 +164,7 @@ setmetatable(Module, {
     lua_module_subscribers = state.lua_module_subscribers
     lua_module_publish = state.lua_module_publish
     any_module_subscribes_to_event = state.any_module_subscribes_to_event
+    wrapped_modules = state.wrapped_modules
   end
 })
 return Module

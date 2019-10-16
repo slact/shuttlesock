@@ -18,11 +18,12 @@
 #include <shuttlesock/stalloc.h>
 #include <shuttlesock/resolver.h>
 #include <shuttlesock/shared_slab.h>
+#include <shuttlesock/log.h>
+#include <shuttlesock/module.h>
+#include <shuttlesock/config.h>
 #include <shuttlesock/lua_utils.h>
 #include <shuttlesock/sysutil.h>
-#include <shuttlesock/log.h>
-#include <shuttlesock/config.h>
-#include <shuttlesock/module.h>
+
 #include <shuttlesock/module_event.h>
 
 struct shuso_process_s {
@@ -130,6 +131,7 @@ struct shuso_common_s {
   shuso_ipc_handler_t ipc_handlers[256];
   struct {
     shuso_config_module_ctx_t  *config;
+    shuso_core_module_ctx_t    *core;
   }                   module_ctx;
   
   shuso_config_t      config;

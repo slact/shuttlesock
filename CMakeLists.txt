@@ -27,6 +27,7 @@ set(libsrc
   src/module_event.c
   src/config.c
   ${PROJECT_BINARY_DIR}/src/embedded_lua_scripts.c
+  src/lua_api/lazy_atomics.c
   src/lua_binding.c
   src/lua_utils.c
 )
