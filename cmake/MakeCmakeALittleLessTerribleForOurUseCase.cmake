@@ -43,6 +43,7 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 
 if("${CMAKE_C_COMPILER_ID}" STREQUAL "AppleClang")
+  add_compiler_flags("-Wno-gnu-folding-constant")
   set(link_ubsan "")
   set(leak_sanitizer "")
 else()
