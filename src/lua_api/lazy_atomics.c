@@ -22,17 +22,31 @@ typedef struct {
   _Atomic     (void *)  pointer;
 } shuso_lua_lazy_atomic_value_t;
 
+
+typedef struct {
+  shuso_lua_lazy_atomic_value_t *atomic;
+} lua_lazy_atomic_userdata_t;
+
 static int Lua_lazy_atomics_value_set(lua_State *L);
 
 static int Lua_lazy_atomics_value_create(lua_State *L) {
   shuso_t *S = shuso_state(L);
   shuso_lua_lazy_atomic_value_t *atomicval = shuso_shared_slab_alloc(&S->common->shm, sizeof(*atomicval));
-  
   if(!atomicval) {
     lua_pushnil(L);
     lua_pushstring(L, "failed to allocate Lua shared atomic value");
     return 2;
   }
+  
+  lua_lazy_atomic_userdata_t *ud = lua_newuserdata(L, sizeof(*ud));
+  if(!ud) {
+    lua_pushnil(L);
+    lua_pushstring(L, "failed to allocate Lua shared atomic value userdata");
+    return 2;
+  }
+  
+  ud->atomic = atomicval;
+  luaL_setmetatable(L, "shuttlesock.lazy_atomic");
   
   if(lua_gettop(L) == 0) {
     atomicval->type = SHUSO_LUA_SHATOMIC_NIL;
@@ -44,15 +58,14 @@ static int Lua_lazy_atomics_value_create(lua_State *L) {
     luaS_call(L, 2, 0);
   }
   
-  lua_pushlightuserdata(L, atomicval);
   return 1;
 }
 
 static int Lua_lazy_atomics_value_destroy(lua_State *L) {
   //this is not concurrency-safe! destruction assumes the value is no longer in use
   shuso_t *S = shuso_state(L);
-  shuso_lua_lazy_atomic_value_t *atomicval = (void *)lua_topointer(L, 1);
-  atomicval->type = SHUSO_LUA_SHATOMIC_NIL;
+  lua_lazy_atomic_userdata_t *ud = luaL_checkudata(L, 1, "shuttlesock.lazy_atomic");
+  shuso_lua_lazy_atomic_value_t *atomicval = ud->atomic;
   if(atomicval->string) {
     shuso_shared_slab_free(&S->common->shm, atomicval->string);
     atomicval->string = NULL;
@@ -65,18 +78,24 @@ static int Lua_lazy_atomics_value_destroy(lua_State *L) {
 
 static int Lua_lazy_atomics_value_set(lua_State *L) {
   shuso_t *S = shuso_state(L);
-  shuso_lua_lazy_atomic_value_t *atomicval = (void *)lua_topointer(L, 1);
-  
-  int type = lua_type(L, 1);
+  lua_lazy_atomic_userdata_t      *ud = luaL_checkudata(L, 1, "shuttlesock.lazy_atomic");
+  shuso_lua_lazy_atomic_value_t   *atomicval = ud->atomic;
+  if(atomicval == NULL) {
+    lua_pushnil(L);
+    lua_pushliteral(L, "can't set destroyed atomic value");
+    return 2;
+  }
+  luaL_checkany(L, 2);
+  int type = lua_type(L, 2);
   switch(type) {
     case LUA_TNUMBER: {
-      if(lua_isinteger(L, 1)) {
-        int integer = lua_tointeger(L, 1);
+      if(lua_isinteger(L, 2)) {
+        int integer = lua_tointeger(L, 2);
         atomicval->integer = integer;
         atomicval->type = SHUSO_LUA_SHATOMIC_INTEGER;
       }
       else {
-        lua_Number num = lua_tonumber(L, 1);
+        lua_Number num = lua_tonumber(L, 2);
         atomicval->number = num;
         atomicval->type = SHUSO_LUA_SHATOMIC_NUMBER;
       }
@@ -84,7 +103,7 @@ static int Lua_lazy_atomics_value_set(lua_State *L) {
     }
     case LUA_TSTRING: {
       size_t sz;
-      const char *str = lua_tolstring(L, 1, &sz);
+      const char *str = lua_tolstring(L, 2, &sz);
       sized_string_t *shared_str, *old_shared_str;
       shared_str = shuso_shared_slab_alloc(&S->common->shm, sizeof(*shared_str) + sz);
       if(!sz) {
@@ -101,7 +120,7 @@ static int Lua_lazy_atomics_value_set(lua_State *L) {
       break;
     }
     case LUA_TLIGHTUSERDATA: {
-      atomicval->pointer = (void *)lua_topointer(L, 1);
+      atomicval->pointer = (void *)lua_topointer(L, 2);
       atomicval->type = SHUSO_LUA_SHATOMIC_POINTER;
       break;
     }
@@ -121,8 +140,14 @@ static int Lua_lazy_atomics_value_set(lua_State *L) {
 }
 
 static int Lua_lazy_atomics_value_get(lua_State *L) {
-  luaL_checktype(L, 1, LUA_TLIGHTUSERDATA);
-  shuso_lua_lazy_atomic_value_t *atomicval = (void *)lua_topointer(L, 1);
+  lua_lazy_atomic_userdata_t      *ud = luaL_checkudata(L, 1, "shuttlesock.lazy_atomic");
+  shuso_lua_lazy_atomic_value_t   *atomicval = ud->atomic;
+  if(atomicval == NULL) {
+    lua_pushnil(L);
+    lua_pushliteral(L, "can't set destroyed atomic value");
+    return 2;
+  }
+  
   // we can afford to not wrap this in a Check-And-Set for the type
   // because the value_set operation does not erase the previous value
   // when the type changes
@@ -157,9 +182,14 @@ static int Lua_lazy_atomics_value_get(lua_State *L) {
 }
 
 int Lua_lazy_atomics_value_increment(lua_State *L) {
-  luaL_checktype(L, 1, LUA_TLIGHTUSERDATA);
+  lua_lazy_atomic_userdata_t      *ud = luaL_checkudata(L, 1, "shuttlesock.lazy_atomic");
+  shuso_lua_lazy_atomic_value_t   *atomicval = ud->atomic;
+  if(atomicval == NULL) {
+    lua_pushnil(L);
+    lua_pushliteral(L, "can't set destroyed atomic value");
+    return 2;
+  }
   luaL_checktype(L, 2, LUA_TNUMBER);
-  shuso_lua_lazy_atomic_value_t *atomicval = (void *)lua_topointer(L, 1);
   int type = atomicval->type;
   switch(type) {
     case SHUSO_LUA_SHATOMIC_INTEGER: {
@@ -196,15 +226,48 @@ int Lua_lazy_atomics_value_increment(lua_State *L) {
 luaL_Reg shuttlesock_lua_lazy_atomics_table[] = {
   {"create", Lua_lazy_atomics_value_create},
   {"destroy", Lua_lazy_atomics_value_destroy},
-  
-  {"set", Lua_lazy_atomics_value_set},
-  {"get", Lua_lazy_atomics_value_get},
-  {"increment", Lua_lazy_atomics_value_increment},
   {NULL, NULL}
 };
 
+static int Lua_lazy_atomics_value_gxcopy_save_state(lua_State *L) {
+  lua_lazy_atomic_userdata_t      *ud = luaL_checkudata(L, 1, "shuttlesock.lazy_atomic");
+  lua_pushlightuserdata(L, ud->atomic);
+  return 1;
+}
+
+static int Lua_lazy_atomics_value_gxcopy_load_state(lua_State *L) {
+  luaL_checktype(L, 1, LUA_TLIGHTUSERDATA);
+  shuso_lua_lazy_atomic_value_t   *atomicval = (void *)lua_topointer(L, 1);
+  lua_lazy_atomic_userdata_t *ud = lua_newuserdata(L, sizeof(*ud));
+  if(!ud) {
+    return luaL_error(L, "failed to allocate Lua shared atomic value userdata");
+  }
+  
+  ud->atomic = atomicval;
+  luaL_setmetatable(L, "shuttlesock.lazy_atomic");
+  return 1;
+}
 
 int luaS_push_lazy_atomics_module(lua_State *L) {
   luaL_newlib(L, shuttlesock_lua_lazy_atomics_table);
+  
+  if(luaL_newmetatable(L, "shuttlesock.lazy_atomic")) {
+    //__index table
+    luaL_getsubtable(L, -1, "__index");
+    luaL_setfuncs(L, (luaL_Reg[]){
+      {"set", Lua_lazy_atomics_value_set},
+      {"value", Lua_lazy_atomics_value_get},
+      {"increment", Lua_lazy_atomics_value_increment},
+      {NULL, NULL}
+    }, 0);
+    lua_pop(L, 1);
+    
+    luaL_setfuncs(L, (luaL_Reg[]){
+      {"__gxcopy_save_state", Lua_lazy_atomics_value_gxcopy_save_state},
+      {"__gxcopy_load_state", Lua_lazy_atomics_value_gxcopy_load_state},
+      {NULL, NULL}
+    }, 0);
+  }
+  
   return 1;
 }
