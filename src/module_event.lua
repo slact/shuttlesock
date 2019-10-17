@@ -46,7 +46,7 @@ do
   event_mt = {
     __name = "event",
     __index=event,
-    __gxcopy = function()
+    __gxcopy_metatable = function()
       return require("shuttlesock.core.module_event").metatable
     end
   }

@@ -574,14 +574,14 @@ static bool gxcopy_metatable(lua_gxcopy_state_t *gxs) {
     return true;
   }
   
-  if(lua_getfield(Ls, -1, "__gxcopy") == LUA_TFUNCTION) {
+  if(lua_getfield(Ls, -1, "__gxcopy_metatable") == LUA_TFUNCTION) {
     if(!gxcopy_function(gxs, false)) {
-      return shuso_set_error(shuso_state(Ls), "failed to gxcopy metatable __gxcopy function");
+      return shuso_set_error(shuso_state(Ls), "failed to gxcopy metatable __gxcopy_metatable function");
     }
     lua_pop(Ls, 2);
     luaS_call(Ld, 0, 1);
     if(lua_isnil(Ld, -1)) {
-      return shuso_set_error(shuso_state(Ls), "failed to gxcopy metatable, __gxcopy function returned nil");
+      return shuso_set_error(shuso_state(Ls), "failed to gxcopy metatable, __gxcopy_metatable function returned nil");
     }
     
     lua_setmetatable(Ld, -2);

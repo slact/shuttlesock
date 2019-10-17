@@ -18,6 +18,7 @@
 
 typedef struct {
   bool    verbose;
+  const char *data_path;
 } test_config_t;
 
 test_config_t test_config;
@@ -169,6 +170,30 @@ do { \
     snow_fail("%s", lua_tostring(L, -1)); \
   } \
   if(lua_pcall(L, 0, LUA_MULTRET, 0) != LUA_OK) { \
+    snow_fail("%s", lua_tostring(L, -1)); \
+  } \
+} while(0)
+
+#define assert_luaL_dofile(L, filename) do { \
+  snow_fail_update(); \
+  lua_getglobal(L, "string"); \
+  lua_getfield(L, -1, "format"); \
+  lua_remove(L, -2); \
+  if(filename[0] == '/' || test_config.data_path[strlen(test_config.data_path)-1] == '/') { \
+    lua_pushstring(L, "%s%s"); \
+  } \
+  else { \
+    lua_pushstring(L, "%s/%s"); \
+  } \
+  lua_pushstring(L, test_config.data_path); \
+  lua_pushstring(L, filename); \
+  lua_call(L, 3, 1); \
+  if(luaL_loadfile(L, lua_tostring(L, -1)) != LUA_OK) { \
+    lua_remove(L, -2); \
+    snow_fail("%s", lua_tostring(L, -1)); \
+  } \
+  lua_remove(L, -2); \
+  if(!luaS_pcall(L, 0, LUA_MULTRET)) { \
     snow_fail("%s", lua_tostring(L, -1)); \
   } \
 } while(0)

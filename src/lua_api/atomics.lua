@@ -49,7 +49,7 @@ local atomics_mt = {
     return atomic:set(v)
   end,
   __name="atomics",
-  __gxcopy = function()
+  __gxcopy_metatable = function()
     return require("shuttlesock.atomics").metatable
   end
 }

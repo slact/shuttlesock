@@ -13,7 +13,7 @@ local module = {}
 local module_mt = {
   __name = "module",
   __index = module,
-  __gxcopy = function()
+  __gxcopy_metatable = function()
     return require("shuttlesock.module").metatable
   end
 }

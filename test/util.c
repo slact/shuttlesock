@@ -18,6 +18,7 @@ bool strmatch(const char *str, const char *pattern) {
 }
 
 static void runcheck_timeout_timer(shuso_loop *loop, shuso_ev_timer *w, int revent) {
+  printf("TIMEOUT TIMER!!\n");
   shuso_t *S = shuso_state(loop, w);
   shuso_module_t  *mod = shuso_ev_data(w);
   test_runcheck_t *chk = mod->privdata;

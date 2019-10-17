@@ -7,7 +7,7 @@ local block_cache = {}
 local block = {}
 local block_mt = {
   __index = block,
-  __gxcopy = function()
+  __gxcopy_metatable = function()
     return require("shuttlesock.config").block_metatable
   end,
   __name="config.block"
@@ -15,7 +15,7 @@ local block_mt = {
 
 local block_context_mt = {
   __mode="k",
-  __gxcopy = function()
+  __gxcopy_metatable = function()
     return require("shuttlesock.config").block_context_metatable
   end,
   __newindex = function(t, k)
@@ -76,7 +76,7 @@ local setting_cache = {}
 local setting = {}
 local setting_mt = {
   __index = setting,
-  __gxcopy = function()
+  __gxcopy_metatable = function()
     return require("shuttlesock.config").setting_metatable
   end,
   __name="config.setting"

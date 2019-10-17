@@ -5,13 +5,18 @@
 #ifndef __clang_analyzer__
 bool set_test_options(int *argc, char **argv) {
   snow_set_extra_help(""
-    "    --verbose:      Verbose test output.\n"
+    "    --verbose:          Verbose test output.\n"
+    "    --data-path=[path]: Vath to test data directory.\n"
   );
   int i = 1;
   while(i < *argc) {
     char *arg = argv[i];
     if(strcmp(arg, "--verbose") == 0) {
       test_config.verbose = true;
+    }
+    if((strstr(arg, "--data-path=") - arg) == 0) {
+      test_config.data_path=&arg[strlen("--data-path=")];
+      printf("yeeeh: %s\n\n", test_config.data_path);
     }
     i++;
   }
@@ -93,7 +98,7 @@ describe(modules) {
     after_each() {
       if(S) shuso_destroy(S);
     }
-    test("a lua module") {
+    test("bare-bones module") {
       lua_State *L = S->lua.state;
       assert_luaL_dostring(L,"\
         local Module = require 'shuttlesock.module' \
@@ -109,7 +114,6 @@ describe(modules) {
       
       assert_luaL_dostring(L, "require 'shuttlesock.module'.find('luatest')");
     }
-    
   }
 }
 
@@ -494,6 +498,28 @@ describe(lua_bridge) {
   }
 }
 
+describe(lua_api) {
+  static shuso_t          *S = NULL;
+  static test_runcheck_t  *chk = NULL;
+  before_each() {
+    S = shusoT_create(&chk, 5.0);
+  }
+  after_each() {
+    if(S) shusoT_destroy(S, &chk);
+  }
+  
+  skip("a module") {
+    lua_State *L = S->lua.state;
+    assert_luaL_dofile(L, "test_a_module.lua");
+    
+    assert_shuso(S, shuso_configure_finish(S));
+    
+    shuso_run(S);
+    
+    assert_shuso_ran_ok(S);
+  }
+  
+}
 #define IPC_ECHO 130
 
 typedef struct {
@@ -992,6 +1018,7 @@ snow_main_decls;
 int main(int argc, char **argv) {
   _snow.ignore_unknown_options = 1;
   memset(&test_config, 0x0, sizeof(test_config));
+  test_config.data_path="test/data";
   dev_null = open("/dev/null", O_WRONLY);
   if(!set_test_options(&argc, argv)) {
     return 1;
