@@ -169,7 +169,14 @@ char *luaS_dbgval(lua_State *L, int n) {
       }
       lua_pop(L, 1);
       break;
-      
+    case LUA_TLIGHTUSERDATA:
+      lua_getglobal(L, "tostring");
+      lua_pushvalue(L, n);
+      lua_call(L, 1, 1);
+      str = lua_tostring(L, -1);
+      sprintf(cur, "light %s", str);
+      lua_pop(L, 1);
+      break;
     default:
       lua_getglobal(L, "tostring");
       lua_pushvalue(L, n);
