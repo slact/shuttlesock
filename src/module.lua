@@ -373,7 +373,7 @@ do
 end
 
 setmetatable(Module, {
-  __gxcopy_save_state = function()
+  __gxcopy_save_module_state = function()
     return {
       core = Module.core,
       by_name = Module.by_name,
@@ -382,7 +382,7 @@ setmetatable(Module, {
       max_module_count = Module.max_module_count
     }
   end,
-  __gxcopy_load_state = function(state)
+  __gxcopy_load_module_state = function(state)
     Module.core = state.core
     Module.by_name = assert(state.by_name)
     Module.by_ptr = assert(state.by_ptr)

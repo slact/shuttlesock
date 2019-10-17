@@ -1669,7 +1669,7 @@ static void lua_module_gxcopy(shuso_t *S, shuso_event_state_t *es, intptr_t code
       lua_pop(Lm, 1);
       continue;
     }
-    lua_getfield(Lm, -1, "__gxcopy_save_state");
+    lua_getfield(Lm, -1, "__gxcopy_save_module_state");
     if(lua_isnil(Lm, -1)) {
       lua_pop(Lm, 3);
       continue;

@@ -202,6 +202,22 @@ describe(config) {
   }
 }
 
+int luaS_test_userdata_gxcopy_save(lua_State *L) {
+  int *ud = (void *)lua_topointer(L, 1);
+  lua_pushlightuserdata(L, ud);
+  return 1;
+}
+int luaS_test_userdata_gxcopy_load(lua_State *L) {
+  int *ud_in = (void *)lua_topointer(L, 1);
+  assert(ud_in != NULL);
+  int *ud = lua_newuserdata(L, sizeof(*ud));
+  assert(ud != NULL);
+  luaL_setmetatable(L, "test_userdata");
+  *ud = *ud_in;
+  luaS_printstack(L);
+  return 1;
+}
+
 describe(lua_bridge) {
   subdesc(gxcopy) {
     static shuso_t   *Ss;
@@ -241,6 +257,61 @@ describe(lua_bridge) {
         assert(copy[1] == 11) \
         assert(copy[2] == copy)"
       );
+    }
+    
+    test("metatable referencing its table") {
+       assert_luaL_dostring(Ls,"\
+        local t={11,22,33,44,55} \
+        local mt = {t=t} \
+        setmetatable(t, mt) \
+        return t"
+      );
+      assert(luaS_gxcopy_start(Ls, Ld));
+      assert(luaS_gxcopy(Ls, Ld));
+      assert(luaS_gxcopy_finish(Ls, Ld));
+      shuso_destroy(Ss);
+      Ss = NULL;
+      lua_setglobal(Ld, "copy");
+      assert_luaL_dostring(Ld, "\
+        assert(copy[1] == 11)\n \
+        assert(copy[2] == 22)\n \
+        local mt = assert(getmetatable(copy))\n \
+        assert(mt.t == copy)\n \
+      ");
+    }
+    
+    test("userdata") {
+      luaL_Reg mt_fn[] = {
+        {"__gxcopy_save_userdata", luaS_test_userdata_gxcopy_save},
+        {"__gxcopy_load_userdata", luaS_test_userdata_gxcopy_load},
+        {NULL, NULL}
+      };
+      luaL_newmetatable(Ls, "test_userdata");
+      lua_pushinteger(Ls, 99);
+      lua_setfield(Ls, -2, "number");
+      
+      luaL_newmetatable(Ld, "test_userdata");
+      lua_pushinteger(Ld, 98);
+      lua_setfield(Ld, -2, "number");
+      
+      luaL_setfuncs(Ls, mt_fn, 0);
+      int *ud = lua_newuserdata(Ls, sizeof(*ud));
+      assert(ud != NULL);
+      *ud=27;
+      luaL_setmetatable(Ls, "test_userdata");
+      assert(luaS_gxcopy_start(Ls, Ld));
+      assert(luaS_gxcopy(Ls, Ld));
+      assert(luaS_gxcopy_finish(Ls, Ld));
+      int *copied_ud = (void *)lua_topointer(Ld, -1);
+      assert(copied_ud != NULL);
+      assert(copied_ud != ud);
+      assert(*copied_ud == *ud);
+      lua_setglobal(Ld, "copy");
+      assert_luaL_dostring(Ld, "\
+        assert(type(copy) == 'userdata')\n \
+        local mt = assert(getmetatable(copy))\n \
+        assert(mt.number == 98)\n \
+      ");
     }
     
     test("function with upvalues") {

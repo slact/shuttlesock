@@ -150,7 +150,7 @@ end
 
 Module.metatable = module_mt
 setmetatable(Module, {
-  __gxcopy_save_state = function()
+  __gxcopy_save_module_state = function()
     return {
       lua_modules = lua_modules,
       lua_module_subscribers = lua_module_subscribers,
@@ -159,7 +159,7 @@ setmetatable(Module, {
       wrapped_modules = wrapped_modules
     }
   end,
-  __gxcopy_load_state = function(state)
+  __gxcopy_load_module_state = function(state)
     lua_modules = state.lua_modules
     lua_module_subscribers = state.lua_module_subscribers
     lua_module_publish = state.lua_module_publish

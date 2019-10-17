@@ -144,13 +144,13 @@ function Event.data_type_map(language, data_type_name)
 end
 
 setmetatable(Event, {
-  __gxcopy_save_state = function()
+  __gxcopy_save_module_state = function()
     return {
       by_name = Event.by_name,
       data_type_map = Event.data_type_map
     }
   end,
-  __gxcopy_load_state = function(state)
+  __gxcopy_load_module_state = function(state)
     Event.by_name = assert(state.by_name, "by_name missing from global Event state")
     Event.data_type_map = assert(state.data_type_map, "data_type_map missing from global Event state")
   end

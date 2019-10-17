@@ -229,13 +229,13 @@ luaL_Reg shuttlesock_lua_lazy_atomics_table[] = {
   {NULL, NULL}
 };
 
-static int Lua_lazy_atomics_value_gxcopy_save_state(lua_State *L) {
+static int Lua_lazy_atomics_value_gxcopy_save(lua_State *L) {
   lua_lazy_atomic_userdata_t      *ud = luaL_checkudata(L, 1, "shuttlesock.lazy_atomic");
   lua_pushlightuserdata(L, ud->atomic);
   return 1;
 }
 
-static int Lua_lazy_atomics_value_gxcopy_load_state(lua_State *L) {
+static int Lua_lazy_atomics_value_gxcopy_load(lua_State *L) {
   luaL_checktype(L, 1, LUA_TLIGHTUSERDATA);
   shuso_lua_lazy_atomic_value_t   *atomicval = (void *)lua_topointer(L, 1);
   lua_lazy_atomic_userdata_t *ud = lua_newuserdata(L, sizeof(*ud));
@@ -263,8 +263,8 @@ int luaS_push_lazy_atomics_module(lua_State *L) {
     lua_pop(L, 1);
     
     luaL_setfuncs(L, (luaL_Reg[]){
-      {"__gxcopy_save_state", Lua_lazy_atomics_value_gxcopy_save_state},
-      {"__gxcopy_load_state", Lua_lazy_atomics_value_gxcopy_load_state},
+      {"__gxcopy_save", Lua_lazy_atomics_value_gxcopy_save},
+      {"__gxcopy_load", Lua_lazy_atomics_value_gxcopy_load},
       {NULL, NULL}
     }, 0);
   }
