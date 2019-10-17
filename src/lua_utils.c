@@ -960,7 +960,9 @@ void luaS_push_runstate(lua_State *L, shuso_runstate_t state) {
       lua_pushliteral(L, "stopping");
       return;
   }
+#ifndef __clang_analyzer__
   shuso_set_error(shuso_state(L), "unknown runstate, can't push onto Lua stack");
   lua_pushnil(L);
   return;
+#endif
 }
