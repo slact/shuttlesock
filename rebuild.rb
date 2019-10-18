@@ -336,6 +336,9 @@ rebuild = Opts.new do
   clean :debug_flag,
     set: {clean: true}
   
+  libev_static :debug_flag,
+    cmake_define: {LIBEV_STATIC: 1}
+  
   c_ares_static :debug_flag,
     cmake_define: {C_ARES_BUILD_STATIC: 1}
   

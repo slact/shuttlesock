@@ -54,23 +54,26 @@ endif()
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
 target_link_libraries(shuttlesock PUBLIC ${CMAKE_THREAD_LIBS_INIT})
-
-target_require_package(shuttlesock PUBLIC ev)
-#set(LIBEV_DIR ${CMAKE_CURRENT_SOURCE_DIR}/lib/libev)
-#include(ExternalProject)
-#ExternalProject_Add(libev_autoconf
-#  SOURCE_DIR ${LIBEV_DIR}
-#  CONFIGURE_COMMAND ${LIBEV_DIR}/configure "--prefix=${LIBEV_DIR}" "--enable-shared=no" "--with-pic=yes"
-#  PREFIX ${LIBEV_DIR}
-#  BUILD_COMMAND make
-#  INSTALL_COMMAND make install
-#  BUILD_IN_SOURCE 1
-#)
-#include_directories(${LIBEV_DIR})
-#add_dependencies(shuttlesock libev_autoconf)
-#add_library(libev STATIC IMPORTED)
-#set_target_properties(libev PROPERTIES IMPORTED_LOCATION ${LIBEV_DIR}/lib/libev.a)
-#target_link_libraries(shuttlesock PRIVATE libev)
+if(NOT LIBEV_STATIC)
+  target_require_package(shuttlesock PUBLIC ev)
+else()
+  set(LIBEV_PREFIX_DIR ${CMAKE_CURRENT_BINARY_DIR}/libev)
+  include(ExternalProject)
+  ExternalProject_Add(libev_autoconf
+    URL "http://dist.schmorp.de/libev/libev-4.27.tar.gz"
+  #  SOURCE_DIR ${LIBEV_DIR}
+    CONFIGURE_COMMAND /bin/sh -c "CFLAGS=\"${CFLAGS} -w\" ./configure --prefix=\"${LIBEV_PREFIX_DIR}\" --enable-shared=no --with-pic=yes"
+    PREFIX ${LIBEV_PREFIX_DIR}
+    BUILD_COMMAND make
+    INSTALL_COMMAND make install
+    BUILD_IN_SOURCE 1
+  )
+  include_directories(${LIBEV_PREFIX_DIR}/include)
+  add_dependencies(shuttlesock libev_autoconf)
+  add_library(libev STATIC IMPORTED)
+  set_target_properties(libev PROPERTIES IMPORTED_LOCATION ${LIBEV_PREFIX_DIR}/lib/libev.a)
+  target_link_libraries(shuttlesock PRIVATE libev)
+endif()
   
 
 
