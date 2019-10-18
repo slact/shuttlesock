@@ -954,7 +954,15 @@ bool luaS_gxcopy_module_state(lua_State *Ls, lua_State *Ld, const char *module_n
   }
   return true;
 }
-
+bool luaS_streq(lua_State *L, int index, const char *str) {
+  if(str) {
+    lua_pushstring(L, str);
+  }
+  int n = lua_absindex(L, index);
+  bool equal = lua_compare(L, n, -1, LUA_OPEQ);
+  lua_pop(L, 1);
+  return equal;
+}
 int luaS_table_count(lua_State *L, int idx) {
   int absidx = lua_absindex(L, idx);
   luaL_checktype(L, absidx, LUA_TTABLE);

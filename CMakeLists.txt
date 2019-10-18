@@ -204,6 +204,7 @@ pack_lua_scripts_add(NAME "shuttlesock.core.module_event" SCRIPT module_event.lu
 pack_lua_scripts_add(NAME "shuttlesock.log" SCRIPT lua_api/log.lua MODULE CHECK)
 pack_lua_scripts_add(NAME "shuttlesock.module" SCRIPT lua_api/module.lua MODULE CHECK)
 pack_lua_scripts_add(NAME "shuttlesock.atomics" SCRIPT lua_api/atomics.lua MODULE CHECK)
+pack_lua_scripts_add(NAME "shuttlesock.watcher" SCRIPT lua_api/watcher.lua MODULE CHECK)
 pack_lua_scripts_finish()
 
 configure_file(src/include/shuttlesock/build_config.h.tmpl src/include/shuttlesock/build_config.h)
