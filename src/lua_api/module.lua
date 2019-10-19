@@ -75,7 +75,6 @@ end
 
 function Module.receive_event(publisher_module_name, module_name, event_name, code, data)
   local full_event_name = ("%s:%s"):format(publisher_module_name, event_name)
-  print(module_name, publisher_module_name, event_name, data)
   if not any_module_subscribes_to_event[full_event_name] then
     return true
   end
