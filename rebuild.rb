@@ -260,7 +260,7 @@ class Opts
     return self unless @vars[:run_test]
     puts green "Running tests..."
     in_dir :build do
-      @run_ok = system './shuso_test'
+      @run_ok = system './shuso_test', '--data-path=../test/data'
     end
     if @run_ok
       puts green "Tests passed"

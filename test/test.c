@@ -508,7 +508,7 @@ describe(lua_api) {
     if(S) shusoT_destroy(S, &chk);
   }
   
-  skip("a module") {
+  test("a module") {
     lua_State *L = S->lua.state;
     assert_luaL_dofile(L, "test_a_module.lua");
     

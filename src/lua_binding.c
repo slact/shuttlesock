@@ -220,6 +220,13 @@ static int Lua_shuso_runstate(lua_State *L) {
   luaS_push_runstate(L, S->common->state);
   return 1;
 }
+
+static int Lua_shuso_procnum(lua_State *L) {
+  shuso_t *S = shuso_state(L);
+  lua_pushinteger(L, S->procnum);
+  return 1;
+}
+
 static int Lua_shuso_process_runstate(lua_State *L) {
   shuso_t *S = shuso_state(L);
   if(lua_gettop(L) == 0) {
@@ -341,8 +348,10 @@ static int Lua_shuso_set_error(lua_State *L) {
   shuso_t       *S = shuso_state(L);
   luaL_checkstring(L, 1);
   
-  lua_getlib_field(L, "string", "format");
-  lua_call(L, nargs, 1);
+  if(nargs > 1) {
+    lua_getlib_field(L, "string", "format");
+    lua_call(L, nargs, 1);
+  }
   
   const char    *err = lua_tostring(L, -1);
   shuso_set_error(S, err);
@@ -386,7 +395,7 @@ static void watcher_callback(struct ev_loop *loop, ev_watcher *watcher, int even
   int                     rc;
   
   if(w->ref.handler == LUA_NOREF) {
-    luaL_error(L, "no handler for shuttlesock io watcher");
+    luaL_error(L, "no handler for watcher");
     return;
   }
   
@@ -446,6 +455,7 @@ static int Lua_watcher_set(lua_State *L) {
     } break;
     
     case LUA_EV_WATCHER_TIMER: {
+
       if(nargs-1 < 1 || nargs-1 > 2) {
         return luaL_error(L, "timer watcher:set() expects 1-2 arguments");
       }
@@ -781,6 +791,7 @@ int Lua_shuso_new_watcher(lua_State *L) {
   watcher->type = wtype;
   watcher->ref.handler = LUA_NOREF;
   watcher->ref.self = LUA_NOREF;
+  watcher->coroutine_thread = NULL;
   
   if(luaL_newmetatable(L, "shuttlesock.watcher")) {
     luaL_setfuncs(L, (luaL_Reg[]) {
@@ -792,7 +803,15 @@ int Lua_shuso_new_watcher(lua_State *L) {
   }
   lua_setmetatable(L, -2);
   
-  ev_init(&watcher->watcher.watcher, NULL);
+  ev_init(&watcher->watcher.watcher, watcher_callback);
+  
+  
+  if(lua_gettop(L) > 1) {
+    lua_pushcfunction(L, Lua_watcher_set);
+    lua_replace(L, 1);
+    lua_insert(L, 2);
+    luaS_pcall(L, lua_gettop(L) - 1, 1);
+  }
   return 1;
 }
 
@@ -1486,16 +1505,14 @@ static void lua_module_event_listener(shuso_t *S, shuso_event_state_t *evs, intp
   }
   
   luaS_push_lua_module_field(L, "shuttlesock.module", "receive_event");
-  
+  lua_pushstring(L, evs->publisher->name);
   lua_pushstring(L, evs->module->name);
   lua_pushstring(L, evs->name);
-  
-  lua_pushnil(L); //TODO: push module
-  
-  lua_pushvalue(L, -5);
-  lua_remove(L, -6);
-  
-  luaS_function_call_result_ok(L, 4, false);
+  lua_pushinteger(L, code);
+  lua_pushvalue(L, -6);
+  lua_remove(L, -7);
+
+  luaS_function_call_result_ok(L, 5, false);
   return;
 }
 
@@ -1876,8 +1893,12 @@ luaL_Reg shuttlesock_core_module_methods[] = {
   {"run", Lua_shuso_run},
   {"stop", Lua_shuso_stop},
   {"runstate", Lua_shuso_runstate},
+  
+//processes
   {"process_runstate", Lua_shuso_process_runstate},
+  {"procnum", Lua_shuso_procnum},
 
+//util
   {"set_log_file", Lua_shuso_set_log_fd},
   {"set_error", Lua_shuso_set_error},
 

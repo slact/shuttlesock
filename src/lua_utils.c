@@ -173,10 +173,23 @@ char *luaS_dbgval(lua_State *L, int n) {
       lua_getglobal(L, "tostring");
       lua_pushvalue(L, n);
       lua_call(L, 1, 1);
-      str = lua_tostring(L, -1);
-      sprintf(cur, "light %s", str);
+      sprintf(cur, "light %s", lua_tostring(L, -1));
       lua_pop(L, 1);
       break;
+    case LUA_TFUNCTION: {
+      lua_Debug dbg;
+      lua_pushvalue(L, n);
+      lua_getinfo(L, ">nSlu", &dbg);
+      
+      lua_getglobal(L, "tostring");
+      lua_pushvalue(L, n);
+      lua_call(L, 1, 1);
+      
+      sprintf(cur, "%s%s%s%s%s%s %s:%d", lua_iscfunction(L, n) ? "c " : "", lua_tostring(L, -1), strlen(dbg.namewhat)>0 ? " ":"", dbg.namewhat, dbg.name?" ":"", dbg.name?dbg.name:"", dbg.short_src, dbg.linedefined);
+      lua_pop(L, 1);
+      
+      break;
+    }
     default:
       lua_getglobal(L, "tostring");
       lua_pushvalue(L, n);

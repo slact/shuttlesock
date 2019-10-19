@@ -192,10 +192,13 @@ endif()
 
 include(PackLuaScripts)
 pack_lua_scripts_start(SCRIPTS_PATH src SOURCE embedded_lua_scripts.c)
+
+#some luarocks we use
 pack_lua_scripts_add(NAME "argparse" SCRIPT luarocks/argparse/src/argparse.lua MODULE)
-pack_lua_scripts_add(NAME "binser" SCRIPT luarocks/binser/binser.lua MODULE)
 pack_lua_scripts_add(NAME "mm" SCRIPT luarocks/mm.lua MODULE)
 pack_lua_scripts_add(NAME "inspect" SCRIPT luarocks/inspect.lua MODULE)
+
+#modules used by the shuttlesock core
 pack_lua_scripts_add(NAME "shuttlesock.core.config" SCRIPT config.lua MODULE CHECK)
 pack_lua_scripts_add(NAME "shuttlesock.core.module" SCRIPT module.lua MODULE CHECK)
 pack_lua_scripts_add(NAME "shuttlesock.core.module_event" SCRIPT module_event.lua MODULE CHECK)
@@ -205,6 +208,8 @@ pack_lua_scripts_add(NAME "shuttlesock.log" SCRIPT lua_api/log.lua MODULE CHECK)
 pack_lua_scripts_add(NAME "shuttlesock.module" SCRIPT lua_api/module.lua MODULE CHECK)
 pack_lua_scripts_add(NAME "shuttlesock.atomics" SCRIPT lua_api/atomics.lua MODULE CHECK)
 pack_lua_scripts_add(NAME "shuttlesock.watcher" SCRIPT lua_api/watcher.lua MODULE CHECK)
+pack_lua_scripts_add(NAME "shuttlesock.process" SCRIPT lua_api/process.lua MODULE CHECK)
+pack_lua_scripts_add(NAME "shuttlesock" SCRIPT lua_api/shuttlesock.lua MODULE CHECK)
 pack_lua_scripts_finish()
 
 configure_file(src/include/shuttlesock/build_config.h.tmpl src/include/shuttlesock/build_config.h)

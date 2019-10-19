@@ -27,6 +27,21 @@ function Module.wrap(module_name, module_ptr)
   return self
 end
 
+local function subscribe_to_event_names(self)
+  for k, v in pairs(rawget(self, "subscribe") or {}) do
+    if type(k) == "number" then
+      assert(type(v) == "string", "numerically-indexed subscribe event name must be a string")
+      lua_module_subscribers[self][v]={}
+    elseif type(k) == "string" then
+      assert(type(v) == "function", "string-indexed subscribe event value must be a function")
+      assert(self:subscribe(k, v))
+    else
+      error("invalid subscribe key type " .. type(k))
+    end
+  end
+  self.subscribe = nil
+end
+
 function Module.new(mod, version)
   if type(mod) == "string" then
     assert(type(version) == "string")
@@ -34,9 +49,11 @@ function Module.new(mod, version)
   end
   assert(type(mod) == "table")
   setmetatable(mod, module_mt)
-  
   lua_module_subscribers[mod]={}
   lua_module_publish[mod]={}
+  if mod.subscribe then
+    subscribe_to_event_names(mod)
+  end
   return mod
 end
 
@@ -56,13 +73,15 @@ function Module.find(name)
   return found
 end
 
-function Module.receive_event(modname, publisher_module_name, event_name, data)
-  if not any_module_subscribes_to_event[event_name] then
+function Module.receive_event(publisher_module_name, module_name, event_name, code, data)
+  local full_event_name = ("%s:%s"):format(publisher_module_name, event_name)
+  print(module_name, publisher_module_name, event_name, data)
+  if not any_module_subscribes_to_event[full_event_name] then
     return true
   end
-  local self = assert(lua_modules[modname])
+  local self = assert(lua_modules[module_name])
   
-  local subscribers = rawget(rawget(lua_module_subscribers, self), event_name)
+  local subscribers = rawget(rawget(lua_module_subscribers, self), full_event_name)
   if not subscribers or #subscribers == 0 then
     return true
   end
@@ -74,7 +93,7 @@ function Module.receive_event(modname, publisher_module_name, event_name, data)
   
   local ok, err
   for _, subscriber in ipairs(subscribers) do
-    ok, err = pcall(subscriber, self, data, event_name, publisher)
+    ok, err = pcall(subscriber, self, code, data, event_name, publisher)
     if not ok then
       Log.error("Error receiving module event %s for module %s: %s", event_name, self.name or "?",  err or "?")
     end
@@ -92,18 +111,7 @@ function module:add()
   }
   
   local subs = {}
-  for k, v in pairs(self.subscribe or {}) do
-    if type(k) == "number" then
-      assert(type(v) == "string", "numerically-indexed subscribe event name must be a string")
-      lua_module_subscribers[self][v]={}
-    elseif type(k) == "string" then
-      assert(type(v) == "function", "string-indexed subscribe event value must be a function")
-      assert(self:subscribe(k, v))
-    else
-      error("invalid subscribe key type " .. type(k))
-    end
-  end
-  
+  subscribe_to_event_names(self)
   for k, _ in pairs(lua_module_subscribers[self]) do
     table.insert(subs, k)
   end
