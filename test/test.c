@@ -519,6 +519,14 @@ describe(lua_api) {
     assert_shuso_ran_ok(S);
   }
   
+  test("lazy atomics") {
+    lua_State *L = S->lua.state;
+    assert_luaL_dofile(L, "test_lazy_atomics.lua");
+    assert_shuso(S, shuso_configure_finish(S));
+    shuso_run(S);
+    assert_shuso_ran_ok(S);
+  }
+  
 }
 #define IPC_ECHO 130
 
