@@ -6,15 +6,15 @@ typedef struct {
   char   data[];
 } sized_string_t;
 
+#define SHUSO_LUA_SHATOMIC_NIL      0
+#define SHUSO_LUA_SHATOMIC_BOOLEAN  1
+#define SHUSO_LUA_SHATOMIC_STRING   2
+#define SHUSO_LUA_SHATOMIC_INTEGER  3
+#define SHUSO_LUA_SHATOMIC_NUMBER   4
+#define SHUSO_LUA_SHATOMIC_POINTER  5
+
 typedef struct {
-  _Atomic enum {
-    SHUSO_LUA_SHATOMIC_NIL = 0,
-    SHUSO_LUA_SHATOMIC_BOOLEAN,
-    SHUSO_LUA_SHATOMIC_STRING,
-    SHUSO_LUA_SHATOMIC_INTEGER,
-    SHUSO_LUA_SHATOMIC_NUMBER,
-    SHUSO_LUA_SHATOMIC_POINTER
-  }                     type;
+  _Atomic      unsigned typemix; //update counter and type enum in one atomic bundle
   _Atomic     (sized_string_t *) string;
   _Atomic      int      integer;
   _Atomic      double   number;
@@ -27,11 +27,21 @@ typedef struct {
   shuso_lua_lazy_atomic_value_t *atomic;
 } lua_lazy_atomic_userdata_t;
 
+static bool update_type_safely(shuso_lua_lazy_atomic_value_t *atomic, unsigned old_typemix, unsigned new_type) {
+  unsigned new_typemix = (((old_typemix >> 8) + 1)<<8) + new_type;
+  return atomic_compare_exchange_strong(&atomic->typemix, &old_typemix, new_typemix);
+}
+
+static int get_type(shuso_lua_lazy_atomic_value_t *atomic) {
+  return atomic->typemix & 0x0F;
+}
+
 static int Lua_lazy_atomics_value_set(lua_State *L);
 
 static int Lua_lazy_atomics_value_create(lua_State *L) {
   shuso_t *S = shuso_state(L);
   shuso_lua_lazy_atomic_value_t *atomicval = shuso_shared_slab_alloc(&S->common->shm, sizeof(*atomicval));
+  int nargs = lua_gettop(L);
   if(!atomicval) {
     lua_pushnil(L);
     lua_pushstring(L, "failed to allocate Lua shared atomic value");
@@ -48,13 +58,13 @@ static int Lua_lazy_atomics_value_create(lua_State *L) {
   ud->atomic = atomicval;
   luaL_setmetatable(L, "shuttlesock.lazy_atomic");
   
-  if(lua_gettop(L) == 0) {
-    atomicval->type = SHUSO_LUA_SHATOMIC_NIL;
+  if(nargs == 0) {
+    atomicval->typemix = SHUSO_LUA_SHATOMIC_NIL;
   }
   else {
     lua_pushcfunction(L, Lua_lazy_atomics_value_set);
-    lua_pushlightuserdata(L, atomicval);
     lua_pushvalue(L, 1);
+    lua_pushvalue(L, 2);
     luaS_call(L, 2, 0);
   }
   
@@ -87,17 +97,20 @@ static int Lua_lazy_atomics_value_set(lua_State *L) {
   }
   luaL_checkany(L, 2);
   int type = lua_type(L, 2);
+  
+  unsigned old_typemix = atomicval->typemix;
+  unsigned new_atype;
   switch(type) {
     case LUA_TNUMBER: {
       if(lua_isinteger(L, 2)) {
         int integer = lua_tointeger(L, 2);
         atomicval->integer = integer;
-        atomicval->type = SHUSO_LUA_SHATOMIC_INTEGER;
+        new_atype = SHUSO_LUA_SHATOMIC_INTEGER;
       }
       else {
         lua_Number num = lua_tonumber(L, 2);
         atomicval->number = num;
-        atomicval->type = SHUSO_LUA_SHATOMIC_NUMBER;
+        new_atype = SHUSO_LUA_SHATOMIC_NUMBER;
       }
       break;
     }
@@ -114,6 +127,7 @@ static int Lua_lazy_atomics_value_set(lua_State *L) {
       shared_str->sz = sz;
       memcpy(shared_str->data, str, sz);
       old_shared_str = atomic_exchange(&atomicval->string, shared_str);
+      new_atype = SHUSO_LUA_SHATOMIC_STRING;
       if(old_shared_str != NULL) {
         shuso_shared_slab_free(&S->common->shm, old_shared_str);
       }
@@ -121,11 +135,11 @@ static int Lua_lazy_atomics_value_set(lua_State *L) {
     }
     case LUA_TLIGHTUSERDATA: {
       atomicval->pointer = (void *)lua_topointer(L, 2);
-      atomicval->type = SHUSO_LUA_SHATOMIC_POINTER;
+      new_atype = SHUSO_LUA_SHATOMIC_POINTER;
       break;
     }
     case LUA_TNIL: {
-      atomicval->type = SHUSO_LUA_SHATOMIC_NIL;
+      new_atype = SHUSO_LUA_SHATOMIC_NIL;
       break;
     }
     default: {
@@ -135,7 +149,9 @@ static int Lua_lazy_atomics_value_set(lua_State *L) {
     }
   }
   
-  lua_pushboolean(L, 1);
+  bool newval_ok = update_type_safely(atomicval, old_typemix, new_atype);
+  
+  lua_pushboolean(L, newval_ok);
   return 1;
 }
 
@@ -152,7 +168,7 @@ static int Lua_lazy_atomics_value_get(lua_State *L) {
   // because the value_set operation does not erase the previous value
   // when the type changes
   // so even if the type value is stale, the stale data is still present
-  int valtype = atomicval->type;
+  int valtype = get_type(atomicval);
   switch(valtype) {
     case SHUSO_LUA_SHATOMIC_NIL:
       lua_pushnil(L);
@@ -190,7 +206,7 @@ int Lua_lazy_atomics_value_increment(lua_State *L) {
     return 2;
   }
   luaL_checktype(L, 2, LUA_TNUMBER);
-  int type = atomicval->type;
+  int type = get_type(atomicval);
   switch(type) {
     case SHUSO_LUA_SHATOMIC_INTEGER: {
       int old = atomic_fetch_add(&atomicval->integer, lua_tointeger(L, 2));
@@ -268,6 +284,7 @@ int luaS_push_lazy_atomics_module(lua_State *L) {
       {NULL, NULL}
     }, 0);
   }
+  lua_pop(L, 1);
   
   return 1;
 }
