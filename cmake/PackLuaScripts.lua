@@ -51,7 +51,7 @@ elseif ARG[1] == "--pack" then
   shuso_lua_embedded_scripts_t shuttlesock_lua_embedded_scripts[] = {
   %s
   };
-  ]]
+]]
 
   local struct = {}
 
