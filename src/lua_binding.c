@@ -1038,13 +1038,9 @@ static void resolve_hostname_callback(shuso_t *S, shuso_resolver_result_t result
 
 //logger
 static int log_internal(lua_State *L, void (*logfunc)(shuso_t *S, const char *fmt, ...)) {
-  int            nargs = lua_gettop(L);
   shuso_t       *S = shuso_state(L);
   luaL_checkstring(L, 1);
-  
-  lua_getlib_field(L, "string", "format");
-  lua_call(L, nargs, 1);
-  logfunc(S, "%s", lua_tostring(L, -1));
+  logfunc(S, "%s", lua_tostring(L, 1));
   lua_pushboolean(L, 1);
   return 1;
 }
