@@ -13,9 +13,8 @@ function Shuttlesock.runstate()
   return Core.runstate()
 end
 
-function Shuttlesock.set_error(...)
-  return Core.set_error(...)
+function Shuttlesock.set_error(str, ...)
+  return Core.set_error(tostring(str):format(...))
 end
-
 
 return Shuttlesock
