@@ -301,7 +301,7 @@ static size_t shuso_system_cacheline_size(void) {
 }
 
 
-#ifndef SHUTTLESOCK_HAVE_STRSIGNAL
+#ifdef SHUTTLESOCK_HAVE_STRSIGNAL
 const char *shuso_system_strsignal(int sig) {
   return strsignal(sig);
 }
