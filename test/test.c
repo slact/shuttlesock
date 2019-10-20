@@ -502,7 +502,7 @@ describe(lua_api) {
   static shuso_t          *S = NULL;
   static test_runcheck_t  *chk = NULL;
   before_each() {
-    S = shusoT_create(&chk, 5.0);
+    S = shusoT_create(&chk, 25.0);
   }
   after_each() {
     if(S) shusoT_destroy(S, &chk);
