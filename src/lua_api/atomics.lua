@@ -51,6 +51,9 @@ local atomics_mt = {
   __name="atomics",
   __gxcopy_metatable = function()
     return require("shuttlesock.atomics").metatable
+  end,
+  __pairs = function(self)
+    return next, atomics_tables[self] or {}, nil
   end
 }
 
