@@ -142,7 +142,7 @@ function module:subscribe(event_name, listener_function)
     error("can't subscribe to module events while " .. Core.runstate())
   end
   assert(type(event_name) == "string", "event name must be a string")
-  assert(type(listener_function) == "function", "listener function must a function in case that's not perfectly clear")
+  assert(type(listener_function) == "function", "listener function must be a function in case that's not perfectly clear")
   if not lua_module_subscribers[self][event_name] then
     lua_module_subscribers[self][event_name] = {}
   end
