@@ -221,6 +221,12 @@ static int Lua_shuso_runstate(lua_State *L) {
   return 1;
 }
 
+static int Lua_shuso_pointer(lua_State *L) {
+  shuso_t *S = shuso_state(L);
+  lua_pushlightuserdata(L, S);
+  return 1;
+}
+
 static int Lua_shuso_procnum(lua_State *L) {
   shuso_t *S = shuso_state(L);
   lua_pushinteger(L, S->procnum);
@@ -1891,6 +1897,7 @@ luaL_Reg shuttlesock_core_module_methods[] = {
   {"configure_finish", Lua_shuso_configure_finish},
   
 //state 
+  {"shuttlesock_pointer", Lua_shuso_pointer},
   {"run", Lua_shuso_run},
   {"stop", Lua_shuso_stop},
   {"runstate", Lua_shuso_runstate},
