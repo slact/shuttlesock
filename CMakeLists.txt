@@ -26,7 +26,7 @@ set(libsrc
   src/module.c
   src/module_event.c
   src/config.c
-  ${PROJECT_BINARY_DIR}/src/embedded_lua_scripts.c
+  src/embedded_lua_scripts.c
   src/lua_api/lazy_atomics.c
   src/lua_binding.c
   src/lua_utils.c
@@ -35,7 +35,7 @@ set(libsrc
 add_library(shuttlesock SHARED ${libsrc})
 set_property(TARGET shuttlesock PROPERTY C_STANDARD 11)
 
-target_include_directories(shuttlesock PUBLIC ${PROJECT_BINARY_DIR}/src/include)
+target_include_directories(shuttlesock PUBLIC ${CMAKE_CURRENT_BINARY_DIR}/src/include)
 target_include_directories(shuttlesock PUBLIC src/include)
 target_include_directories(shuttlesock PRIVATE src)
 
@@ -191,25 +191,25 @@ if(NOT (SHUTTLESOCK_DEFAULT_LOGLEVEL IN_LIST SHUTTLESOCK_LOG_LEVELS))
 endif()
 
 include(PackLuaScripts)
-pack_lua_scripts_start(SCRIPTS_PATH src SOURCE embedded_lua_scripts.c)
-
-#some luarocks we use
-pack_lua_scripts_add(NAME "argparse" SCRIPT luarocks/argparse/src/argparse.lua MODULE)
-pack_lua_scripts_add(NAME "mm" SCRIPT luarocks/mm.lua MODULE)
-pack_lua_scripts_add(NAME "inspect" SCRIPT luarocks/inspect.lua MODULE)
-
-#modules used by the shuttlesock core
-pack_lua_scripts_add(NAME "shuttlesock.core.config" SCRIPT config.lua MODULE CHECK)
-pack_lua_scripts_add(NAME "shuttlesock.core.module" SCRIPT module.lua MODULE CHECK)
-pack_lua_scripts_add(NAME "shuttlesock.core.module_event" SCRIPT module_event.lua MODULE CHECK)
-
-#API for Lua modules
-pack_lua_scripts_add(NAME "shuttlesock.log" SCRIPT lua_api/log.lua MODULE CHECK)
-pack_lua_scripts_add(NAME "shuttlesock.module" SCRIPT lua_api/module.lua MODULE CHECK)
-pack_lua_scripts_add(NAME "shuttlesock.atomics" SCRIPT lua_api/atomics.lua MODULE CHECK)
-pack_lua_scripts_add(NAME "shuttlesock.watcher" SCRIPT lua_api/watcher.lua MODULE CHECK)
-pack_lua_scripts_add(NAME "shuttlesock.process" SCRIPT lua_api/process.lua MODULE CHECK)
-pack_lua_scripts_add(NAME "shuttlesock" SCRIPT lua_api/shuttlesock.lua MODULE CHECK)
-pack_lua_scripts_finish()
 
 configure_file(src/include/shuttlesock/build_config.h.tmpl src/include/shuttlesock/build_config.h)
+
+#some luarocks we use
+add_lua_bundled_module("argparse" src/luarocks/argparse/src/argparse.lua)
+add_lua_bundled_module("mm"       src/luarocks/mm.lua)
+add_lua_bundled_module("inspect"  src/luarocks/inspect.lua)
+
+#modules used by the shuttlesock core
+add_lua_module("shuttlesock.core.config"        src/config.lua)
+add_lua_module("shuttlesock.core.module"        src/module.lua)
+add_lua_module("shuttlesock.core.module_event"  src/module_event.lua)
+
+#API for Lua modules
+add_lua_module("shuttlesock.log"          src/lua_api/log.lua)
+add_lua_module("shuttlesock.module"       src/lua_api/module.lua)
+add_lua_module("shuttlesock.atomics"      src/lua_api/atomics.lua)
+add_lua_module("shuttlesock.watcher"      src/lua_api/watcher.lua)
+add_lua_module("shuttlesock.process"      src/lua_api/process.lua)
+add_lua_module("shuttlesock"              src/lua_api/shuttlesock.lua)
+
+set_lua_packed_script_file("src/embedded_lua_scripts.c")
