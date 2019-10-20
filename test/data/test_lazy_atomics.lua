@@ -36,7 +36,7 @@ testmod:subscribe("core:master.stop", function(self)
   assert(self.shared.workers_started:value()==self.shared.workers_count:value())
   assert(self.shared.workers_stopped:value()==self.shared.workers_count:value())
   assert(self.shared.foo:value()=="yes")
-  assert(self.shared.bar:value()=="01111")
+  assert(self.shared.bar:value()=="0"..("1"):rep(self.shared.workers_count:value()))
 end)
 
 
