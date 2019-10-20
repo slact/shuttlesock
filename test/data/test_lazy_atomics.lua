@@ -21,11 +21,7 @@ end)
 
 testmod:subscribe("core:worker.start", function(self)
   self.shared.workers_started:increment(1)
-  self.shared.bar = tostring(self.shared.bar:value()).. "1"
-  self.shared.foo = nil
-  self.shared.foo = 1
-  self.shared.foo = "yes"
-  self.shared.foo = false
+  self.shared.bar = tostring(self.shared.bar:value()).. "1" --not atomic
 end)
 
 testmod:subscribe("core:worker.stop", function(self)
@@ -35,8 +31,12 @@ end)
 testmod:subscribe("core:master.stop", function(self)
   assert(self.shared.workers_started:value()==self.shared.workers_count:value())
   assert(self.shared.workers_stopped:value()==self.shared.workers_count:value())
-  assert(self.shared.foo:value()=="yes")
-  assert(self.shared.bar:value()=="0"..("1"):rep(self.shared.workers_count:value()))
+  assert(self.shared.foo:value()==Shuso.pointer())
+  assert(type(self.shared.bar:value())=="string")
+  local foo = self.shared.foo
+  self.shared:destroy()
+  assert(not foo:value(11))
+  assert(not foo:set(11))
 end)
 
 
@@ -50,6 +50,24 @@ function testmod:initialize()
   assert(self.shared.workers_started:value() == 0)
   self.shared.workers_stopped = 0
   assert(self.shared.workers_stopped:value() == 0)
+  
+  self.shared.foo = nil
+  assert(self.shared.foo:value() == nil)
+  assert(not self.shared.foo:increment(2))
+  self.shared.foo = 1.121
+  assert(self.shared.foo:value() == 1.121)
+  assert(not self.shared.foo:increment(2))
+  self.shared.foo = "yes"
+  assert(self.shared.foo:value() == "yes")
+  assert(not self.shared.foo:increment(2))
+  self.shared.foo = false
+  assert(self.shared.foo:value() == false, tostring(self.shared.foo:value()))
+  assert(not self.shared.foo:increment(2))
+  self.shared.foo = Shuso.pointer()
+  assert(type(self.shared.foo:value()) == "userdata")
+  assert(self.shared.foo:value() == Shuso.pointer())
+  assert(not self.shared.foo:increment(2))
+  
 end
 
 assert(testmod:add())

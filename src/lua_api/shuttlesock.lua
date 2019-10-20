@@ -17,4 +17,8 @@ function Shuttlesock.set_error(str, ...)
   return Core.set_error(tostring(str):format(...))
 end
 
+function Shuttlesock.pointer()
+  return Core.shuttlesock_pointer()
+end
+
 return Shuttlesock
