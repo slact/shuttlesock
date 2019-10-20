@@ -83,6 +83,7 @@ typedef struct {
   shuso_ev_timer     timeout_timer;
   _Atomic uint8_t    timed_out;
   
+  _Atomic int        errors;
   _Atomic int        workers_started;
   _Atomic int        workers_stopped;
   struct {

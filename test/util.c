@@ -187,7 +187,11 @@ static void runcheck_event_listener(shuso_t *S, shuso_event_state_t *evs, intptr
     chk->events.master_manager_exited++;
     //TODO: add exit code and stuff
   }
-  
+  else if(strcmp(evn, "error") == 0) {
+    const char *err = data;
+    chk->errors++;
+    snow_fail("%s", err);
+  }
 }
 
 static bool runcheck_module_initialize(shuso_t *S, shuso_module_t *self) {
@@ -209,6 +213,8 @@ static bool runcheck_module_initialize(shuso_t *S, shuso_module_t *self) {
   shuso_event_listen(S, "core:worker.workers_started", runcheck_event_listener, self);
   shuso_event_listen(S, "core:manager.worker_exited", runcheck_event_listener, self);
   shuso_event_listen(S, "core:master.manager_exited", runcheck_event_listener, self);
+  
+  shuso_event_listen(S, "core:error", runcheck_event_listener, self);
   
   return true;
 }
@@ -246,6 +252,7 @@ shuso_t *shusoT_create(test_runcheck_t **external_ptr, double test_timeout) {
       " core:master.stop"
       " core:manager.stop"
       " core:worker.stop"
+      " core:error"
       
       " core:manager.workers_started"
       " core:master.workers_started"
@@ -264,6 +271,7 @@ shuso_t *shusoT_create(test_runcheck_t **external_ptr, double test_timeout) {
 bool ___shusoT_run_test(shuso_t *S, int procnum, void (*run)(shuso_t *, void *), void (*verify)(shuso_t *, void *), void *pd) {
   shuso_module_t        *mod = shuso_get_module(S, "runcheck");
   test_runcheck_t       *chk = mod->privdata;
+  chk->errors = 0;
   chk->test.run = run;
   chk->test.verify = verify;
   chk->test.pd = pd;
