@@ -554,7 +554,6 @@ static void lua_watcher_unref(lua_State *L, shuso_lua_ev_watcher_t *w) {
 static int Lua_watcher_start(lua_State *L) {
   shuso_t                *S = shuso_state(L);
   shuso_lua_ev_watcher_t *w = luaL_checkudata(L, 1, "shuttlesock.watcher");
-  luaS_printstack(L, "start");
   if(ev_is_active(&w->watcher.watcher)) {
     return luaL_error(L, "shuttlesock.watcher already active");
   }

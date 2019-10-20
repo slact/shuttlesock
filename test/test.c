@@ -218,7 +218,6 @@ int luaS_test_userdata_gxcopy_load(lua_State *L) {
   assert(ud != NULL);
   luaL_setmetatable(L, "test_userdata");
   *ud = *ud_in;
-  luaS_printstack(L);
   return 1;
 }
 
@@ -497,6 +496,7 @@ describe(lua_bridge) {
     
   }
 }
+
 
 describe(lua_api) {
   static shuso_t          *S = NULL;
