@@ -56,7 +56,9 @@ function testmod:initialize()
   assert(not self.shared.foo:increment(2))
   self.shared.foo = 1.121
   assert(self.shared.foo:value() == 1.121)
-  assert(not self.shared.foo:increment(2))
+  assert(self.shared:set("foo", 1.2))
+  assert(self.shared:get("foo"):value() == 1.2)
+  assert(not self.shared:increment("foo", 2))
   self.shared.foo = "yes"
   assert(self.shared.foo:value() == "yes")
   assert(not self.shared.foo:increment(2))
