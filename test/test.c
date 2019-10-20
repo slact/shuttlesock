@@ -285,8 +285,8 @@ describe(lua_bridge) {
     
     test("userdata") {
       luaL_Reg mt_fn[] = {
-        {"__gxcopy_save_userdata", luaS_test_userdata_gxcopy_save},
-        {"__gxcopy_load_userdata", luaS_test_userdata_gxcopy_load},
+        {"__gxcopy_save", luaS_test_userdata_gxcopy_save},
+        {"__gxcopy_load", luaS_test_userdata_gxcopy_load},
         {NULL, NULL}
       };
       luaL_newmetatable(Ls, "test_userdata");

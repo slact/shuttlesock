@@ -644,9 +644,13 @@ static bool gxcopy_table(lua_gxcopy_state_t *gxs) {
   while(lua_next(Ls, tindex) != 0) {
     //key at -2, value at -1
     lua_pushvalue(Ls, -2);
-    gxcopy_any(gxs); //copy key
+    if(!gxcopy_any(gxs)) { //copy key
+      return false;
+    }
     lua_pop(Ls, 1);
-    gxcopy_any(gxs); //copy value
+    if(!gxcopy_any(gxs)) { //copy value
+      return false;
+    }
     lua_pop(Ls, 1);
     lua_rawset(Ld, -3);
   }
@@ -741,18 +745,17 @@ static bool gxcopy_userdata(lua_gxcopy_state_t *gxs) {
   if(!lua_getmetatable(Ls, -1)) {
     return shuso_set_error(shuso_state(gxs->src.state), "failed to gxcopy userdata without metatable: this is impossible");
   }
-  
-  lua_getfield(Ls, -1, "__gxcopy_save_userdata");
+  lua_getfield(Ls, -1, "__gxcopy_save");
   if(!lua_isfunction(Ls, -1)) {
     lua_pop(Ls, 2);
-    return shuso_set_error(shuso_state(gxs->src.state), "failed to gxcopy userdata: __gxcopy_save_userdata metatable value is not a function");
+    return shuso_set_error(shuso_state(gxs->src.state), "failed to gxcopy userdata: __gxcopy_save metatable value is not a function");
   }
   
-  lua_getfield(Ls, -2, "__gxcopy_load_userdata");
+  lua_getfield(Ls, -2, "__gxcopy_load");
   if(!lua_isfunction(Ls, -1)) {
-    return shuso_set_error(shuso_state(gxs->src.state), "failed to gxcopy userdata: __gxcopy_load_userdata metatable value is not a function");
+    return shuso_set_error(shuso_state(gxs->src.state), "failed to gxcopy userdata: __gxcopy_load metatable value is not a function");
   }
-  if(!gxcopy_any(gxs)) { //copy __gxcopy_load_userdata
+  if(!gxcopy_any(gxs)) { //copy __gxcopy_load
     lua_pop(Ls, 3);
     return false;
   }
@@ -763,14 +766,14 @@ static bool gxcopy_userdata(lua_gxcopy_state_t *gxs) {
   lua_pushvalue(Ls, -2);
   if(!luaS_function_call_result_ok(Ls, 1, true)) {
     lua_pop(Ld, 1);
-    return shuso_set_error(shuso_state(Ls), "failed to gxcopy userdata: __gxcopy_save_userdata error: %s", shuso_last_error(shuso_state(Ls)));
+    return shuso_set_error(shuso_state(Ls), "failed to gxcopy userdata: __gxcopy_save error: %s", shuso_last_error(shuso_state(Ls)));
   }
   
   gxcopy_any(gxs); //copy __gxcopy_save'd userdata
   if(!luaS_function_call_result_ok(Ld, 1, true)) {
-    return shuso_set_error(shuso_state(Ld), "failed to gxcopy userdata: __gxcopy_load_userdata error: %s", shuso_last_error(shuso_state(Ld)));
+    return shuso_set_error(shuso_state(Ld), "failed to gxcopy userdata: __gxcopy_load error: %s", shuso_last_error(shuso_state(Ld)));
   }
-  
+  lua_pop(Ls, 1); //pop __gxcopy_save'd result
   return true;
 }
 static bool gxcopy_thread(lua_gxcopy_state_t *gxs) {
