@@ -81,6 +81,7 @@ static int Lua_lazy_atomics_value_destroy(lua_State *L) {
     atomicval->string = NULL;
   }
   shuso_shared_slab_free(&S->common->shm, atomicval);
+  ud->atomic = NULL;
   lua_pushboolean(L, 1);
   return 1;
 }
@@ -140,6 +141,11 @@ static int Lua_lazy_atomics_value_set(lua_State *L) {
     }
     case LUA_TNIL: {
       new_atype = SHUSO_LUA_SHATOMIC_NIL;
+      break;
+    }
+    case LUA_TBOOLEAN: {
+      new_atype = SHUSO_LUA_SHATOMIC_BOOLEAN;
+      atomicval->boolean = lua_toboolean(L, 2);
       break;
     }
     default: {
@@ -274,6 +280,7 @@ int luaS_push_lazy_atomics_module(lua_State *L) {
       {"set", Lua_lazy_atomics_value_set},
       {"value", Lua_lazy_atomics_value_get},
       {"increment", Lua_lazy_atomics_value_increment},
+      {"destroy", Lua_lazy_atomics_value_destroy},
       {NULL, NULL}
     }, 0);
     lua_pop(L, 1);
