@@ -69,6 +69,7 @@ typedef struct {
   shuso_module_event_t worker_exited;
   shuso_module_event_t manager_exited;
   
+  shuso_module_event_t error;
 } shuso_core_module_events_t;
 
 struct shuso_core_module_ctx_s {

@@ -399,6 +399,8 @@ static bool core_module_initialize(shuso_t *S, shuso_module_t *self) {
     {"worker.workers_started",    &events->worker_all_workers_started,  NULL},
     {"manager.worker_exited",     &events->worker_exited,               NULL},
     {"master.manager_exited",     &events->manager_exited,              NULL},
+    
+    {"error",                     &events->error,              "string"},
     {NULL, NULL, NULL}
   });
   
@@ -434,6 +436,8 @@ shuso_module_t shuso_core_module = {
    " worker.workers_started"
    " manager.worker_exited"
    " master.manager_exited"
+   
+   " error"
   ,
   .subscribe = 
    " core:worker.start.before.lua_gxcopy"

@@ -726,6 +726,7 @@ static void shuso_set_error_vararg(shuso_t *S, const char *fmt, va_list args) {
     char *config_errors = S->error.combined_errors;
     int config_errors_len = config_errors == NULL ? 0 : strlen(config_errors);
     if((config_errors = realloc(config_errors, config_errors_len + strlen(last_err) + 5)) == NULL) {
+      shuso_core_module_event_publish(S, "error", SHUSO_OK, (void *)last_err);
       return;
     }
     sprintf(&config_errors[config_errors_len], "\n  %s", last_err);
@@ -745,6 +746,7 @@ static void shuso_set_error_vararg(shuso_t *S, const char *fmt, va_list args) {
   if(free_oldmsg) {
     free((void *)free_oldmsg);
   }
+  shuso_core_module_event_publish(S, "error", SHUSO_OK, (void *)shuso_last_error(S));
 }
 
 bool shuso_set_error(shuso_t *S, const char *fmt, ...) {
