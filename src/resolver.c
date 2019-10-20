@@ -4,16 +4,17 @@
 #include <errno.h>
 #include <sys/uio.h>
 
-typedef struct {
-  size_t sz;
-  char   data[];
-} aalloc_t;
-
 #if defined(SHUTTLESOCK_DEBUG_SANITIZE) || defined(SHUTTLESOCK_DEBUG_VALGRIND) || defined(__clang_analyzer__)
 #define INIT_ARES_ALLOCS 1
 #endif
 
 #ifdef INIT_ARES_ALLOCS
+
+typedef struct {
+  size_t sz;
+  char   data[];
+} aalloc_t;
+
 static void *init_malloc(size_t sz) {
   aalloc_t *a = calloc(1, sizeof(*a) + sz);
   if(a == NULL) {
@@ -29,13 +30,19 @@ static void init_free(void *ptr) {
 static void *init_realloc(void *ptr, size_t sz) {
   if(ptr) {
     aalloc_t *a = container_of(ptr, aalloc_t, data);
-    a = realloc(a, sz);
+    size_t old_sz = a->sz;
+    if(sz == 0) {
+      free(a);
+      return NULL;
+    }
+    a = realloc(a, sizeof(*a)+sz);
     if(a == NULL) {
       return NULL;
     }
-    if(a->sz < sz) {
-      memset(&a->data[a->sz], '0', sz - a->sz);
+    if(sz > old_sz) {
+      memset(&a->data[old_sz], 0, sz - old_sz);
     }
+    a->sz = sz;
     return (void *)&a->data;
   }
   else {
