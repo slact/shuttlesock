@@ -1,5 +1,3 @@
-local mm = require "mm"
-
 local function fail(str, ...)
   local arg= {...}
   if #arg == 0 then
