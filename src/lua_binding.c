@@ -227,6 +227,12 @@ static int Lua_shuso_procnum(lua_State *L) {
   return 1;
 }
 
+static int Lua_shuso_count_workers(lua_State *L) {
+  shuso_t *S = shuso_state(L);
+  lua_pushinteger(L, S->common->process.workers_end - S->common->process.workers_start);
+  return 1;
+}
+
 static int Lua_shuso_process_runstate(lua_State *L) {
   shuso_t *S = shuso_state(L);
   if(lua_gettop(L) == 0) {
@@ -1896,6 +1902,7 @@ luaL_Reg shuttlesock_core_module_methods[] = {
 //processes
   {"process_runstate", Lua_shuso_process_runstate},
   {"procnum", Lua_shuso_procnum},
+  {"count_workers", Lua_shuso_count_workers},
 
 //util
   {"set_log_file", Lua_shuso_set_log_fd},

@@ -22,4 +22,8 @@ function Process.type()
   end
 end
 
+function Process.count_workers()
+  return Core.count_workers()
+end
+
 return Process
