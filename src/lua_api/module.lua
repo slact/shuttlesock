@@ -1,5 +1,5 @@
 local Core = require "shuttlesock.core"
-local Log = require "shuttlesock.log"
+local Shuttlesock = require "shuttlesock"
 
 local wrapped_modules = {}
 local lua_modules = {}
@@ -94,7 +94,7 @@ function Module.receive_event(publisher_module_name, module_name, event_name, co
   for _, subscriber in ipairs(subscribers) do
     ok, err = pcall(subscriber, self, code, data, event_name, publisher)
     if not ok then
-      Log.error("Error receiving module event %s for module %s: %s", event_name, self.name or "?",  err or "?")
+      Shuttlesock.set_error("Error receiving module event %s for module %s: %s", event_name, self.name or "?",  err or "?")
     end
   end
   
