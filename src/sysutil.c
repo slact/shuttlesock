@@ -1,10 +1,15 @@
 #include <shuttlesock/build_config.h>
 #ifdef SHUTTLESOCK_PTHREAD_SETNAME_STYLE_LINUX
 #define _GNU_SOURCE
+#define __UNDEF_GNU_SOURCE
 #endif
 #include <pthread.h>
-#ifdef _GNU_SOURCE
+
+#include <stdio.h>
+
+#ifdef __UNDEF_GNU_SOURCE
 #undef _GNU_SOURCE
+#undef __UNDEF_GNU_SOURCE
 #endif
 
 //for strsignal()
@@ -40,7 +45,6 @@
 #include <pthread_np.h>
 #endif
 
-#include <stdio.h>
 #include <assert.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
