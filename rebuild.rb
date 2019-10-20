@@ -200,6 +200,8 @@ class Opts
   end
   
   def make
+    return self if @vars[:no_build]
+    
     build_opts=[]
     if @vars[:verbose_build]
       if (`cmake --build 2>&1`).match("--verbose")
@@ -333,6 +335,9 @@ rebuild = Opts.new do
   no_ccache :debug_flag,
     cmake_define: {DISABLE_CCACHE: true}
   
+  no_build :debug_flag,
+    set:{no_build: true}
+  
   clean :debug_flag,
     set: {clean: true}
   
@@ -415,7 +420,7 @@ rebuild = Opts.new do
     cmake_define: {SHUTTLESOCK_NO_LUAC: true}
   
   nothread :debug_flag,
-    alt: ["nothreads", "no-threads"],
+    alt: ["nothreads", "no-threads", "no-thread"],
     cmake_define: {SHUTTLESOCK_DEBUG_NO_WORKER_THREADS: true}
   
   debug_modules :debug_flag,
