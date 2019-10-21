@@ -1502,6 +1502,7 @@ static void lua_module_event_listener(shuso_t *S, shuso_event_state_t *evs, intp
     map = lua_topointer(L, -1);
     lua_pop(L, 1);
     assert(map);
+    if(!map->wrap(S, data, map->privdata)) {
     if(!map->wrap(S, data)) {
       shuso_set_error(S, "failed to map data type %s for event %s to Lua", evs->data_type, evs->name);
       return;

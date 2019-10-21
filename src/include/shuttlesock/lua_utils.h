@@ -17,6 +17,7 @@ shuso_t *shuso_state_from_lua(lua_State *L);
 
 //initialization stuff
 bool luaS_set_shuttlesock_state_pointer(lua_State *L, shuso_t *S);
+bool shuso_register_lua_event_data_types(shuso_t *S);
 
 //lua functions here
 int luaS_push_core_module(lua_State *L);

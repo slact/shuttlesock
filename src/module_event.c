@@ -82,7 +82,19 @@ bool shuso_event_publish(shuso_t *S, shuso_module_t *publisher_module, shuso_mod
   return true;
 }
 
-bool shuso_register_event_data_type(shuso_t *S, shuso_event_data_type_map_t *t) {
+bool shuso_register_event_data_type_mapping(shuso_t *S, const char *language, const char *data_type, shuso_module_t *registering_module, shuso_event_data_type_map_t *t) {
+  lua_State *L = S->lua.state;
+  shuso_event_data_type_map_t *map = shuso_stalloc(&S->stalloc, sizeof(*map));
+  if(!map) {
+    shuso_set_error(S, "failed to allocate map while registering event data type");
+  }
+  *map = *t;
   
-  return true;
+  luaS_push_lua_module_field(L, "shuttlesock.core.module_event", "register_data_type");
+  lua_pushstring(L, language);
+  lua_pushstring(L, data_type);
+  lua_pushstring(L, registering_module->name);
+  lua_pushlightuserdata(L, map);
+  
+  return luaS_function_call_result_ok(L, 4, false);
 }

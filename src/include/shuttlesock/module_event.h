@@ -2,8 +2,9 @@
 #define SHUTTLESOCK_MODULE_EVENT_H
 
 typedef struct {
-  bool (*wrap)(shuso_t *, void *);
-  bool (*unwrap)(shuso_t *, void **);
+  bool (*wrap)(shuso_t *, void *, void *pd);
+  bool (*unwrap)(shuso_t *, void **, void *pd);
+  void  *privdata;
 } shuso_event_data_type_map_t;
 
 typedef struct {
@@ -39,5 +40,6 @@ void *shuso_events(shuso_t *S, shuso_module_t *module);
 bool shuso_events_initialize(shuso_t *S, shuso_module_t *module,  void *events_struct, shuso_event_init_t *events_init);
 bool shuso_event_listen(shuso_t *S, const char *name, shuso_module_event_fn *callback, void *pd);
 bool shuso_event_publish(shuso_t *S, shuso_module_t *publisher_module, shuso_module_event_t *event, intptr_t code, void *data);
+bool shuso_register_event_data_type_mapping(shuso_t *S, const char *language, const char *data_type, shuso_module_t *registering_module, shuso_event_data_type_map_t *t);
 
 #endif //SHUTTLESOCK_MODULE_EVENT_H
