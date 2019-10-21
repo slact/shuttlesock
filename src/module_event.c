@@ -82,17 +82,43 @@ bool shuso_event_publish(shuso_t *S, shuso_module_t *publisher_module, shuso_mod
   return true;
 }
 
-bool shuso_register_event_data_type_mapping(shuso_t *S, const char *language, const char *data_type, shuso_module_t *registering_module, shuso_event_data_type_map_t *t) {
+bool shuso_register_event_data_type_mapping(shuso_t *S, shuso_event_data_type_map_t *t, shuso_module_t *registering_module, bool replace_if_present) {
   lua_State *L = S->lua.state;
+  
+  //does it already exist?
+  luaS_push_lua_module_field(L, "shuttlesock.core.module_event", "data_type_map");
+  lua_pushstring(L, t->language);
+  lua_pushstring(L, t->data_type);
+  luaS_call(L, 2, 2); //returns data_type_map_ptr, module_name
+  
+  if(!lua_isnil(L, -2)) {
+    //yeah, it exists
+    if(replace_if_present) {
+      //but that's okay
+      luaS_push_lua_module_field(L, "shuttlesock.core.module_event", "unregister_data_type");
+      lua_pushstring(L, t->language);
+      lua_pushstring(L, t->data_type);
+      luaS_function_call_result_ok(L, 2, false);
+    }
+  }
+  lua_pop(L, 2);
+  
   shuso_event_data_type_map_t *map = shuso_stalloc(&S->stalloc, sizeof(*map));
   if(!map) {
-    shuso_set_error(S, "failed to allocate map while registering event data type");
+    return shuso_set_error(S, "failed to allocate map while registering event data type");
   }
   *map = *t;
+  map->language = shuso_stalloc(&S->stalloc, strlen(t->language)+1);
+  map->data_type = shuso_stalloc(&S->stalloc, strlen(t->data_type)+1);
+  if(!map->language || !map->data_type) {
+    return shuso_set_error(S, "failed to allocate map while registering event data type");
+  }
+  strcpy((char *)map->language, t->language);
+  strcpy((char *)map->data_type, t->data_type);
   
   luaS_push_lua_module_field(L, "shuttlesock.core.module_event", "register_data_type");
-  lua_pushstring(L, language);
-  lua_pushstring(L, data_type);
+  lua_pushstring(L, map->language);
+  lua_pushstring(L, map->data_type);
   lua_pushstring(L, registering_module->name);
   lua_pushlightuserdata(L, map);
   

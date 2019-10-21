@@ -14,6 +14,7 @@ static bool add_module(shuso_t *S, shuso_module_t *module, const char *adding_fu
     return false;
   }
   lua_State *L = S->lua.state;
+  
   luaS_push_lua_module_field(L, "shuttlesock.core.module", adding_function_name);
   if(!module->name) {
     return shuso_set_error(S, "module name missing");
@@ -21,6 +22,7 @@ static bool add_module(shuso_t *S, shuso_module_t *module, const char *adding_fu
   if(!module->version) {
     return shuso_set_error(S, "module %s version string is missing", module->name);
   }
+  
   lua_pushstring(L, module->name);
   lua_pushlightuserdata(L, module);
   lua_pushstring(L, module->version);
@@ -31,6 +33,7 @@ static bool add_module(shuso_t *S, shuso_module_t *module, const char *adding_fu
     S->common->state = SHUSO_STATE_MISCONFIGURED;
     return false;
   }
+  
   lua_getfield(L, -1, "index");
   module->index = lua_tointeger(L, -1) - 1; //global module number
   lua_pop(L, 2);

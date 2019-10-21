@@ -83,6 +83,7 @@ typedef struct {
   shuso_ev_timer     timeout_timer;
   _Atomic uint8_t    timed_out;
   
+  _Atomic int        ignore_errors;
   _Atomic int        errors;
   _Atomic int        workers_started;
   _Atomic int        workers_stopped;
@@ -99,7 +100,7 @@ typedef struct {
 int dev_null;
 
 shuso_t *shusoT_create(test_runcheck_t **external_ptr, double test_timeout);
-
+test_runcheck_t *shusoT_get_runcheck(shuso_t *S);
 #define shusoT_run_test(...) do { \
   snow_fail_update(); \
   ___shusoT_run_test(__VA_ARGS__); \

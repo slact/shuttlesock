@@ -397,14 +397,12 @@ bool shuso_lua_initialize(shuso_t *S) {
       lua_pop(L, 1);
     }
   }
-  
- 
-  //lua doesn't come with a glob, and config needs it when including files
   lua_getglobal(L, "require");
   lua_pushliteral(L, "shuttlesock.core.config");
   lua_call(L, 1, 1);
-  
   S->config.index = luaL_ref(L, LUA_REGISTRYINDEX);
+  
+  shuso_register_lua_event_data_types(S);
   
   return true;
 }

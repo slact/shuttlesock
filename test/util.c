@@ -75,6 +75,9 @@ bool ___runcheck(shuso_t *S, char **err) {
   assert_util(chk->events.master_workers_started == 1);
   assert_util(chk->events.worker_workers_started >= 1);
   assert_util(chk->events.master_manager_exited == 1);
+  if(!chk->ignore_errors) {
+    assert_util(chk->errors == 0);
+  }
   return true;
 }
 
@@ -82,7 +85,6 @@ static void runcheck_event_listener(shuso_t *S, shuso_event_state_t *evs, intptr
   shuso_module_t  *mod = pd;
   const char      *evn = evs->name;
   test_runcheck_t *chk = mod->privdata;
-  shuso_log_info(S, "got event %s", evn);
   if(strcmp(evn, "master.start") == 0) {
     assert(chk->process.master.started == 0);
     assert(chk->process.master.stopped == 0);
@@ -190,7 +192,9 @@ static void runcheck_event_listener(shuso_t *S, shuso_event_state_t *evs, intptr
   else if(strcmp(evn, "error") == 0) {
     const char *err = data;
     chk->errors++;
-    snow_fail("%s", err);
+    if(!chk->ignore_errors) {
+      snow_fail("%s", err);
+    }
   }
 }
 
@@ -264,13 +268,18 @@ shuso_t *shusoT_create(test_runcheck_t **external_ptr, double test_timeout) {
   };
   chk->timeout = test_timeout;
   chk->timeout_is_ok = false;
+  chk->ignore_errors = 0;
   shuso_add_module(S, &chk->runcheck_module);
   return S;
 }
 
-bool ___shusoT_run_test(shuso_t *S, int procnum, void (*run)(shuso_t *, void *), void (*verify)(shuso_t *, void *), void *pd) {
+test_runcheck_t *shusoT_get_runcheck(shuso_t *S) {
   shuso_module_t        *mod = shuso_get_module(S, "runcheck");
-  test_runcheck_t       *chk = mod->privdata;
+  return mod->privdata;
+}
+
+bool ___shusoT_run_test(shuso_t *S, int procnum, void (*run)(shuso_t *, void *), void (*verify)(shuso_t *, void *), void *pd) {
+  test_runcheck_t       *chk = shusoT_get_runcheck(S);
   chk->errors = 0;
   chk->test.run = run;
   chk->test.verify = verify;
@@ -284,8 +293,7 @@ bool ___shusoT_run_test(shuso_t *S, int procnum, void (*run)(shuso_t *, void *),
 }
 
 bool shusoT_destroy(shuso_t *S, test_runcheck_t **chkptr) {
-  shuso_module_t        *mod = shuso_get_module(S, "runcheck");
-  test_runcheck_t       *chk = mod->privdata;
+  test_runcheck_t       *chk = shusoT_get_runcheck(S);
   shmfree(chk);
   *chkptr = NULL;
   return shuso_destroy(S);

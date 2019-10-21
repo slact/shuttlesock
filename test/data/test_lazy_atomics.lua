@@ -70,6 +70,8 @@ function testmod:initialize()
   assert(self.shared.foo:value() == Shuso.pointer())
   assert(not self.shared.foo:increment(2))
   
+  assert(not self.shared.foo:set({}))
+  
 end
 
 assert(testmod:add())

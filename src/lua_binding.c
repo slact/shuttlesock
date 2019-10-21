@@ -1493,18 +1493,17 @@ static void lua_module_event_listener(shuso_t *S, shuso_event_state_t *evs, intp
   if(evs->data_type) {
     const shuso_event_data_type_map_t     *map;
     luaS_push_lua_module_field(L, "shuttlesock.core.module_event", "data_type_map");
-    lua_pushliteral(L, "lua");
+    lua_pushliteral(L, "Lua");
     lua_pushstring(L, evs->data_type);
     if(!luaS_function_call_result_ok(L, 2, true)) {
-      shuso_set_error(S, "failed to map data type %s for event %s to Lua: %s", evs->data_type, evs->name, shuso_last_error(S));
+      shuso_set_error(S, "failed to map data type \"%s\" for event \"%s\" to Lua: %s", evs->data_type, evs->name, shuso_last_error(S));
       return;
     }
     map = lua_topointer(L, -1);
     lua_pop(L, 1);
     assert(map);
     if(!map->wrap(S, data, map->privdata)) {
-    if(!map->wrap(S, data)) {
-      shuso_set_error(S, "failed to map data type %s for event %s to Lua", evs->data_type, evs->name);
+      shuso_set_error(S, "failed to map data type \"%s\" for event \"%s\" to Lua", evs->data_type, evs->name);
       return;
     } 
   }
@@ -1982,3 +1981,28 @@ shuso_module_t shuso_lua_bridge_module = {
    " core:worker.start.before.lua_gxcopy",
   .initialize = lua_bridge_module_initialize
 };
+
+static bool datatype_string_wrap(shuso_t *S, void *d, void *pd) {
+  lua_State *L = S->lua.state;
+  const char *str = d;
+  lua_pushstring(L, str);
+  return true;
+}
+static bool datatype_string_unwrap(shuso_t *S, void **d, void *pd) {
+  return false;
+}
+//data types
+bool shuso_register_lua_event_data_types(shuso_t *S) {
+  shuso_event_data_type_map_t map;
+  
+  map = (shuso_event_data_type_map_t ){
+    .wrap = datatype_string_wrap,
+    .unwrap = datatype_string_unwrap,
+    .language = "Lua",
+    .data_type = "string"
+  };
+  if(!shuso_register_event_data_type_mapping(S, &map, &shuso_lua_bridge_module, true)) {
+    return false;
+  }
+  return true;
+}

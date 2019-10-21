@@ -527,6 +527,14 @@ describe(lua_api) {
     assert_shuso_ran_ok(S);
   }
   
+  test("core:error events") {
+    assert_luaL_dofile(S->lua.state, "test_core_error_events.lua");
+    assert_shuso(S, shuso_configure_finish(S));
+    chk->ignore_errors = 1;
+    shuso_run(S);
+    assert_shuso_ran_ok(S);
+  }
+  
 }
 #define IPC_ECHO 130
 
