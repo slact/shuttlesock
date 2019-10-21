@@ -198,6 +198,7 @@ struct shuso_s {
     char                       *combined_errors;
     bool                        static_memory;
     bool                        do_not_log;
+    bool                        do_not_publish_event;
   }                           error;
   char                        logbuf[1024];
 }; //shuso_t;

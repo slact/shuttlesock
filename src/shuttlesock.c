@@ -745,8 +745,10 @@ static void shuso_set_error_vararg(shuso_t *S, const char *fmt, va_list args) {
   if(free_oldmsg) {
     free((void *)free_oldmsg);
   }
-  if(S->common->state > SHUSO_STATE_CONFIGURING) {
+  if(!S->error.do_not_publish_event && S->common->state > SHUSO_STATE_CONFIGURING) {
+    S->error.do_not_publish_event = true;
     shuso_core_module_event_publish(S, "error", SHUSO_OK, (void *)shuso_last_error(S));
+    S->error.do_not_publish_event = false;
   }
 }
 
