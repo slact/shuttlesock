@@ -330,8 +330,7 @@ int luaS_table_concat(lua_State *L, const char *delimeter) {
   return 1;
 }
 
-int luaS_do_embedded_script(lua_State *L) {
-  const char *name = luaL_checkstring(L, -1);
+void luaS_do_embedded_script(lua_State *L, const char *name, int nargs) {
   shuso_lua_embedded_scripts_t *script;
   for(script = &shuttlesock_lua_embedded_scripts[0]; script->name != NULL; script++) {
     if(strcmp(script->name, name) == 0) {
@@ -347,15 +346,16 @@ int luaS_do_embedded_script(lua_State *L) {
       lua_remove(L, fname_idx);
       if(rc != LUA_OK) {
         lua_error(L);
-        return 0;
+        return;
       }
-      
-      lua_call(L, 0, 1);
-      return 1;
+      if(nargs > 0) {
+        lua_insert(L, -nargs-1);
+      }
+      lua_call(L, nargs, 1);
+      return;
     }
   }
   luaL_error(L, "embedded script %s not found", name);
-  return 0;
 }
 
 shuso_t *shuso_state_from_lua(lua_State *L) {
@@ -370,6 +370,12 @@ bool luaS_set_shuttlesock_state_pointer(lua_State *L, shuso_t *S) {
   lua_pushlightuserdata(L, S);
   lua_setfield(L, LUA_REGISTRYINDEX, "shuttlesock.userdata");
   return true;
+}
+
+static int luaS_requiref_embedded_script(lua_State *L) {
+  const char *name = lua_tostring(L, -1);
+  luaS_do_embedded_script(L, name, 0);
+  return 1;
 }
 
 bool shuso_lua_initialize(shuso_t *S) {
@@ -393,7 +399,7 @@ bool shuso_lua_initialize(shuso_t *S) {
   
   for(shuso_lua_embedded_scripts_t *script = &shuttlesock_lua_embedded_scripts[0]; script->name != NULL; script++) {
     if(script->module) {
-      luaL_requiref(L, script->name, luaS_do_embedded_script, 0);
+      luaL_requiref(L, script->name, luaS_requiref_embedded_script, 0);
       lua_pop(L, 1);
     }
   }

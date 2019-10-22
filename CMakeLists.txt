@@ -194,6 +194,9 @@ include(PackLuaScripts)
 
 configure_file(src/include/shuttlesock/build_config.h.tmpl src/include/shuttlesock/build_config.h)
 
+#utils used inside shuttlesock.core
+add_lua_script("lua_binding" src/lua_binding.lua)
+
 #some luarocks we use
 add_lua_bundled_module("argparse" src/luarocks/argparse/src/argparse.lua)
 add_lua_bundled_module("mm"       src/luarocks/mm.lua)

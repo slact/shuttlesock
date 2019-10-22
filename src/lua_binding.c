@@ -1884,6 +1884,10 @@ static int Lua_shuso_setting_module_name(lua_State *L) {
   return 1;
 }
 
+static int Lua_shuso_is_light_userdata(lua_State *L) {
+  return lua_type(L, 1) == LUA_TLIGHTUSERDATA;
+}
+
 luaL_Reg shuttlesock_core_module_methods[] = {
 // creation, destruction
   {"create", Lua_shuso_create},
@@ -1910,6 +1914,9 @@ luaL_Reg shuttlesock_core_module_methods[] = {
 //util
   {"set_log_file", Lua_shuso_set_log_fd},
   {"set_error", Lua_shuso_set_error},
+  
+//lua helpers
+  {"is_light_userdata", Lua_shuso_is_light_userdata},
 
 //config
   {"config_block_parent_setting_pointer", Lua_shuso_block_parent_setting_pointer},
@@ -1966,6 +1973,9 @@ luaL_Reg shuttlesock_system_module_methods[] = {
 
 int luaS_push_core_module(lua_State *L) {
   luaL_newlib(L, shuttlesock_core_module_methods);
+  lua_pushvalue(L, -1);
+  luaS_do_embedded_script(L, "lua_binding", 1);
+  lua_pop(L, 1);
   return 1;
 }
 

@@ -176,7 +176,10 @@ do { \
   } \
 } while(0)
 
-#define assert_luaL_dofile(L, filename) do { \
+#define assert_luaL_dofile(L, filename) \
+  assert_luaL_dofile_args(L, filename, 0)
+
+#define assert_luaL_dofile_args(L, filename, nargs) do { \
   snow_fail_update(); \
   lua_getglobal(L, "string"); \
   lua_getfield(L, -1, "format"); \
@@ -195,7 +198,10 @@ do { \
     snow_fail("%s", lua_tostring(L, -1)); \
   } \
   lua_remove(L, -2); \
-  if(!luaS_pcall(L, 0, LUA_MULTRET)) { \
+  if(nargs > 0) { \
+    lua_insert(L, -nargs-1); \
+  } \
+  if(!luaS_pcall(L, nargs, LUA_MULTRET)) { \
     snow_fail("%s", lua_tostring(L, -1)); \
   } \
 } while(0)

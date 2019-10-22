@@ -471,6 +471,13 @@ describe(lua_bridge) {
         assert(copy1.common == copy2.common, 'common table should be the same') \
       ");
     }
+    
+    test("gxcopy_check") {
+      lua_State *L = Ss->lua.state;
+      lua_newuserdata(L, sizeof(int));
+      lua_pushlightuserdata(L, NULL);
+      assert_luaL_dofile_args(L, "test_gxcopy_check.lua", 2);
+    }
   }
   subdesc(printstack) {
     static shuso_t   *S;
