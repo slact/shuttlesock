@@ -22,7 +22,7 @@ bool shuso_register_lua_event_data_types(shuso_t *S);
 //lua functions here
 int luaS_push_core_module(lua_State *L);
 int luaS_push_system_module(lua_State *L);
-int luaS_do_embedded_script(lua_State *L);
+void luaS_do_embedded_script(lua_State *L, const char *name, int nargs);
 
 //debug stuff
 char *luaS_dbgval(lua_State *L, int n);
@@ -51,7 +51,6 @@ bool luaS_gxcopy_start(lua_State *source, lua_State *destination);
 bool luaS_gxcopy(lua_State *source, lua_State *destination);
 bool luaS_gxcopy_module_state(lua_State *source, lua_State *destination, const char *module_name);
 bool luaS_gxcopy_finish(lua_State *source, lua_State *destination);
-
 
 bool luaS_streq(lua_State *L, int index, const char *str);
 #define luaS_streq_literal(L, index, str) \

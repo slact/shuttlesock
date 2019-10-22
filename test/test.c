@@ -518,12 +518,16 @@ describe(lua_api) {
   test("a module") {
     lua_State *L = S->lua.state;
     assert_luaL_dofile(L, "test_a_module.lua");
-    
     assert_shuso(S, shuso_configure_finish(S));
-    
     shuso_run(S);
-    
     assert_shuso_ran_ok(S);
+  }
+  
+  test("a module that can't be gxcopied") {
+    lua_State *L = S->lua.state;
+    assert_luaL_dofile(L, "test_a_module_bad_gxcopy.lua");
+    shuso_configure_finish(S);
+    assert_shuso_error(S, "failed to configure.*failed to initialize module.* contains a coroutine");
   }
   
   test("lazy atomics") {

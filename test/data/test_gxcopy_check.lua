@@ -8,21 +8,29 @@ local function gxcopy_fail(val, matcherr)
   local ok, err = gxcopy_check(val)
   if ok then return false, "gxcopy_check was supposed to fail, but didn't" end
   if matcherr then
+    local oneline = false
     if type(matcherr)=="string" then
       matcherr = {matcherr}
+      oneline = true
     end
-    n = 1
+    local n = 0
     for line in err:gmatch("[^\n]*") do
-      local matchline = matcherr[n]
       n=n+1
+      local matchline = matcherr[n]
       if not matchline then
-        return true
+        if oneline then
+          return true
+        else
+          return nil, "not enough lines in gxcopy_check error: " .. err
+        end
       end
       if not line:match(matchline) then
         return nil, "gxcopy_check error doesn't match. error: " .. err
       end
     end
-    
+    if not oneline and n ~= #matcherr then
+      return nil, "too many lines in gxcopy_check error: " .. err
+    end
     
   end
   return true
@@ -51,9 +59,6 @@ assert(gxcopy_fail(ud, "__gxcopy_load.*not a function"))
 local t = {
   {
     {
-      {
-        {11},22
-      },
       function()
         return mt
       end
@@ -65,9 +70,12 @@ local t = {
   }
 }
 
+
 assert(gxcopy_fail(t, "contains a coroutine"))
 
+
 local str = "string"
+
 
 local function fstack()
   local up1 = lud
@@ -76,3 +84,53 @@ local function fstack()
 end
 
 assert(gxcopy_fail(fstack, {"contains a coroutine", "function .* upvalue t", "table value at key", "table key"}))
+
+
+t={{{22}}}
+t.t=t
+assert(gxcopy_check(t))
+
+setmetatable(t, {
+  foo=coro
+})
+assert(gxcopy_fail(t, {"coroutine", "table metatable value at key.*foo"}))
+
+setmetatable(t, {
+  __gxcopy_save = false,
+  __gxcopy_load = function()end,
+})
+assert(gxcopy_fail(t, {"__gxcopy_save.*not a function"}))
+
+
+setmetatable(t, {
+  __gxcopy_save = function()end,
+  __gxcopy_load = "99"
+})
+assert(gxcopy_fail(t, {"__gxcopy_load.*not a function"}))
+
+local mt = {
+  __gxcopy_metatable={}
+}
+setmetatable(t, mt)
+assert(gxcopy_fail(t, {"__gxcopy_metatable.*not a function", "in table"}))
+
+local mt = {
+  __gxcopy_metatable=function()
+    return {}
+  end
+}
+setmetatable(t, mt)
+assert(gxcopy_fail(t, {"__gxcopy_metatable.*exact same metatable", "in table"}))
+
+mt.__gxcopy_metatable=function()
+  return mt
+end
+
+assert(gxcopy_fail(t, {"__gxcopy_metatable.*upvalue", "in table"}))
+
+_G['globmeta']=mt
+mt.__gxcopy_metatable=function()
+  return globmeta
+end
+
+assert(gxcopy_check(t))

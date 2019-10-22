@@ -1485,6 +1485,12 @@ static int luaS_find_module_table(lua_State *L, const char *name) {
 }
 
 static bool lua_module_initialize_config(shuso_t *S, shuso_module_t *module, shuso_setting_block_t *block) {
+  /*
+  luaS_push_lua_module_field(L, "shuttlesock.core", "gxcopy_check");
+  lua_pushvalue(L, -2);
+  lua_pushfstring(L, "failed to initialize module %s", module->name);
+  lua_call(L, 2, 2);
+  */
   return true;
 }
 
@@ -1525,8 +1531,8 @@ static void lua_module_event_listener(shuso_t *S, shuso_event_state_t *evs, intp
 
 static bool lua_module_initialize(shuso_t *S, shuso_module_t *module) {
   lua_State *L = S->lua.state;
+  int top = lua_gettop(L);
   luaS_find_module_table(L, module->name);
-  
   lua_getfield(L, -1, "events");
   lua_getfield(L, -1, "publish");
   
@@ -1536,6 +1542,7 @@ static bool lua_module_initialize(shuso_t *S, shuso_module_t *module) {
     shuso_event_init_t *events_init = malloc(sizeof(*events_init) * (npub + 1));
     if(events == NULL || events_init == NULL) {
       if(events_init) free(events_init);
+      lua_settop(L, top);
       return shuso_set_error(S, "failed to allocate lua module published events array");
     }
     lua_pushnil(L);
@@ -1551,48 +1558,62 @@ static bool lua_module_initialize(shuso_t *S, shuso_module_t *module) {
     events_init[npub]=(shuso_event_init_t ){.name = NULL, .event = NULL};
     if(!shuso_events_initialize(S, module, events, events_init)) {
       free(events_init);
+      lua_settop(L, top);
       return false;
     }
     free(events_init);
   }
   lua_pop(L, 1);
+  
   lua_getfield(L, -1, "subscribe");
   lua_pushnil(L);
   while(lua_next(L, -2)) {
     shuso_event_listen(S, lua_tostring(L, -2), lua_module_event_listener, NULL);
     lua_pop(L, 1);
   }
-  lua_pop(L, 2);
+  lua_pop(L, 3);
   
   bool ok = true;
-  
   luaS_push_lua_module_field(L, "shuttlesock.module", "find");
   lua_pushstring(L, module->name);
   if (!luaS_function_call_result_ok(L, 1, true)) {
-    lua_pop(L, 1);
+    lua_settop(L, top);
     return shuso_set_error(S, "failed to find Lua shuttlesock module '%s'", module->name);
   }
   assert(lua_istable(L, -1));
   
+  int stacksize_before = lua_gettop(L);
+
   lua_getfield(L, -1, "initialize");
   if(lua_isfunction(L, -1)) {
     lua_pushvalue(L, -2);
-    int stacksize_before = lua_gettop(L) - 2;
+    
     ok = luaS_pcall(L, 1, LUA_MULTRET);
     if(!ok) {
+      lua_settop(L, top);
       return false;
     }
     int nret = lua_gettop(L) - stacksize_before;
     if(nret > 0 && !lua_toboolean(L, stacksize_before+1)) {
       const char *err = nret > 1 ? lua_tostring(L, stacksize_before+2) : "(no error message)";
       shuso_set_error(S, "%s", err);
-      lua_pop(L, nret);
+      lua_settop(L, top);
       return false;
     }
     lua_pop(L, nret);
   }
-  lua_pop(L, 2);
   
+  luaS_push_lua_module_field(L, "shuttlesock.core", "gxcopy_check");
+  lua_pushvalue(L, -2);
+  lua_pushfstring(L, "failed to initialize module %s", module->name);
+  lua_call(L, 2, 2);
+  if(!lua_toboolean(L, -2)) {
+    const char *err = lua_tostring(L, -1);
+    shuso_set_error(S, "%s", err);
+    lua_settop(L, top);
+    return false;
+  }
+  lua_settop(L, top);
   return ok;
 }
 
