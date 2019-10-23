@@ -265,19 +265,38 @@ static void do_nothing(void) {
   //nothing at all
 }
 
-bool shuso_ipc_add_handler(shuso_t * S,  const char *name, const uint8_t code, shuso_ipc_fn *receive, shuso_ipc_fn *cancel) {
+const shuso_ipc_handler_t *shuso_ipc_add_handler(shuso_t *S,  const char *name, uint32_t code, shuso_ipc_fn *receive, shuso_ipc_fn *cancel) {
+  if(!shuso_runstate_check(S, SHUSO_STATE_CONFIGURING, "add IPC handler")) {
+    return false;
+  }
+  
   shuso_ipc_handler_t *handlers = S->common->ipc_handlers;
+  
+  if(code == SHUTTLESOCK_IPC_CODE_AUTOMATIC) {
+    for(int i = SHUTTLESOCK_IPC_CODE_MIN; i <= SHUTTLESOCK_IPC_CODE_MAX; code++) {
+      if(handlers[code].name == NULL) {
+        code = i;
+        break;
+      }
+    }
+    if(code == SHUTTLESOCK_IPC_CODE_AUTOMATIC) {
+      shuso_set_error(S, "All %d IPC codes are already used.", SHUTTLESOCK_IPC_CODE_MAX - SHUTTLESOCK_IPC_CODE_MIN);
+      return NULL;
+    }
+  }
+  
   if(handlers[code].name != NULL) {
     //this code is already handled
-    return false;
+    shuso_set_error(S, "IPC code %d is already in use by %s", (int)code, handlers[code].name);
+    return NULL;
   }
   handlers[code] = (shuso_ipc_handler_t ){
     .code = code,
-    .name = name ? name : "unnamed",
+    .name = name ? name : "(unnamed)",
     .receive = receive,
     .cancel = cancel ? cancel : (shuso_ipc_fn *)&do_nothing
   };
-  return true;
+  return &handlers[code];
 }
 
 static void ipc_send_retry_cb(shuso_loop *loop, shuso_ev_timer *w, int revents) {

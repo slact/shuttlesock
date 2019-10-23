@@ -7,6 +7,7 @@
 #include <arpa/inet.h>
 #include <ares.h>
 #include <errno.h>
+#include "lua_api/lua_ipc.h"
 
 typedef enum {
   LUA_EV_WATCHER_IO =       0,
@@ -224,6 +225,12 @@ static int Lua_shuso_runstate(lua_State *L) {
 static int Lua_shuso_pointer(lua_State *L) {
   shuso_t *S = shuso_state(L);
   lua_pushlightuserdata(L, S);
+  return 1;
+}
+
+static int Lua_shuso_procnum_valid(lua_State *L) {
+  luaL_checknumber(L, 1);
+  lua_pushboolean(L, shuso_procnum_valid(shuso_state(L), lua_tointeger(L, 1)));
   return 1;
 }
 
@@ -1461,12 +1468,6 @@ static int Lua_shuso_ipc_open_listener_sockets(lua_State *L) {
   return 0;
 }
 
-int Lua_shuso_ipc_add_handler(lua_State *L) {
-  return 0;
-}
-int Lua_shuso_ipc_send(lua_State *L) {
-  return 0;
-}
 int Lua_shuso_ipc_send_workers(lua_State *L) {
   return 0;
 }
@@ -1909,6 +1910,16 @@ static int Lua_shuso_is_light_userdata(lua_State *L) {
   return lua_type(L, 1) == LUA_TLIGHTUSERDATA;
 }
 
+static int Lua_shuso_pcall(lua_State *L) {
+  luaL_checktype(L, 1, LUA_TFUNCTION);
+  int nargs = lua_gettop(L) - 1;
+  bool ok = luaS_pcall(L, nargs, LUA_MULTRET);
+  lua_pushboolean(L, ok);
+  lua_insert(L, 1);
+  return lua_gettop(L);
+}
+
+
 luaL_Reg shuttlesock_core_module_methods[] = {
 // creation, destruction
   {"create", Lua_shuso_create},
@@ -1931,6 +1942,7 @@ luaL_Reg shuttlesock_core_module_methods[] = {
   {"process_runstate", Lua_shuso_process_runstate},
   {"procnum", Lua_shuso_procnum},
   {"count_workers", Lua_shuso_count_workers},
+  {"procnum_valid", Lua_shuso_procnum_valid},
 
 //util
   {"set_log_file", Lua_shuso_set_log_fd},
@@ -1938,6 +1950,7 @@ luaL_Reg shuttlesock_core_module_methods[] = {
   
 //lua helpers
   {"is_light_userdata", Lua_shuso_is_light_userdata},
+  {"pcall", Lua_shuso_pcall},
 
 //config
   {"config_block_parent_setting_pointer", Lua_shuso_block_parent_setting_pointer},
@@ -1978,8 +1991,7 @@ luaL_Reg shuttlesock_core_module_methods[] = {
   {"send_file", Lua_shuso_ipc_send_fd},
   {"new_file_receiver", Lua_shuso_ipc_file_receiver_new},
   {"open_listener_sockets", Lua_shuso_ipc_open_listener_sockets},
-  {"add_message_handler", Lua_shuso_ipc_add_handler},
-  {"send_message", Lua_shuso_ipc_send},
+  {"send_message_yield", luaS_ipc_send_message_yield},
   {"send_message_to_all_workers", Lua_shuso_ipc_send_workers},
   
   {NULL, NULL}

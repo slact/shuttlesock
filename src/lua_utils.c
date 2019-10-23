@@ -436,7 +436,6 @@ int luaS_resume(lua_State *thread, lua_State *from, int nargs) {
       luaL_traceback(thread, thread, errmsg, 1);
       shuso_log_error(S, "lua coroutine error: %s", lua_tostring(thread, -1));
       lua_pop(thread, 1);
-      lua_gc(thread, LUA_GCCOLLECT, 0);
       break;
   }
   return rc;

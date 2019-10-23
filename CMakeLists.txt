@@ -28,6 +28,7 @@ set(libsrc
   src/config.c
   src/embedded_lua_scripts.c
   src/lua_api/lazy_atomics.c
+  src/lua_api/lua_ipc.c
   src/lua_binding.c
   src/lua_utils.c
 )

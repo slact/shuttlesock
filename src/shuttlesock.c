@@ -780,6 +780,15 @@ int shuso_error_count(shuso_t *S) {
   return S->error.error_count;
 }
 
+bool shuso_procnum_valid(shuso_t *S, int procnum) {
+  if(procnum < SHUTTLESOCK_MASTER) {
+    return false;
+  }
+  if(procnum >= SHUTTLESOCK_WORKER && (procnum < S->common->process.workers_start || procnum >= S->common->process.workers_end)) {
+    return false;
+  }
+  return true;
+}
 
 shuso_process_t *shuso_procnum_to_process(shuso_t *S, int procnum) {
  if(procnum < SHUTTLESOCK_MASTER || procnum > SHUTTLESOCK_MAX_WORKERS) {

@@ -16,6 +16,10 @@
 #define SHUTTLESOCK_IPC_CMD_WORKER_STARTED 10
 #define SHUTTLESOCK_IPC_CMD_WORKER_STOPPED 11
 
+#define SHUTTLESOCK_IPC_CODE_AUTOMATIC UINT16_MAX
+
+#define SHUTTLESOCK_IPC_CODE_MIN 0
+#define SHUTTLESOCK_IPC_CODE_MAX UINT8_MAX
 
 typedef struct {
   _Atomic uint8_t    next_read;
@@ -96,7 +100,7 @@ bool shuso_ipc_channel_shared_stop(shuso_t *, shuso_process_t *);
 
 bool shuso_ipc_send(shuso_t *, shuso_process_t *, const uint8_t code, void *ptr);
 bool shuso_ipc_send_workers(shuso_t *, const uint8_t code, void *ptr);
-bool shuso_ipc_add_handler(shuso_t *,  const char *name, const uint8_t code, shuso_ipc_fn *, shuso_ipc_fn *);
+const shuso_ipc_handler_t *shuso_ipc_add_handler(shuso_t *S,  const char *name, uint32_t code, shuso_ipc_fn *receive, shuso_ipc_fn *cancel);
 
 
 bool shuso_ipc_send_fd(shuso_t *, shuso_process_t *, int fd, uintptr_t ref, void *pd);
