@@ -60,6 +60,9 @@ union shuso_ev_any_u {
 };
 
 #ifdef SHUTTLESOCK_DEBUG_NO_WORKER_THREADS
+#define SHUTTLESOCK_WATCHER_STATE_OFFSET offsetof(shuso_ev_io, state)
+_Static_assert(offsetof(union shuso_ev_any_u, watcher) == offsetof(union shuso_ev_any_u, io.ev), "ok...");
+_Static_assert(offsetof(shuso_ev_io, state) == offsetof(shuso_ev_io, state) - offsetof(shuso_ev_io, ev), "nonzero shuso_ev_* watcher offset");
 _Static_assert(offsetof(shuso_ev_io, state) == offsetof(shuso_ev_timer, state), "mismatching shuso_ev_* state offset");
 _Static_assert(offsetof(shuso_ev_io, state) == offsetof(shuso_ev_child, state), "mismatching shuso_ev_* state offset");
 _Static_assert(offsetof(shuso_ev_io, state) == offsetof(shuso_ev_signal, state), "mismatching shuso_ev_* state offset");

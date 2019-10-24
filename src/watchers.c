@@ -97,7 +97,7 @@ shuso_t *shuso_state_from_ev_child(struct ev_loop *loop, shuso_ev_child *w) {
   return w->state;
 }
 shuso_t *shuso_state_from_raw_ev_watcher(struct ev_loop *loop, ev_watcher *w) {
-  return (shuso_t *)(&w[1]); //struct-aligning magic at work. it's ugly but it works
+  return ((shuso_ev_io *)w)->state; //struct-aligning magic at work. it's weird but it works
 }
 #else
 shuso_t *shuso_state_from_ev_io(struct ev_loop *loop, shuso_ev_io *w) {
