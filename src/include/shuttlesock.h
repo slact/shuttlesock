@@ -161,6 +161,9 @@ struct shuso_common_s {
   shuso_shared_slab_t shm;
 }; //shuso_common_t
 
+_Static_assert(offsetof(shuso_common_t, process.worker)+sizeof(shuso_process_t)*SHUTTLESOCK_MASTER == offsetof(shuso_common_t, process.master), "master process offset does not match value of SHUTTLESOCK_MASTER");
+_Static_assert(offsetof(shuso_common_t, process.worker)+sizeof(shuso_process_t)*SHUTTLESOCK_MANAGER == offsetof(shuso_common_t, process.manager), "manager process offset does not match value of SHUTTLESOCK_MANAGER");
+
 LLIST_TYPEDEF_LINK_STRUCT(shuso_ev_timer);
 
 struct shuso_s {
@@ -236,7 +239,7 @@ const char *shuso_last_error(shuso_t *S);
 int shuso_last_errno(shuso_t *S);
 shuso_process_t *shuso_procnum_to_process(shuso_t *S, int procnum);
 int shuso_process_to_procnum(shuso_t *S, shuso_process_t *proc);
-bool shuso_procnum_valid(shuso_t *S, int procnum);
+bool shuso_procnum_valid(shuso_t *S, int procnum, const char **err);
 
 
 const char *shuso_process_as_string(int procnum);

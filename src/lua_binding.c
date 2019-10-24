@@ -37,6 +37,7 @@ typedef struct {
 static int Lua_watcher_stop(lua_State *L);
 static void lua_watcher_unref(lua_State *L, shuso_lua_ev_watcher_t *w);
 static const char *watchertype_str(shuso_lua_ev_watcher_type_t type);
+static shuso_process_t *lua_shuso_checkprocnum(lua_State *L, int index);
 
 static void lua_get_registry_table(lua_State *L, const char *name) {
   lua_getfield(L, LUA_REGISTRYINDEX, name);
@@ -230,8 +231,16 @@ static int Lua_shuso_pointer(lua_State *L) {
 
 static int Lua_shuso_procnum_valid(lua_State *L) {
   luaL_checknumber(L, 1);
-  lua_pushboolean(L, shuso_procnum_valid(shuso_state(L), lua_tointeger(L, 1)));
-  return 1;
+  const char *err = "invalid procnum";
+  if(shuso_procnum_valid(shuso_state(L), lua_tointeger(L, 1), &err)){
+    lua_pushboolean(L, 1);
+    return 1;
+  }
+  else {
+    lua_pushboolean(L, 0);
+    lua_pushstring(L, err);
+    return 2;
+  }
 }
 
 static int Lua_shuso_procnum(lua_State *L) {
@@ -252,53 +261,10 @@ static int Lua_shuso_process_runstate(lua_State *L) {
     luaS_push_runstate(L, *S->process->state);
     return 1;
   }
-  if(lua_isstring(L, 1)) {
-    const char *str = lua_tostring(L, 1);
-    if(strcmp(str, "master") == 0) {
-      lua_pop(L, 1);
-      lua_pushinteger(L, SHUTTLESOCK_MASTER);
-    }
-    else if(strcmp(str, "manager") == 0) {
-      lua_pop(L, 1);
-      lua_pushinteger(L, SHUTTLESOCK_MANAGER);
-    }
-    else {
-      lua_pushnil(L);
-      lua_pushfstring(L, "unknown process \"%s\"", str);
-      return 2;
-    }
-  }
-  if(!lua_isinteger(L, 1)) {
-    //not an int or string
-    lua_getglobal(L, "tostring");
-    lua_pushvalue(L, 1);
-    lua_pcall(L, 1, 1, 0);
-    lua_pushnil(L);
-    lua_pushfstring(L, "invalid process %s", lua_tostring(L, -2));
-    return 2;
-  }
-  int procnum = lua_tointeger(L, 1);
-  switch(procnum) {
-    case SHUTTLESOCK_MASTER:
-      luaS_push_runstate(L, *S->common->process.master.state);
-      return 1;
-    case SHUTTLESOCK_MANAGER:
-      luaS_push_runstate(L, *S->common->process.master.state);
-      return 1;
-    default:
-      if(procnum < SHUTTLESOCK_MASTER) {
-        lua_pushnil(L);
-        lua_pushfstring(L, "invalid process number %d", procnum);
-        return 2;
-      }
-      if(procnum > SHUTTLESOCK_MANAGER && (procnum < S->common->process.workers_start || procnum > S->common->process.workers_end)) {
-        lua_pushnil(L);
-        lua_pushfstring(L, "inactive worker number %d", procnum);
-        return 2;
-      }
-      luaS_push_runstate(L, *S->common->process.worker[procnum].state);
-      return 1;
-  }
+  
+  shuso_process_t *proc = lua_shuso_checkprocnum(L, 1);
+  luaS_push_runstate(L, *proc->state);
+  return 1;
 }
 /*
 static int Lua_shuso_spawn_manager(lua_State *L) {
@@ -488,6 +454,7 @@ static int Lua_watcher_set(lua_State *L) {
       else {
         repeat = luaL_optnumber(L, 3, 0.0);
       }
+      shuso_log_warning(S, "S:%p w: %p, watcher: %p", S, w, &w->watcher);
       shuso_ev_timer_init(S, &w->watcher.timer, after, repeat, (shuso_ev_timer_fn *)watcher_callback, w);
     } break;
     
@@ -1102,59 +1069,27 @@ static shuso_process_t *lua_shuso_checkprocnum(lua_State *L, int index) {
       return NULL;
     }
   }
-  else if(type == LUA_TNUMBER) {
-    int procnum = lua_tointeger(L, index);
-    if(procnum <= SHUTTLESOCK_NOPROCESS) {
-      luaL_error(L, "invalid procnum");
-      return NULL;
-    }
-    else if(procnum == SHUTTLESOCK_MASTER) {
-      proc = &S->common->process.master;
-    }
-    else if(procnum == SHUTTLESOCK_MANAGER) {
-      proc = &S->common->process.manager;
-    }
-    else if(procnum >= SHUTTLESOCK_WORKER) {
-      if(procnum < S->common->process.workers_start || procnum > S->common->process.workers_end) {
-        luaL_error(L, "invalid worker number %d, must be between %d and %d", procnum, (int)S->common->process.workers_start, (int)S->common->process.workers_end);
-        return NULL;
-      }
-      proc = &S->common->process.worker[procnum];
-    }
-    else {
-      raise(SIGABRT); // how did we get here?... these clauses should have covered the entire range.
-      return NULL;
-    }
-  }
-  else {
+  else if(type != LUA_TNUMBER) {
     luaL_error(L, "procnum must be a number or string");
     return NULL;
   }
+  lua_pushcfunction(L, Lua_shuso_procnum_valid);
+  
+  lua_pushvalue(L, index);
+  lua_call(L, 1, 2);
+  if(!lua_toboolean(L, -2)) {
+    lua_error(L);
+    return NULL;
+  }
+  lua_pop(L, 2);
+  proc = &S->common->process.worker[lua_tointeger(L, index)];
   return proc;
 }
 
 static int Lua_shuso_ipc_send_fd(lua_State *L) {
-  int              nargs = lua_gettop(L);
   shuso_process_t *proc = lua_shuso_checkprocnum(L, 1);
   int              fd = luaL_checkinteger(L, 2);
-  uintptr_t        ref;
-  if(nargs < 3) {
-    return luaL_error(L, "not enough arguments");
-  }
-  if(lua_isnumber(L, 3)) {
-    lua_Integer num = luaL_checkinteger(L, 3);
-    if(num < 0) {
-      return luaL_error(L, "ref must be non-negative");
-    }
-    ref = num;
-  }
-  else {
-    return luaL_error(L, "ref must be a number");
-  }
-
-  //size_t           strlen = 0;
-  //const char      *str = nargs >= 4 ? luaL_checklstring(L, 4, &strlen);
-  //TODO: support sending privdata along with the fd
+  uintptr_t        ref = luaL_checkinteger(L, 3);
   
   shuso_t *S = shuso_state(L);
   bool ok = shuso_ipc_send_fd(S, proc, fd, ref, NULL);

@@ -300,8 +300,10 @@ int lua_ipc_send_message(lua_State *L, bool yield) {
   int              ipc_code;
   data->name = lua_tostring(L, 2);
   
-  if(!shuso_procnum_valid(S, dst)) {
-    return luaL_error(L, "invalid destination");
+  
+  const char *err;
+  if(!shuso_procnum_valid(S, dst, &err)) {
+    return luaL_error(L, "%s", err);
   }
   
   lua_getfield(L, LUA_REGISTRYINDEX, "shuttlesock.lua_ipc.code");

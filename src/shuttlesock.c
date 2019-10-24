@@ -781,11 +781,13 @@ int shuso_error_count(shuso_t *S) {
   return S->error.error_count;
 }
 
-bool shuso_procnum_valid(shuso_t *S, int procnum) {
+bool shuso_procnum_valid(shuso_t *S, int procnum, const char **err) {
   if(procnum < SHUTTLESOCK_MASTER) {
+    if(err) *err = "invalid procnum";
     return false;
   }
   if(procnum >= SHUTTLESOCK_WORKER && (procnum < S->common->process.workers_start || procnum >= S->common->process.workers_end)) {
+    if(err) *err = "invalid worker number";
     return false;
   }
   return true;
