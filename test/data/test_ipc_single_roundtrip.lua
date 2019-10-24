@@ -4,7 +4,6 @@ local Process = require "shuttlesock.process"
 local Shuso = require "shuttlesock"
 local Atomics = require "shuttlesock.atomics"
 local IPC = require "shuttlesock.ipc"
-local mm = require "mm"
 local testmod = Module.new {
   name= "lua_testmod",
   version = "0.0.0",
