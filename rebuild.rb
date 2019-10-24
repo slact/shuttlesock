@@ -242,6 +242,10 @@ class Opts
     return system *args
   end
   
+  def fake_system_echo(*args)
+    puts yellow ">> #{args.join " "}"
+  end
+  
   def in_dir(what, opt = nil, &block)
     if what.to_sym == :build
       @in_build_dir = true
@@ -270,13 +274,15 @@ class Opts
       $stderr.puts red "...tests faled"
       return false
     end
-
     if @build_type == "DebugCoverage"
-      system "mkdir coverage 2>/dev/null"
-      if File.exists? 'build/luacov.stats.out' then
+      statsfiles = Dir.glob("#{BUILD_DIR}/luacov.stats.out.0x*")
+      fake_system_echo "./merge_luacov_stats.lua", "#{BUILD_DIR}/luacov.stats.out.0x*", "--out=#{BUILD_DIR}/luacov.stats.out"
+      system "./merge_luacov_stats.lua", *statsfiles, "--out=#{BUILD_DIR}/luacov.stats.out"
+      system_echo "mkdir coverage 2>/dev/null"
+      if File.exists? "#{BUILD_DIR}/luacov.stats.out" then
         puts green "Preparing Lua coverage reports..."
-        system "rm -Rf coverage/lua 2>/dev/null"
-        system "mkdir coverage/lua 2>/dev/null"
+        system_echo "rm -Rf coverage/lua 2>/dev/null"
+        system_echo "mkdir coverage/lua 2>/dev/null"
         
         if system_echo 'luacov'
           puts green "done"
@@ -289,13 +295,13 @@ class Opts
       
       if !@vars[:no_display_coverage]
         puts green "Preparing C coverage results..."
-        system "rm -Rf coverage/c 2>/dev/null"
-        system "mkdir coverage/c 2>/dev/null"
+        system_echo "rm -Rf coverage/c 2>/dev/null"
+        system_echo "mkdir coverage/c 2>/dev/null"
         
         ok = false
         in_dir "build", :quiet do
           if @vars[:compiler] == "gcc"
-            system 'mkdir coverage-report 2>/dev/null'
+            system_echo 'mkdir coverage-report 2>/dev/null'
             ok = system_echo 'gcovr --root ../src --html-details -o ../coverage/c/index.html --gcov-ignore-parse-errors ./'
           elsif @vars[:compiler] == "clang"
             system_echo 'llvm-profdata merge -sparse *.profraw -o .profdata'
@@ -310,9 +316,9 @@ class Opts
           $stderr.puts red "failed"
         end
         if File.exist? 'coverage/lua/index.html'
-          system 'xdg-open', 'coverage/lua/index.html'
+          system_echo 'xdg-open', 'coverage/lua/index.html'
         end
-        system 'xdg-open', 'coverage/c/index.html'
+        system_echo 'xdg-open', 'coverage/c/index.html'
       end
     end
     self
