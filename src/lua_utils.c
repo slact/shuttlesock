@@ -4,6 +4,7 @@
 #include <lauxlib.h>
 #include <shuttlesock/embedded_lua_scripts.h>
 #include "lua_api/lazy_atomics.h"
+#include "lua_api/lua_ipc.h"
 
 #include <glob.h>
 
@@ -407,6 +408,10 @@ bool shuso_lua_initialize(shuso_t *S) {
   lua_pushliteral(L, "shuttlesock.core.config");
   lua_call(L, 1, 1);
   S->config.index = luaL_ref(L, LUA_REGISTRYINDEX);
+  
+  if(S->procnum < SHUTTLESOCK_MANAGER) {
+    shuso_register_lua_ipc_handler(S);
+  }
   
   shuso_register_lua_event_data_types(S);
   

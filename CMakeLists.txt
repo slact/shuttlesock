@@ -215,5 +215,6 @@ add_lua_module("shuttlesock.module"       src/lua_api/module.lua)
 add_lua_module("shuttlesock.atomics"      src/lua_api/atomics.lua)
 add_lua_module("shuttlesock.watcher"      src/lua_api/watcher.lua)
 add_lua_module("shuttlesock.process"      src/lua_api/process.lua)
+add_lua_module("shuttlesock.ipc"          src/lua_api/ipc.lua)
 
 set_lua_packed_script_file("src/embedded_lua_scripts.c")

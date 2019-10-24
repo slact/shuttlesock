@@ -4,6 +4,7 @@
 #include <shuttlesock/common.h>
 
 #define SHUTTLESOCK_IPC_CMD_NIL                   0
+
 #define SHUTTLESOCK_IPC_CMD_SIGNAL                1
 #define SHUTTLESOCK_IPC_CMD_SHUTDOWN              2
 #define SHUTTLESOCK_IPC_CMD_SHUTDOWN_COMPLETE     3
@@ -18,8 +19,8 @@
 
 #define SHUTTLESOCK_IPC_CODE_AUTOMATIC UINT16_MAX
 
-#define SHUTTLESOCK_IPC_CODE_MIN 0
-#define SHUTTLESOCK_IPC_CODE_MAX UINT8_MAX
+#define SHUTTLESOCK_IPC_CODE_AUTOMATIC_MIN 20
+#define SHUTTLESOCK_IPC_CODE_AUTOMATIC_MAX UINT8_MAX
 
 typedef struct {
   _Atomic uint8_t    next_read;

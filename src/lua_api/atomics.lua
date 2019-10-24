@@ -57,7 +57,13 @@ local atomics_mt = {
   end
 }
 
-function Atomics.new(keys)
+function Atomics.new(...)
+  local keys = {...}
+  for _, k in ipairs(keys) do
+    if type(k) ~= "string" then
+      error("invalid Atomics.new key ".. tostring(k))
+    end
+  end
   local self = { }
   local atomics = {}
   atomics_tables[self] = atomics

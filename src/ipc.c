@@ -273,14 +273,14 @@ const shuso_ipc_handler_t *shuso_ipc_add_handler(shuso_t *S,  const char *name, 
   shuso_ipc_handler_t *handlers = S->common->ipc_handlers;
   
   if(code == SHUTTLESOCK_IPC_CODE_AUTOMATIC) {
-    for(int i = SHUTTLESOCK_IPC_CODE_MIN; i <= SHUTTLESOCK_IPC_CODE_MAX; code++) {
-      if(handlers[code].name == NULL) {
+    for(int i = SHUTTLESOCK_IPC_CODE_AUTOMATIC_MIN; i <= SHUTTLESOCK_IPC_CODE_AUTOMATIC_MAX; i++) {
+      if(handlers[i].name == NULL) {
         code = i;
         break;
       }
     }
     if(code == SHUTTLESOCK_IPC_CODE_AUTOMATIC) {
-      shuso_set_error(S, "All %d IPC codes are already used.", SHUTTLESOCK_IPC_CODE_MAX - SHUTTLESOCK_IPC_CODE_MIN);
+      shuso_set_error(S, "All %d automatic IPC codes are already used.", SHUTTLESOCK_IPC_CODE_AUTOMATIC_MAX - SHUTTLESOCK_IPC_CODE_AUTOMATIC_MIN);
       return NULL;
     }
   }

@@ -41,7 +41,7 @@ end)
 
 
 function testmod:initialize()
-  self.shared = Atomics.new{"foo", "bar", "workers_started", "workers_stopped", "workers_count"}
+  self.shared = Atomics.new("foo", "bar", "workers_started", "workers_stopped", "workers_count")
   self.shared.foo = 0
   assert(self.shared.foo:value() == 0)
   self.shared.bar="0"

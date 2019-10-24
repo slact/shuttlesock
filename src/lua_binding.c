@@ -1991,8 +1991,9 @@ luaL_Reg shuttlesock_core_module_methods[] = {
   {"send_file", Lua_shuso_ipc_send_fd},
   {"new_file_receiver", Lua_shuso_ipc_file_receiver_new},
   {"open_listener_sockets", Lua_shuso_ipc_open_listener_sockets},
-  {"send_message_yield", luaS_ipc_send_message_yield},
-  {"send_message_to_all_workers", Lua_shuso_ipc_send_workers},
+  {"ipc_send_message", luaS_ipc_send_message_noyield},
+  {"ipc_send_message_yield", luaS_ipc_send_message_yield},
+  {"ipc_send_message_to_all_workers", Lua_shuso_ipc_send_workers},
   
   {NULL, NULL}
 };

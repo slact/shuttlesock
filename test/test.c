@@ -2,6 +2,7 @@
 #include <lua.h>
 #include <lauxlib.h>
 #include <lualib.h>
+#include "../src/lua_api/lua_ipc.h"
 #ifndef __clang_analyzer__
 bool set_test_options(int *argc, char **argv) {
   snow_set_extra_help(""
@@ -546,6 +547,70 @@ describe(lua_api) {
     assert_shuso_ran_ok(S);
   }
   
+  subdesc(ipc) {
+    test("pack/unpack data") {
+      lua_State *L = S->lua.state;
+      assert_luaL_dostring(L,"\
+        local x = {}\n\
+        x.x=x\n\
+        return {\n\
+          121,\n\
+          x,\n\
+          {\n\
+            112,\n\
+            'banana',\n\
+            true,\n\
+            false,\n\
+            x=12,\n\
+          },\n\
+          {[{}]='!!!'}\n\
+        }"
+      );
+      shuso_ipc_lua_data_t *data = luaS_lua_ipc_pack_data(L, -1);
+      lua_pop(L, 1);
+      lua_gc(L, LUA_GCCOLLECT, 0);
+      luaS_lua_ipc_unpack_data(L, data);
+      lua_setglobal(L, "unpacked");
+      
+      lua_rawgeti(L, LUA_REGISTRYINDEX, data->reftable);
+      lua_setglobal(L, "data_reftable");
+      
+      assert_luaL_dostring(L, " \
+        assert(type(unpacked) == 'table') \n\
+        assert(unpacked[1]==121)\n\
+        assert(unpacked[2].x == unpacked[2]) \n\
+        assert(unpacked[3][1]==112)\n\
+        assert(unpacked[3][2]=='banana')\n\
+        assert(unpacked[3][3]==true) \n\
+        local k, v = next(unpacked[4], nil) \n\
+        assert(type(k)=='table' and next(k) == nil) \n\
+        assert(v == '!!!') \n\
+        _G.weak=setmetatable({data=unpacked}, {__mode='v'}) \n\
+        local n = 0 \n\
+        for k,v in pairs(_G.data_reftable) do \n\
+          if type(v) ~= 'string' then\n\
+            _G.weak[k]=v \n\
+            n=n+1 \n\
+          end\n\
+        end \n\
+        _G.data_reftable=nil\n\
+        assert(n>1)\n\
+      ");
+      assert_luaL_dostring(L, "_G.weak.data = nil");
+      lua_gc(L, LUA_GCCOLLECT, 0);
+      assert_luaL_dostring(L, "assert(next(_G.weak) ~= nil)");
+      luaS_lua_ipc_gc_data(L, data);
+      lua_gc(L, LUA_GCCOLLECT, 0);
+      assert_luaL_dostring(L, "assert(next(_G.weak) == nil)");
+    }
+    
+    test("single round-trip") {
+      assert_luaL_dofile(S->lua.state, "test_ipc_single_roundtrip.lua");
+      assert_shuso(S, shuso_configure_finish(S));
+      shuso_run(S);
+      assert_shuso_ran_ok(S);
+    }
+  }
 }
 #define IPC_ECHO 130
 
