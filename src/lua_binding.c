@@ -407,6 +407,7 @@ static int Lua_watcher_gc(lua_State *L) {
 }
 static void watcher_callback(struct ev_loop *loop, ev_watcher *watcher, int events) {
   shuso_t                *S = shuso_state(loop, watcher);
+
   shuso_lua_ev_watcher_t *w = watcher->data;
   lua_State              *L = S->lua.state;
   lua_State              *coro = NULL;

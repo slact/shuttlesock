@@ -26,7 +26,6 @@ testmod:subscribe("core:manager.start", function(self)
   end)()
 end)
 
-local cur = 0
 testmod:subscribe("core:worker.workers_started", function(self)
   coroutine.wrap(function()
     IPC.send("manager", "yekh", {})

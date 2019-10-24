@@ -636,7 +636,6 @@ static bool gxcopy_table(lua_gxcopy_state_t *gxs) {
   }
   
   if(gxcopy_cache_load(gxs)) {
-    //raise(SIGSTOP);
     return true;
   }
   
