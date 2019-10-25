@@ -2,8 +2,8 @@ local Core = require "shuttlesock.core"
 
 local Config = {}
 
+local blocks = {}
 
-local block_cache = {}
 local block = {}
 local block_mt = {
   __index = block,
@@ -27,10 +27,11 @@ local block_context_mt = {
 
 function Config.block(ptr)
   assert(type(ptr) == "userdata")
-  local self = rawget(block_cache, ptr)
+  local self = rawget(blocks, ptr)
   if self then return self end
   self = setmetatable({ptr=ptr}, block_mt)
-  block_cache[ptr]=self
+  rawset(blocks, ptr, self)
+  
   self.parent_setting_ptr = Core.config_block_parent_setting_pointer(ptr)
   self.settings = {}
   self.contexts = setmetatable({}, block_context_mt)
@@ -83,15 +84,16 @@ local setting_mt = {
 }
 function Config.setting(ptr)
   assert(type(ptr) == "userdata")
-  local setting = rawget(setting_cache, ptr)
-  if self then return self end
+  local self = rawget(setting_cache, ptr)
+  if self then
+    return self
+  end
   self = setmetatable({
-    name = Core.config_setting_name(ptr)
-    raw_name = Core.config_setting_raw_name(ptr)
-    module_name = Core.setting.config_module_name(ptr)
+    name = Core.config_setting_name(ptr),
+    raw_name = Core.config_setting_raw_name(ptr),
+    module_name = Core.setting.config_module_name(ptr),
     ptr=ptr
   }, block_mt)
-  self.name = name
   setting_cache[ptr]=self
   
   self.values = {}
@@ -108,13 +110,25 @@ function Config.setting(ptr)
 end
 
 
+local possible_value_types = {
+  ["merged"] = true,
+  ["local"] = true,
+  ["inherited"] = true,
+  ["default"] = true,
+  ["defaults"] = true
+}
+  
+
 function setting:value(n, data_type, value_type)
+  if type(n) == "string" and not value_type then
+    n, data_type, value_type = 1, n, data_type
+  end
   assert(n, "value index is missing")
   local val
-  if not value_type and possible_value_types[data_type] then
+  if not value_type and rawget(possible_value_types, data_type) then
     data_type, value_type = nil, data_type
   end
-  if value_type == "defaults" then
+  if value_type == "defaults" or not value_type then
     -- both are permitted because in C this is called 'defaults', but
     -- it's plural only because the singular 'default' is a reserved keyword
     value_type = "default"
@@ -141,4 +155,15 @@ end
 Config.block_metatable = block_mt
 Config.block_context_metatable = block_context_mt
 Config.setting_metatable = setting_mt
+
+setmetatable(Config, {
+  __gxcopy_save_state = function()
+    return {
+      blocks = blocks,
+    }
+  end,
+  __gxcopy_load_state = function(data)
+    blocks = data.blocks
+  end
+})
 return Config
