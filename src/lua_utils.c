@@ -386,11 +386,15 @@ bool shuso_lua_initialize(shuso_t *S) {
   lua_getglobal(L, "require");
   lua_pushliteral(L, "luacov");
   lua_call(L, 1, 1);
+  //luacov can't be writing to the same outfile from multiple Lua states
   lua_getfield(L, -1, "configuration");
   lua_getfield(L, -1, "statsfile");
   lua_setfield(L, -2, "original_statsfile");
   lua_getfield(L, -1, "statsfile");
-  lua_pushfstring(L, "%s.%p", lua_tostring(L, -1), (void *)S);
+  
+  struct timeval tv;
+  gettimeofday(&tv,NULL);
+  lua_pushfstring(L, "%s.split.%d.%d.%d.%p", lua_tostring(L, -1), tv.tv_sec, tv.tv_usec, (long )getpid(), (void *)S);
   lua_setfield(L, -3, "statsfile");
   lua_pop(L, 3);
 #endif

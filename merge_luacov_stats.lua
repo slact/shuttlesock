@@ -87,7 +87,7 @@ for _, f in ipairs(infiles) do
   end
 end
 if outfile then
-  print("Loaded %s stats file%s", #infiles, #infiles == 1 and "" or "s")
+  print(("Loaded %s stats file%s."):format(#infiles, #infiles == 1 and "" or "s"))
   luacov_stats_save(outfile, data)
   for _,f in ipairs(infiles) do
     local ok, err = os.remove(f)
@@ -97,7 +97,7 @@ if outfile then
     end
   end
   print(("Removed %d merged stats file%s."):format(#infiles, #infiles==1 and "" or "s"))
-  print(("Saved stats to file %s"):format(outfile))
+  print(("Saved merged stats to file %s"):format(outfile))
 else
   luacov_stats_save(nil, data, io.stdout)
 end

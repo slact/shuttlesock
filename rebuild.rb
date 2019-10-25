@@ -275,8 +275,8 @@ class Opts
       return false
     end
     if @build_type == "DebugCoverage"
-      statsfiles = Dir.glob("#{BUILD_DIR}/luacov.stats.out.0x*")
-      fake_system_echo "./merge_luacov_stats.lua", "#{BUILD_DIR}/luacov.stats.out.0x*", "--out=#{BUILD_DIR}/luacov.stats.out"
+      statsfiles = Dir.glob("#{BUILD_DIR}/luacov.stats.out.*")
+      fake_system_echo "./merge_luacov_stats.lua", "#{BUILD_DIR}/luacov.stats.out.*", "--out=#{BUILD_DIR}/luacov.stats.out"
       system "./merge_luacov_stats.lua", *statsfiles, "--out=#{BUILD_DIR}/luacov.stats.out"
       system_echo "mkdir coverage 2>/dev/null"
       if File.exists? "#{BUILD_DIR}/luacov.stats.out" then
