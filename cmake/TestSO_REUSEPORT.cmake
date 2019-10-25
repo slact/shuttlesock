@@ -9,7 +9,7 @@ function(test_SO_REUSEPORT reuseport_var)
   message(STATUS "Check if system supports SO_REUSEPORT")
   cmake_push_check_state(RESET)
   set(CMAKE_REQUIRED_QUIET 1)
-  set(CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS} -Werror -std=c11")
+  set(CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS} -Werror -std=gnu11")
   check_c_source_compiles("
     #include <sys/socket.h>
     #ifndef SO_REUSEPORT
