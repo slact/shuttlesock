@@ -11,11 +11,29 @@ local function mm_setting(setting)
   for k,v in pairs(setting) do
     cpy[k]=v
   end
-  cpy.parent = "..."
+  cpy.parent = setting.parent and setting.parent.name or "--none--"
   cpy.block = "..."
   mm(cpy)
 end
 ]]
+
+local DEBUG_MODE = false
+local assert, error = assert, error
+if not DEBUG_MODE then
+  local __original_error = error
+  error = function(err, n)
+    __original_error(err, n or 0)
+  end
+
+  assert = function(cond, err)
+    if not cond then
+      error(err, 0)
+    else
+      return cond, err
+    end
+  end
+end
+
 
 local function resolve_path(prefix, name)
   if not prefix or name:match("^%/") then
@@ -633,6 +651,88 @@ function Config.new(name)
   return config
 end
 
+
+--utility functions
+function Config.split_path(pathy_thing)
+  if type(pathy_thing)=="string" then
+    pathy_thing = {path=pathy_thing}
+  end
+  
+  if pathy_thing.split_path then
+    return pathy_thing.split_path
+  end
+  
+  local tbl = {}
+  local path = pathy_thing.path
+  if not path:match("^%/") then
+    table.insert(tbl, "**")
+  end
+  if path == "*" or path == "*/" then
+    return tbl
+  end
+  
+  if #path and not path:match("%/$") then
+    path = path.."/"
+  end
+  for pathpart in path:gmatch("[^%/]+") do
+    table.insert(tbl, pathpart)
+  end
+  pathy_thing.split_path = tbl
+  return tbl
+end
+local function match_path_part(ppart, mpart)
+  if not mpart then
+    return false
+  end
+  if ppart ~= mpart and mpart ~= "*" and mpart ~= "**" then
+    local ppart_left, ppart_right = ppart:match("^([^:]+):(.*)$")
+    if not ppart_left then
+      ppart_left, ppart_right = nil, ppart
+    end
+    local mpart_left, mpart_right = mpart:match("^([^:]+):(.*)$")
+    if not mpart_left then
+      mpart_left, mpart_right = "*", mpart
+    end
+    if mpart_left ~= "*" and mpart_left ~= ppart_left then
+      return false
+    end
+    
+    if mpart_right ~= "*" and mpart_right ~= ppart_right then
+      return false
+    end
+  end
+  return true
+end
+local function unwind_to_last_doublestar(match, m)
+  for i=m+1, #match do
+    if match[i]=="**" then
+      return i
+    end
+  end
+  return false
+end
+function Config.match_path(path, match)
+  path = Config.split_path(path)
+  match = Config.split_path(match)
+  if #match == 1 and match[1] == "**" then
+    return true
+  end
+  local m = #match
+  for i=#path, 1, -1 do
+    local ppart = path[i]
+    local mpart = match[m]
+    if mpart == "**" then m = m-1 end
+    if not match_path_part(ppart, mpart) then
+      m = unwind_to_last_doublestar(match, m)
+      if not m then
+        return false
+      end
+    end
+    m=m-1
+  end
+  return m == 0
+end
+
 do --config
   local config = {}
   config_mt = {
@@ -641,45 +741,20 @@ do --config
       return require("shuttlesock.core.config").metatable
     end
   }
+
+
   
-  local function split_path(pathy_thing)
-    if pathy_thing.split_path then
-      return pathy_thing.split_path
+  function config:parse(str, name)
+    assert(type(str) == "string")
+    if name then
+      self.name = name
     end
     
-    local tbl = {}
-    if not pathy_thing.path:match("^%/") then
-      table.insert(tbl, "*:*")
+    if self.parsed then
+      error("parsing more than one root config is not supported yet")
     end
-    for pathpart in pathy_thing.path:gmatch("^[^%/]+") do
-      table.insert(tbl, pathpart:match("%:") and pathpart or "*:"..pathpart)
-    end
-    pathy_thing.split_path = tbl
-    return tbl
-  end
-
-  local function match_path(setting, handler)
-    local dpath = split_path(setting)
-    local hpath = split_path(handler)
-    for i=#dpath, 1, -1 do
-      local d = dpath[i]
-      for j = #hpath, 1, -1 do
-        local h = hpath[j]
-        if d ~= h and h ~= "*:*" and h:match("^%*%:(.+)") ~= d:match("^[^%:]*%:(.+)") then
-          return false
-        end
-      end
-    end
-    return true
-  end
-  
-  function config:parse(str)
-    if str then
-      assert(type(str) == "string")
-      assert(not self.string)
-      self.string = str
-    end
-    local parser = Parser.new(self.name, self.string)
+    
+    local parser = Parser.new(self.name, str)
     assert(parser:parse())
     self.root = parser.root
     table.insert(self.parsers, parser)
@@ -690,6 +765,7 @@ do --config
     --now handle includes
     assert(self:handle("config:include_path"))
     assert(self:handle("config:include"))
+    self.parsed = true
     return self
   end
   
@@ -697,7 +773,7 @@ do --config
     local setting = block.setting
     self:get_setting_path(setting)
     for _, handler in pairs(self.handlers) do
-      if handler.module == module_name and match_path(setting, handler) then
+      if handler.module == module_name and Config.match_path(setting, handler) then
         return true
       end
     end
@@ -745,7 +821,7 @@ do --config
       self:get_setting_path(setting)
       local matches = {}
       for _, handler in ipairs(possible_handlers) do
-        if match_path(setting, handler) then
+        if Config.match_path(setting, handler) then
           table.insert(matches, handler)
         end
       end
@@ -764,31 +840,38 @@ do --config
   end
   
   function config:get_setting_path(setting)
-    if setting.path then
-      return setting.path
+    local function is_root(s)
+      return (s.parent == s) or not s.parent
     end
-    local buf = {}
-    local cur = setting
-    while true do
-      cur = cur.parent
-      if cur.parent == cur or not cur then
-        setting.path = "/"..table.concat(buf, "/")
-        return setting.path
+    if not setting.path then
+      if is_root(setting) then --root
+        setting.path = ""
+      elseif is_root(setting.parent) then
+        setting.path = "/"
       else
-        table.insert(cur, setting.full_name or ("*:"..setting.name))
+        local parent_path = config:get_setting_path(setting.parent)
+        local slash = parent_path:match("/$") and "" or "/"
+        local parent_path_part = (setting.parent.full_name or setting.parent.name)
+        setting.path = ("%s%s%s"):format(config:get_setting_path(setting.parent), slash, parent_path_part)
       end
     end
-  end
-  
-  function config:load(path_prefix)
-    assert(not self.loaded, "config already loaded")
-    assert(not self.string, "config string already set")
-    assert(self.name, "config name must be set to the filename when using config:load()")
-    self.string = assert(read_file(resolve_path(path_prefix, self.name), "config"))
-    self.loaded = true
-    return self
+    return setting.path
   end
 
+  function config:load(path)
+    if not self.name then
+      self.name = path
+    end
+    assert(not self.loaded, "config already loaded")
+    assert(self.name, "config name must be set to the filename when using config:load()")
+    local str = assert(read_file(path, "config"))
+    return self:parse(str, path)
+  end
+
+  function config:merge(config2)
+    error("not yet implemented")
+  end
+  
   function config:handle(handler_name)
     for setting in self:each_setting() do
       local ok, handler, err

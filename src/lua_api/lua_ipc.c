@@ -252,7 +252,7 @@ static void lua_ipc_handler(shuso_t *S, const uint8_t code, void *ptr) {
   
   d->success = lua_toboolean(L, -1);
   lua_pop(L, 1);
-  shuso_ipc_send(S, &S->common->process.worker[d->sender], response_code, d);
+  shuso_ipc_send(S, shuso_procnum_to_process(S, d->sender), response_code, d);
 }
 
 bool luaS_lua_ipc_gc_data(lua_State *L, shuso_ipc_lua_data_t *d) {
@@ -287,7 +287,7 @@ static void lua_ipc_response_handler(shuso_t *S, const uint8_t code, void *ptr) 
 }
 
 static void lua_ipc_response_cancel_handler(shuso_t *S, const uint8_t code, void *ptr) {
-  //TODO
+  //nothing needs to be done
 }
 
 
@@ -325,7 +325,7 @@ int lua_ipc_send_message(lua_State *L, bool yield) {
   lua_pushvalue(L, 2);
   luaL_ref(L, -2);
   
-  shuso_ipc_send(S, &S->common->process.worker[dst], ipc_code, data);
+  shuso_ipc_send(S, shuso_procnum_to_process(S, dst), ipc_code, data);
   
   lua_pushboolean(L, 1);
   if(yield) {

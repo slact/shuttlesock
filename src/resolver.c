@@ -92,7 +92,6 @@ bool shuso_resolver_init(shuso_t *S, shuso_config_t *cf, shuso_resolver_t *resol
   
   opt.sock_state_cb = ares_socket_state_callback;
   opt.sock_state_cb_data = resolver;
-  
   if((rc = ares_init_options(&resolver->channel, &opt, optmask)) != ARES_SUCCESS) {
     goto fail;
   }

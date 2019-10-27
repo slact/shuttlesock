@@ -20,6 +20,14 @@ static bool luaS_get_config_pointer_ref(lua_State *L, const void *ptr) {
   return lua_isnil(L, -1);
 }
 
+static void luaS_push_config_field(lua_State *L, const char *field) {
+  shuso_t                    *S = shuso_state(L);
+  shuso_config_module_ctx_t  *ctx = S->common->module_ctx.config;
+  luaS_get_config_pointer_ref(L, ctx);
+  lua_getfield(L, -1, field);
+  lua_remove(L, -2);
+}
+
 static bool luaS_pcall_config_method(lua_State *L, const char *method_name, int nargs, bool keep_result) {
   shuso_t                    *S = shuso_state(L);
   int                         argstart = lua_absindex(L, -nargs);
@@ -93,9 +101,7 @@ bool shuso_config_system_initialize(shuso_t *S) {
   }
   
   luaS_config_pointer_ref(L, ctx);
-  *ctx =(shuso_config_module_ctx_t ) {
-    .parsed = false
-  };
+  *ctx =(shuso_config_module_ctx_t ) { 0 };
   
   S->common->module_ctx.config = ctx;
   return true;
@@ -150,9 +156,10 @@ static shuso_setting_values_t  *lua_setting_values_to_c_struct(lua_State *L, shu
 bool shuso_config_system_generate(shuso_t *S) {
   lua_State *L = S->lua.state;
   
-  shuso_config_module_ctx_t  *ctx = S->common->module_ctx.config;
-  if(!ctx->parsed) {
-    if(!shuso_config_string_parse(S, "")) {
+  luaS_push_config_field(L, "parsed");
+  if(!lua_toboolean(L, -1)) {
+    lua_pop(L, 1);
+    if(!shuso_configure_string(S, "", "empty default")) {
       return false;
     }
   }
@@ -329,6 +336,8 @@ bool shuso_config_system_generate(shuso_t *S) {
   }
   lua_pop(L, 1);
   
+  shuso_config_module_ctx_t  *ctx = S->common->module_ctx.config;
+  
   assert(ctx->blocks.root == NULL);
   
   if(!luaS_pcall_config_method(L, "get_root", 0, true)) {
@@ -356,20 +365,6 @@ bool shuso_config_system_generate(shuso_t *S) {
   }
   lua_pop(L, 1);
   
-  return true;
-}
-
-bool shuso_config_file_parse(shuso_t *S, const char *config_file_path) {
-  return false;
-}
-bool shuso_config_string_parse(shuso_t *S, const char *config) {
-  shuso_config_module_ctx_t  *ctx = S->common->module_ctx.config;
-  lua_State *L = S->lua.state;
-  lua_pushstring(L, config);
-  if(!luaS_pcall_config_method(L, "parse", 1, false)) {
-    return false;
-  }
-  ctx->parsed = true;
   return true;
 }
 
@@ -480,3 +475,49 @@ shuso_module_t shuso_config_module = {
   .initialize = config_initialize,
   .initialize_config = config_init_config,
 };
+
+
+bool shuso_configure_file(shuso_t *S, const char *path) {
+  lua_State                   *L = S->lua.state;
+  shuso_config_module_ctx_t   *ctx = S->common->module_ctx.config;
+  
+  lua_pushcfunction(L, luaS_passthru_error_handler);
+  int errhandler_index = lua_gettop(L);
+  
+  luaS_get_config_pointer_ref(L, ctx);
+  lua_getfield(L, -1, "load");
+  lua_insert(L, -2);
+  lua_pushstring(L, path);
+  int ret = lua_pcall(L, 2, 0, errhandler_index);
+  lua_remove(L, errhandler_index);
+  if(ret != LUA_OK) {
+    shuso_set_error(S, "%s", lua_tostring(L, -1));
+    lua_pop(L, 1);
+    return false;
+  }
+  return true;
+}
+
+bool shuso_configure_string(shuso_t *S,  const char *str, const char *str_title) {
+    lua_State                   *L = S->lua.state;
+  shuso_config_module_ctx_t   *ctx = S->common->module_ctx.config;
+  
+  lua_pushcfunction(L, luaS_passthru_error_handler);
+  int errhandler_index = lua_gettop(L);
+  
+  luaS_get_config_pointer_ref(L, ctx);
+  lua_getfield(L, -1, "parse");
+  lua_insert(L, -2);
+  lua_pushstring(L, str);
+  if(str_title) {
+    lua_pushstring(L, str_title);
+  }
+  int ret = lua_pcall(L, str_title ? 3 : 2, 0, errhandler_index);
+  lua_remove(L, errhandler_index);
+  if(ret != LUA_OK) {
+    shuso_set_error(S, "%s", lua_tostring(L, -1));
+    lua_pop(L, 1);
+    return false;
+  }
+  return true;
+}

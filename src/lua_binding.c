@@ -1073,16 +1073,18 @@ static shuso_process_t *lua_shuso_checkprocnum(lua_State *L, int index) {
     luaL_error(L, "procnum must be a number or string");
     return NULL;
   }
-  lua_pushcfunction(L, Lua_shuso_procnum_valid);
-  
-  lua_pushvalue(L, index);
-  lua_call(L, 1, 2);
-  if(!lua_toboolean(L, -2)) {
-    lua_error(L);
-    return NULL;
+  else {
+    lua_pushcfunction(L, Lua_shuso_procnum_valid);
+    
+    lua_pushvalue(L, index);
+    lua_call(L, 1, 2);
+    if(!lua_toboolean(L, -2)) {
+      lua_error(L);
+      return NULL;
+    }
+    lua_pop(L, 2);
+    proc = &S->common->process.worker[lua_tointeger(L, index)];
   }
-  lua_pop(L, 2);
-  proc = &S->common->process.worker[lua_tointeger(L, index)];
   return proc;
 }
 
@@ -1422,12 +1424,37 @@ static int luaS_find_module_table(lua_State *L, const char *name) {
 }
 
 static bool lua_module_initialize_config(shuso_t *S, shuso_module_t *module, shuso_setting_block_t *block) {
-  /*
-  luaS_push_lua_module_field(L, "shuttlesock.core", "gxcopy_check");
+  lua_State *L = S->lua.state;
+  int        top = lua_gettop(L);
+  
+  luaS_push_lua_module_field(L, "shuttlesock.module", "find");
+  lua_pushstring(L, module->name);
+  if (!luaS_function_call_result_ok(L, 1, true)) {
+    lua_settop(L, top);
+    return shuso_set_error(S, "failed to find Lua shuttlesock module '%s'", module->name);
+  }
+  
+  lua_getfield(L, -1, "initialize_config");
+  if(!lua_isfunction(L, -1)) {
+    lua_settop(L, top);
+    return true;
+  }
   lua_pushvalue(L, -2);
-  lua_pushfstring(L, "failed to initialize module %s", module->name);
-  lua_call(L, 2, 2);
-  */
+  lua_remove(L, -3);
+  
+  luaS_push_lua_module_field(L, "shuttlesock.config", "block");
+  lua_pushlightuserdata(L, block);
+  if (!luaS_function_call_result_ok(L, 1, true)) {
+    lua_settop(L, top);
+    return shuso_set_error(S, "failed to wrap config block for Lua shuttlesock module'%s'", module->name);
+  }
+  
+  if(!luaS_call_noerror(L, 2, LUA_MULTRET)) {
+    shuso_set_error(S, "failed run initialize_config for Lua shuttlesock module'%s': %s", module->name, lua_tostring(L, -1));
+    lua_settop(L, top);
+    return false;
+  }
+  
   return true;
 }
 
@@ -1559,21 +1586,19 @@ static bool lua_module_initialize(shuso_t *S, shuso_module_t *module) {
 static int Lua_shuso_add_module(lua_State *L) {
   shuso_t *S = shuso_state(L);
   if(!(shuso_runstate_check(S, SHUSO_STATE_CONFIGURING, "add module"))) {
-    lua_pushnil(L);
-    lua_pushstring(L, shuso_last_error(S));
-    return 2;
+    return luaL_error(L, shuso_last_error(S));
   }
   luaL_checktype(L, 1, LUA_TTABLE);
   shuso_module_t *m = shuso_stalloc(&S->stalloc, sizeof(*m));
   if(m == NULL) {
-    lua_pushnil(L);
-    lua_pushliteral(L, "failed to allocate lua module struct");
-    return 2;
+    return luaL_error(L, "failed to allocate lua module struct");
   }
   memset(m, '\0', sizeof(*m));
   //shuso_lua_module_data_t *d = shuso_stalloc(&S->stalloc, sizeof(*d));
   //m->privdata = d;
   
+  
+  //don't need to check these fields, their values will be checked by the C module adder
   lua_getfield(L, 1, "name");
   m->name = lua_tostring(L, -1);
   lua_pop(L, 1);
@@ -1592,6 +1617,82 @@ static int Lua_shuso_add_module(lua_State *L) {
   
   lua_getfield(L, 1, "publish");
   m->publish = lua_tostring(L, -1);
+  lua_pop(L, 1);
+  
+  lua_getfield(L, 1, "settings");
+  //settings need to be generated, thus also checked
+  if(!lua_isnil(L, -1) && !lua_istable(L, -1)) {
+    return luaL_error(L, "settings field is not a nil or table", m->name);
+  }
+  if(lua_istable(L, -1)) {
+    int count = luaL_len(L, -1);
+    shuso_module_setting_t *settings = shuso_stalloc(&S->stalloc, sizeof(*settings) * (count+1));
+    if(!settings) {
+      return luaL_error(L, "not enough memory for settings");
+    }
+    for(int i = 1; i < count; i++) {
+      lua_geti(L, -1, i+1);
+      if(!lua_istable(L, -1)) {
+        return luaL_error(L, "settings value is not a table");
+      }
+      
+      lua_getfield(L, -1, "name");
+      if(!lua_isstring(L, -1)) {
+        return luaL_error(L, "setting.name is not a string");
+      }
+      settings[i].name = lua_tostring(L, -1);
+      lua_pop(L, 1);
+      
+      lua_getfield(L, -1, "aliases");
+      if(lua_istable(L, -1)) {
+        luaS_table_concat(L, " ");
+        settings[i].aliases = shuso_stalloc(&S->stalloc, luaL_len(L, -1)+1);
+        strcpy((char *)settings[i].aliases, lua_tostring(L, -1));
+      }
+      else if(lua_isstring(L, -1)) {
+        settings[i].aliases = lua_tostring(L, -1);
+      }
+      else if(!lua_isnil(L, -1)) {
+        return luaL_error(L, "setting.aliases is not a table, string, or nil");
+      }
+      lua_pop(L, 1);
+      
+      lua_getfield(L, -1, "path");
+      if(!lua_isstring(L, -1)) {
+        return luaL_error(L, "setting.path is not a string");
+      }
+      settings[i].path = lua_tostring(L, -1);
+      lua_pop(L, 1);
+      
+      lua_getfield(L, -1, "description");
+      settings[i].description = lua_tostring(L, -1);
+      lua_pop(L, 1);
+      
+      lua_getfield(L, -1, "nargs");
+      settings[i].nargs = lua_tostring(L, -1);
+      lua_pop(L, 1);
+      
+      lua_getfield(L, -1, "default_value");
+      if(!lua_isstring(L, -1) && !lua_isnil(L, -1)) {
+        return luaL_error(L, "setting.default_value is not a nil or string");
+      }
+      settings[i].default_value = lua_tostring(L, -1);
+      lua_pop(L, 1);
+      
+      lua_getfield(L, -1, "default_value");
+      if(lua_isstring(L, -1) && (luaS_streq(L, -1, "maybe") || luaS_streq(L, -1, "optional"))) {
+        settings[i].block = SHUSO_SETTING_BLOCK_OPTIONAL;
+      }
+      else {
+        settings[i].block = lua_toboolean(L, -1);
+      }
+      lua_pop(L, 1);
+      
+      lua_pop(L, 1);
+    }
+    settings[count] = (shuso_module_setting_t ){.name = NULL};
+    m->settings = settings;
+  }
   lua_pop(L, 1);
   
   m->initialize_config = lua_module_initialize_config;
@@ -1856,6 +1957,19 @@ static int Lua_shuso_pcall(lua_State *L) {
 }
 
 
+static int Lua_shuso_raise_signal(lua_State *L) {
+  int sig = luaL_checkinteger(L, 1);
+  raise(sig);
+  return 0;
+}
+
+static int Lua_shuso_raise_sigabrt(lua_State *L) {
+  lua_pushcfunction(L, Lua_shuso_raise_signal);
+  lua_pushinteger(L, SIGABRT);
+  lua_call(L, 1, 0);
+  return 0;
+}
+
 luaL_Reg shuttlesock_core_module_methods[] = {
 // creation, destruction
   {"create", Lua_shuso_create},
@@ -1864,8 +1978,7 @@ luaL_Reg shuttlesock_core_module_methods[] = {
 //configuration
   {"configure_file", Lua_shuso_configure_file},
   {"configure_string", Lua_shuso_configure_string},
-  //{"configure_handlers", Lua_shuso_configure_handlers},
-  //{"add_module", Lua_shuso_add_module},
+  //see below for "add_module"
   {"configure_finish", Lua_shuso_configure_finish},
   
 //state 
@@ -1930,6 +2043,11 @@ luaL_Reg shuttlesock_core_module_methods[] = {
   {"ipc_send_message", luaS_ipc_send_message_noyield},
   {"ipc_send_message_yield", luaS_ipc_send_message_yield},
   {"ipc_send_message_to_all_workers", Lua_shuso_ipc_send_workers},
+  
+  
+  //for debugging
+  {"raise_signal", Lua_shuso_raise_signal},
+  {"raise_SIGABRT", Lua_shuso_raise_sigabrt},
   
   {NULL, NULL}
 };

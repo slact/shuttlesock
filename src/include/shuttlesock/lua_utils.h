@@ -39,7 +39,13 @@ void luaS_printstack_named(lua_State *L, const char*);
 
 
 //running lua functions while being nice to shuttlesock
+
 void luaS_call(lua_State *L, int nargs, int nresults);
+
+//fails if there's an error or the function returned nil
+//success on anything else, even if the function returns nothing
+bool luaS_call_noerror(lua_State *L, int nargs, int nrets);
+
 bool luaS_pcall(lua_State *L, int nargs, int nresults);
 int luaS_resume(lua_State *thread, lua_State *from, int nargs);
 int luaS_call_or_resume(lua_State *L, int nargs);
@@ -97,6 +103,11 @@ bool luaS_push_lua_module_field(lua_State *L, const char *module_name, const cha
     lua_remove(L, -2); \
   } \
 } while(0)
+
+//error handlers for lua_pcall
+int luaS_traceback_error_handler(lua_State *L); //sets Lua error + traceback as the shuttlesock error message
+int luaS_passthru_error_handler(lua_State *L); //just returns the error
+
 
 //serialize function (no upvalues!!)
 int luaS_function_dump(lua_State *L);

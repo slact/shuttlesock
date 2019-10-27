@@ -117,7 +117,6 @@ local possible_value_types = {
   ["default"] = true,
   ["defaults"] = true
 }
-  
 
 function setting:value(n, data_type, value_type)
   if type(n) == "string" and not value_type then

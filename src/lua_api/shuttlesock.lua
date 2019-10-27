@@ -21,4 +21,16 @@ function Shuttlesock.pointer()
   return Core.shuttlesock_pointer()
 end
 
+function Shuttlesock.configure_file(file)
+  return Core.configure_file(file)
+end
+
+function Shuttlesock.configure_string(str, name)
+  return Core.configure_string(str, name)
+end
+
+function Shuttlesock.configure_finish()
+  return Core.configure_finish()
+end
+
 return Shuttlesock

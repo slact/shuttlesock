@@ -799,7 +799,8 @@ shuso_process_t *shuso_procnum_to_process(shuso_t *S, int procnum) {
  }
  //negative master and manager procnums refer to their position relative 
  //to worker[] in shuso_common_t, that's why this is one line,
- return &S->common->process.worker[procnum]; 
+ //so fuck off, address sanitizer
+ return &((shuso_process_t *)&S->common->process.worker)[procnum] ;
 }
 
 int shuso_process_to_procnum(shuso_t *S, shuso_process_t *proc) {
@@ -976,13 +977,4 @@ bool shuso_set_log_fd(shuso_t *S, int fd) {
 void shuso_listen(shuso_t *S, shuso_hostinfo_t *bind, shuso_handler_fn handler, shuso_handler_fn cleanup, void *pd) {
   assert(S->procnum == SHUTTLESOCK_MASTER);
   //TODO
-}
-
-bool shuso_configure_file(shuso_t *S, const char *path) {
-  //TODO
-  return false;
-}
-bool shuso_configure_string(shuso_t *S, const char *str_title, const char *str) {
-  //TODO
-  return false;
 }

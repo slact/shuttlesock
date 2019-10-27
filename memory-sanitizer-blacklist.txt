@@ -1,0 +1,1 @@
+fun:luaS_function_call_result_ok

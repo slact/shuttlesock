@@ -173,8 +173,17 @@ describe(config) {
     };
   }
   after_each() {
-    shusoT_destroy(S, &chk);
+    if(S) {
+      shusoT_destroy(S, &chk);
+    }
   }
+  
+  test("path matching") {
+    assert_luaL_dofile(S->lua.state, "test_config_path_matching.lua");
+    shuso_destroy(S);
+    S = NULL;
+  }
+  
   test("a setting please") {
     test_module.initialize_config = config_test_a_setting_init_config;
     test_module.settings = (shuso_module_setting_t []){
@@ -189,7 +198,7 @@ describe(config) {
       SHUTTLESOCK_SETTINGS_END
     };
     shuso_add_module(S, &test_module);
-    shuso_config_string_parse(S, " \
+    shuso_configure_string(S, " \
       foobar 10 11 12 13 \"14\"; \n\
       blorp { \n\
         shmoo { \n\
@@ -200,7 +209,7 @@ describe(config) {
           }\n\
         }\n\
       }\n\
-    ");
+    ", "a string");
     shuso_configure_finish(S);
     shusoT_run_test(S, SHUTTLESOCK_MANAGER, stop_shuttlesock, NULL, (void *)(intptr_t)SHUTTLESOCK_MANAGER);
     assert_shuso_ran_ok(S);
@@ -515,20 +524,27 @@ describe(lua_api) {
   after_each() {
     if(S) shusoT_destroy(S, &chk);
   }
-  
-  test("a module") {
-    lua_State *L = S->lua.state;
-    assert_luaL_dofile(L, "test_a_module.lua");
-    assert_shuso(S, shuso_configure_finish(S));
-    shuso_run(S);
-    assert_shuso_ran_ok(S);
-  }
-  
-  test("a module that can't be gxcopied") {
-    lua_State *L = S->lua.state;
-    assert_luaL_dofile(L, "test_a_module_bad_gxcopy.lua");
-    shuso_configure_finish(S);
-    assert_shuso_error(S, "failed to configure.*failed to initialize module.* contains a coroutine");
+  subdesc(modules) {
+    skip("a module") {
+      lua_State *L = S->lua.state;
+      assert_luaL_dofile(L, "test_a_module.lua");
+      assert_shuso(S, shuso_configure_finish(S));
+      shuso_run(S);
+      assert_shuso_ran_ok(S);
+    }
+    
+    skip("a module that can't be gxcopied") {
+      lua_State *L = S->lua.state;
+      assert_luaL_dofile(L, "test_a_module_bad_gxcopy.lua");
+      shuso_configure_finish(S);
+      assert_shuso_error(S, "failed to configure.*failed to initialize module.* contains a coroutine");
+    }
+
+    test("module with config settings") {
+      assert_luaL_dofile(S->lua.state, "test_module_config_settings.lua");
+      shuso_run(S);
+      assert_shuso_ran_ok(S);
+    }
   }
   
   test("lazy atomics") {
@@ -546,6 +562,8 @@ describe(lua_api) {
     shuso_run(S);
     assert_shuso_ran_ok(S);
   }
+  
+
   
   subdesc(ipc) {
     test("pack/unpack data") {

@@ -4,9 +4,31 @@
 #include <lualib.h>
 #ifndef __clang_analyzer__
 
+static void *initializing_allocator(void *ud, void *ptr, size_t osize,
+ size_t nsize) {
+  //printf("ptr: %p, osz: %d, nsz: %d\n", ptr, (int)osize, (int)nsize);
+  (void)ud;
+  if (nsize == 0) {
+    free(ptr);
+    return NULL;
+  }
+
+  else {
+  void *nptr = realloc(ptr, nsize);
+    if(!ptr) {
+      memset(nptr, '0', nsize);
+    }
+    else if(nsize > osize) {
+      memset((char *)nptr+(nsize - osize), '0', nsize - (nsize - osize));
+    }
+    return nptr;
+  }
+}
+
 bool strmatch(const char *str, const char *pattern) {
-  lua_State *L = luaL_newstate();
+  lua_State *L = lua_newstate(initializing_allocator, NULL);
   luaL_openlibs(L);
+  
   lua_pushstring(L, str);
   lua_getfield(L, -1, "match");
   lua_pushvalue(L, -2);

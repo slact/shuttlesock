@@ -52,7 +52,37 @@ bool luaS_function_pcall_result_ok(lua_State *L, int nargs, bool preserve_result
   return function_result_ok(L, preserve_result);
 }
 
-static int luaS_traceback(lua_State *L) {
+
+//fails if there's an error or the function returned nil
+//success on anything else, even if the function returns nothing
+bool luaS_call_noerror(lua_State *L, int nargs, int nrets) {
+  int stacksize_before = lua_gettop(L) - nargs - 1;
+  
+  lua_pushcfunction(L, luaS_traceback_error_handler);
+  lua_insert(L, stacksize_before);
+  int rc = lua_pcall(L, nargs, nrets, stacksize_before);
+  lua_remove(L, stacksize_before);
+  if (rc != LUA_OK) {  
+    return false;
+  }
+  
+  int returned_count = lua_gettop(L) - stacksize_before;
+  if(returned_count == 0) {
+    //returned nothing
+    return true;
+  }
+  if(lua_toboolean(L, stacksize_before + 1)) {
+    return true;
+  }
+  if(returned_count > 2) {
+    lua_pop(L, returned_count - 2);
+  }
+  lua_remove(L, -2);
+  //just the error is left on the stack
+  return false;;
+}
+
+int luaS_traceback_error_handler(lua_State *L) {
   if (!lua_isstring(L, -1)) { /* 'message' not a string? */
     return 1;  /* keep it intact */
   }
@@ -67,6 +97,14 @@ static int luaS_traceback(lua_State *L) {
   return 1;
 }
 
+int luaS_passthru_error_handler(lua_State *L) {
+  printf("ERRO: %s\n", lua_tostring(L, 1));
+  if(lua_gettop(L) == 0) {
+    lua_pushnil(L);
+  }
+  return 1;
+}
+
 bool luaS_pcall(lua_State *L, int nargs, int nresults) {
 #ifndef NDEBUG
   if(!lua_isfunction(L, -(nargs+1))) {
@@ -75,7 +113,7 @@ bool luaS_pcall(lua_State *L, int nargs, int nresults) {
     assert(lua_isfunction(L, -(nargs+1)));
   }
 #endif  
-  lua_pushcfunction(L, luaS_traceback);
+  lua_pushcfunction(L, luaS_traceback_error_handler);
   lua_insert(L, 1);
   
   int rc = lua_pcall(L, nargs, nresults, 1);

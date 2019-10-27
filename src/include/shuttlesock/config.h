@@ -12,7 +12,6 @@ struct shuso_setting_block_s {
 }; // shuso_setting_block_t
 
 typedef struct {
-  bool             parsed;
   struct {
     const shuso_setting_block_t  *root;
     const shuso_setting_block_t **array;
@@ -77,7 +76,7 @@ bool shuso_config_system_initialize(shuso_t *S);
 bool shuso_config_system_initialize_worker(shuso_t *workerState, shuso_t *managerState);
 bool shuso_config_system_generate(shuso_t *S);
 
-bool shuso_config_file_parse(shuso_t *S, const char *config_file_path);
-bool shuso_config_string_parse(shuso_t *S, const char *config);
+bool shuso_configure_string(shuso_t *S,  const char *str, const char *str_title);
+bool shuso_configure_file(shuso_t *S, const char *path);
 
 #endif //SHUSO_SETTINGS_H
