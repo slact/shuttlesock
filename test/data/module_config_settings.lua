@@ -16,7 +16,14 @@ testmod.settings = {
     default_value='"hey" 121',
     block=true
   },
-  {name="foo2",
+  { name="root_config",
+    path="/",
+    description="hmm",
+    nargs=1,
+    default_value='"hey"',
+    block=true
+  },
+  {name="foo",
    path="block3/",
    description="inside block3",
    nargs="1-3",
@@ -30,7 +37,7 @@ end)
 
 function testmod:initialize_config(block)
   print("initialize config pls")
-  require"mm"(block)
+  print(block:path())
 end
 
 assert(testmod:add())
@@ -40,7 +47,7 @@ local config =
   block1 {
     block2 {
       block3 {
-        foo2 100 150;
+        foo 100 150;
       }
     }
   }

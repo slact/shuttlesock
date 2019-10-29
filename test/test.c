@@ -179,7 +179,7 @@ describe(config) {
   }
   
   test("path matching") {
-    assert_luaL_dofile(S->lua.state, "test_config_path_matching.lua");
+    assert_luaL_dofile(S->lua.state, "config_path_matching.lua");
     shuso_destroy(S);
     S = NULL;
   }
@@ -486,7 +486,7 @@ describe(lua_bridge) {
       lua_State *L = Ss->lua.state;
       lua_newuserdata(L, sizeof(int));
       lua_pushlightuserdata(L, NULL);
-      assert_luaL_dofile_args(L, "test_gxcopy_check.lua", 2);
+      assert_luaL_dofile_args(L, "gxcopy_check.lua", 2);
     }
   }
   subdesc(printstack) {
@@ -527,7 +527,7 @@ describe(lua_api) {
   subdesc(modules) {
     skip("a module") {
       lua_State *L = S->lua.state;
-      assert_luaL_dofile(L, "test_a_module.lua");
+      assert_luaL_dofile(L, "module_simple.lua");
       assert_shuso(S, shuso_configure_finish(S));
       shuso_run(S);
       assert_shuso_ran_ok(S);
@@ -535,13 +535,13 @@ describe(lua_api) {
     
     skip("a module that can't be gxcopied") {
       lua_State *L = S->lua.state;
-      assert_luaL_dofile(L, "test_a_module_bad_gxcopy.lua");
+      assert_luaL_dofile( L, "module_with_bad_gxcopy.lua");
       shuso_configure_finish(S);
       assert_shuso_error(S, "failed to configure.*failed to initialize module.* contains a coroutine");
     }
 
     test("module with config settings") {
-      assert_luaL_dofile(S->lua.state, "test_module_config_settings.lua");
+      assert_luaL_dofile(S->lua.state, "module_config_settings.lua");
       shuso_run(S);
       assert_shuso_ran_ok(S);
     }
@@ -549,14 +549,14 @@ describe(lua_api) {
   
   test("lazy atomics") {
     lua_State *L = S->lua.state;
-    assert_luaL_dofile(L, "test_lazy_atomics.lua");
+    assert_luaL_dofile(L, " lazy_atomics.lua");
     assert_shuso(S, shuso_configure_finish(S));
     shuso_run(S);
     assert_shuso_ran_ok(S);
   }
   
   test("core:error events") {
-    assert_luaL_dofile(S->lua.state, "test_core_error_events.lua");
+    assert_luaL_dofile(S->lua.state, "core_error_events.lua");
     assert_shuso(S, shuso_configure_finish(S));
     chk->ignore_errors = 1;
     shuso_run(S);
@@ -623,7 +623,7 @@ describe(lua_api) {
     }
     
     test("single round-trip") {
-      assert_luaL_dofile(S->lua.state, "test_ipc_single_roundtrip.lua");
+      assert_luaL_dofile(S->lua.state, "  ipc_single_roundtrip.lua");
       assert_shuso(S, shuso_configure_finish(S));
       shuso_run(S);
       assert_shuso_ran_ok(S);

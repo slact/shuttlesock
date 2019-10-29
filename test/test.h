@@ -179,32 +179,11 @@ do { \
 #define assert_luaL_dofile(L, filename) \
   assert_luaL_dofile_args(L, filename, 0)
 
+void ___assert_luaL_dofile_args(lua_State *L, const char *filename, int nargs);
 #define assert_luaL_dofile_args(L, filename, nargs) do { \
   snow_fail_update(); \
-  lua_getglobal(L, "string"); \
-  lua_getfield(L, -1, "format"); \
-  lua_remove(L, -2); \
-  if(filename[0] == '/' || test_config.data_path[strlen(test_config.data_path)-1] == '/') { \
-    lua_pushstring(L, "%s%s"); \
-  } \
-  else { \
-    lua_pushstring(L, "%s/%s"); \
-  } \
-  lua_pushstring(L, test_config.data_path); \
-  lua_pushstring(L, filename); \
-  lua_call(L, 3, 1); \
-  if(luaL_loadfile(L, lua_tostring(L, -1)) != LUA_OK) { \
-    lua_remove(L, -2); \
-    snow_fail("%s", lua_tostring(L, -1)); \
-  } \
-  lua_remove(L, -2); \
-  if(nargs > 0) { \
-    lua_insert(L, -nargs-1); \
-  } \
-  if(!luaS_pcall(L, nargs, LUA_MULTRET)) { \
-    snow_fail("%s", lua_tostring(L, -1)); \
-  } \
-} while(0)
+  ___assert_luaL_dofile_args(L, filename, nargs); \
+}while(0)
 
 #define assert_lua_call(L, in, out) do { \
   if(lua_pcall(L, in, out, 0) != LUA_OK) { \
