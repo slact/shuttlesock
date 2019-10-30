@@ -2,7 +2,8 @@ local Core = require "shuttlesock.core"
 
 local Config = {}
 
-local blocks = {}
+local blocks_cache = {}
+local settings_cache = {}
 
 local block = {}
 local block_mt = {
@@ -27,32 +28,55 @@ local block_context_mt = {
 
 function Config.block(ptr)
   assert(type(ptr) == "userdata")
-  local self = rawget(blocks, ptr)
+  local self = rawget(blocks_cache, ptr)
   if self then return self end
-  self = setmetatable({ptr=ptr}, block_mt)
-  rawset(blocks, ptr, self)
   
-  self.parent_setting_ptr = Core.config_block_parent_setting_pointer(ptr)
-  self.settings = {}
-  self.contexts = setmetatable({}, block_context_mt)
+  local setting_ptr = Core.config_block_parent_setting_pointer(ptr)
+  
+  self = setmetatable({
+    ptr=ptr,
+    name = Core.config_setting_name(setting_ptr),
+    raw_name = Core.config_setting_raw_name(setting_ptr),
+    parent_setting_ptr = Core.config_block_parent_setting_pointer(ptr),
+    settings_cache = {},
+    contexts = setmetatable({}, block_context_mt),
+    path = Core.config_block_path(ptr)
+  }, block_mt)
+  rawset(blocks_cache, ptr, self)
+  
   return self
 end
 
+function block:parent_setting()
+  --[[
+  if not self.parent_setting_ptr then
+    self.parent_setting_ptr = Core.config_block_parent_setting_pointer(ptr)
+  end
+  ]]
+  assert(self.parent_setting_ptr, "block is missing parent_setting_ptr, that's really weird")
+  return Config.setting(self.parent_setting_ptr)
+end
+
+function block.settings() --all local setting in this
+  error("not implemented yet")
+end
+
 function block:setting(name)
-  local setting = self.settings[name]
+  assert(type(name)=="string", "name of setting in block must be a string")
+  local setting = self.settings_cache[name]
   if setting then
     return setting
   elseif setting == false then
     return nil
   end
   
-  local setting_ptr = Core.block_setting_pointer(self.ptr, name)
+  local setting_ptr = Core.config_block_setting_pointer(self.ptr, name)
   if not setting_ptr then
-    self.settings[name] = false
+    self.settings_cache[name] = false
     return nil
   end
   setting = Config.setting(setting_ptr)
-  self.settings[name] = setting
+  self.settings_cache[name] = setting
   return setting
 end
 
@@ -60,6 +84,7 @@ function block:context(module_name)
   if type(module_name) == "table" then
     module_name = module_name.name
   end
+  assert(type(module_name) == "string", "module name isn't a string")
   return self.contexts[module_name]
 end
 
@@ -71,9 +96,6 @@ function block:setting_value(name, n, data_type, value_type)
   return setting:value(n, data_type, value_type)
 end
 
-
-
-local setting_cache = {}
 local setting = {}
 local setting_mt = {
   __index = setting,
@@ -84,27 +106,29 @@ local setting_mt = {
 }
 function Config.setting(ptr)
   assert(type(ptr) == "userdata")
-  local self = rawget(setting_cache, ptr)
+  local self = rawget(settings_cache, ptr)
   if self then
     return self
   end
   self = setmetatable({
     name = Core.config_setting_name(ptr),
     raw_name = Core.config_setting_raw_name(ptr),
-    module_name = Core.setting.config_module_name(ptr),
-    ptr=ptr
-  }, block_mt)
-  setting_cache[ptr]=self
+    module_name = Core.config_setting_module_name(ptr),
+    path = Core.config_setting_path(ptr),
+    ptr=ptr,
+  }, setting_mt)
   
-  self.values = {}
+  self.values_cache = {}
   for _, vtype in ipairs{"merged", "local", "inherited", "default"} do
     local values = {}
     local valcount = Core.config_setting_values_count(ptr, vtype)
     for i=1,valcount do
       table.insert(values, Core.config_setting_value(ptr, i, vtype))
     end
-    self.values[vtype] = values
+    self.values_cache[vtype] = values
   end
+  
+  settings_cache[ptr]=self
   
   return self
 end
@@ -133,7 +157,7 @@ function setting:value(n, data_type, value_type)
     value_type = "default"
   end
   
-  val = self.values[value_type]
+  val = self.values_cache[value_type]
   if not val then
     return nil, "invalid value type' " .. tostring(value_type) .. "'"
   end
@@ -158,11 +182,13 @@ Config.setting_metatable = setting_mt
 setmetatable(Config, {
   __gxcopy_save_state = function()
     return {
-      blocks = blocks,
+      blocks = blocks_cache,
+      settings = settings_cache
     }
   end,
   __gxcopy_load_state = function(data)
-    blocks = data.blocks
+    blocks_cache = data.blocks
+    settings_cache = data.settings
   end
 })
 return Config

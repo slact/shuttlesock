@@ -549,7 +549,7 @@ describe(lua_api) {
   
   test("lazy atomics") {
     lua_State *L = S->lua.state;
-    assert_luaL_dofile(L, " lazy_atomics.lua");
+    assert_luaL_dofile(L, "lazy_atomics.lua");
     assert_shuso(S, shuso_configure_finish(S));
     shuso_run(S);
     assert_shuso_ran_ok(S);
@@ -623,7 +623,7 @@ describe(lua_api) {
     }
     
     test("single round-trip") {
-      assert_luaL_dofile(S->lua.state, "  ipc_single_roundtrip.lua");
+      assert_luaL_dofile(S->lua.state, "ipc_single_roundtrip.lua");
       assert_shuso(S, shuso_configure_finish(S));
       shuso_run(S);
       assert_shuso_ran_ok(S);

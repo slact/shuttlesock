@@ -1815,6 +1815,29 @@ static int Lua_shuso_block_parent_setting_pointer(lua_State *L) {
   return 1;
 }
 
+static int Lua_shuso_block_setting_pointer(lua_State *L) {
+  luaL_checktype(L, 1, LUA_TLIGHTUSERDATA);
+  luaL_checkstring(L, 2);
+  
+  lua_getlib_field(L, "shuttlesock.core.config", "block");
+  lua_pushvalue(L, 1);
+  lua_call(L, 1, 1);
+  if(!lua_istable(L, -1)) {
+    lua_pushnil(L);
+    lua_pushstring(L, "block not found");
+    return 2;
+  }
+  lua_getfield(L, -1, "settings");
+  lua_pushvalue(L, -2);
+  lua_pushvalue(L, 2);
+  luaS_call(L, 2, 1);
+  if(lua_isnil(L, -1)) {
+    lua_pushstring(L, "setting not found");
+    return 2;
+  }
+  return 1;
+}
+
 static int Lua_shuso_setting_block_pointer(lua_State *L) {
   luaL_checktype(L, 1, LUA_TLIGHTUSERDATA);
   const shuso_setting_t *setting = lua_topointer(L, 1);
@@ -1866,14 +1889,17 @@ static const shuso_setting_values_t *setting_values_type(lua_State *L, const shu
 
 static int Lua_shuso_setting_values_count(lua_State *L) {
   luaL_checktype(L, 1, LUA_TLIGHTUSERDATA);
-  
   const shuso_setting_t         *setting = lua_topointer(L, 1);
   const shuso_setting_values_t  *vals = NULL;
   
   vals = setting_values_type(L, setting, lua_gettop(L) < 2 ? 0 : 2);
-  assert(vals != NULL);
   
-  lua_pushinteger(L, vals->count);
+  if(vals == NULL) {
+    lua_pushinteger(L, 0);
+  }
+  else {
+    lua_pushinteger(L, vals->count);
+  }
   return 1;
 }
 
@@ -1943,6 +1969,32 @@ static int Lua_shuso_setting_module_name(lua_State *L) {
   return 1;
 }
 
+static int Lua_shuso_setting_path(lua_State *L) {
+  luaL_checktype(L, 1, LUA_TLIGHTUSERDATA);
+  luaS_get_config_pointer_ref(L, (void *)lua_topointer(L, 1));
+  assert(!lua_isnil(L, -1));
+  luaS_pcall_config_method(L, "get_path", 1, true);
+  return 1;
+}
+static int Lua_shuso_block_path(lua_State *L) {
+  return Lua_shuso_setting_path(L);
+}
+
+static int Lua_shuso_match_path(lua_State *L) {
+  luaL_checktype(L, 1, LUA_TLIGHTUSERDATA);
+  luaL_checkstring(L, 2);
+  
+  luaS_get_config_pointer_ref(L, lua_topointer(L, 1));
+  assert(!lua_isnil(L, -1));
+  
+  luaS_push_lua_module_field(L, "shuttlesock.config", "match_path");
+  lua_pushvalue(L, -2);
+  lua_pushvalue(L, 2);
+  int top = lua_gettop(L);
+  luaS_call(L, 2, LUA_MULTRET);
+  return lua_gettop(L) - top;
+}
+
 static int Lua_shuso_is_light_userdata(lua_State *L) {
   return lua_type(L, 1) == LUA_TLIGHTUSERDATA;
 }
@@ -2003,7 +2055,11 @@ luaL_Reg shuttlesock_core_module_methods[] = {
 
 //config
   {"config_block_parent_setting_pointer", Lua_shuso_block_parent_setting_pointer},
+  {"config_block_setting_pointer", Lua_shuso_block_setting_pointer},
+  {"config_block_path", Lua_shuso_block_path},
   {"config_setting_block_pointer", Lua_shuso_setting_block_pointer},
+  {"config_setting_path", Lua_shuso_setting_path},
+  {"config_match_path", Lua_shuso_match_path},
   {"config_setting_value", Lua_shuso_setting_value},
   {"config_setting_name", Lua_shuso_setting_name},
   {"config_setting_raw_name", Lua_shuso_setting_raw_name},

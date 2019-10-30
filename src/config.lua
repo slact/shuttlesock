@@ -4,7 +4,7 @@ local parser_mt
 local Config = {}
 local config_mt
 
---[[
+
 local function mm_setting(setting)
   local mm = require "mm"
   local cpy = {}
@@ -15,7 +15,6 @@ local function mm_setting(setting)
   cpy.block = "..."
   mm(cpy)
 end
-]]
 
 local DEBUG_MODE = false
 local assert, error = assert, error
@@ -547,7 +546,6 @@ do --parser
       return true
     end
     
-    
     assert(self:in_setting())
     local char = self.str:sub(self.cur, self.cur)
     local ok, err
@@ -773,7 +771,7 @@ do --config
     local setting = block.setting
     self:get_setting_path(setting)
     for _, handler in pairs(self.handlers) do
-      if handler.module == module_name and Config.match_path(setting, handler) then
+      if Config.match_path(setting, handler) then
         return true
       end
     end
@@ -804,6 +802,14 @@ do --config
     return false
   end
   
+  function config:location(block_or_setting)
+    local parser = self.parsers[block_or_setting.setting.parser_index]
+    if not parser then
+      return "unknown location"
+    end
+    return parser:location(block_or_setting.position.start)
+  end
+  
   function config:find_handler_for_setting(setting)
     if setting.full_name then
       local handler = self.handlers[setting.full_name]
@@ -818,7 +824,7 @@ do --config
       if not possible_handlers then
         return nil, "unknown setting " .. setting.name
       end
-      self:get_setting_path(setting)
+      self:get_path(setting)
       local matches = {}
       for _, handler in ipairs(possible_handlers) do
         if Config.match_path(setting, handler) then
@@ -837,6 +843,46 @@ do --config
         return matches[1]
       end
     end
+  end
+  
+  function config:get_path(block_or_setting)
+    if block_or_setting.path then
+      return block_or_setting.path
+    end
+    local function is_root(s)
+      return (s.parent == s) or not s.parent
+    end
+    if block_or_setting.type == "block" then
+      local setting = block_or_setting.setting
+      local setting_path = config:get_path(setting)
+      local setting_path_part = is_root(setting) and "" or (setting.full_name or setting.name)
+      local slash = setting_path:match("/$") and "" or "/"
+      block_or_setting.path = setting_path..slash..setting_path_part
+      return block_or_setting.path
+    else
+      assert(block_or_setting.type == "setting")
+      local setting = block_or_setting
+      if not setting.path then
+        if is_root(setting) then --root
+          setting.path = ""
+        elseif is_root(setting.parent) then
+          setting.path = "/"
+        else
+          local parent_path = config:get_path(setting.parent)
+          local slash = parent_path:match("/$") and "" or "/"
+          local parent_path_part = (setting.parent.full_name or setting.parent.name)
+          setting.path = ("%s%s%s"):format(config:get_setting_path(setting.parent), slash, parent_path_part)
+        end
+      end
+      return setting.path
+    end
+  end
+  
+  function config:error(block_or_setting, message, ...)
+    if select("#", ...) > 0 then
+      message = message:format(...)
+    end
+    return ("%s in %s"):format(message, config:location(block_or_setting))
   end
   
   function config:get_setting_path(setting)
@@ -1182,6 +1228,10 @@ do --config
       return {}
     end
     return predecessor.values
+  end
+  
+  function config:mm_setting(setting)
+    return mm_setting(setting)
   end
   
 end
