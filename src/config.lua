@@ -682,6 +682,17 @@ local function match_path_part(ppart, mpart)
   if not mpart then
     return false
   end
+  
+  local parenthesized = mpart:match("^%((.*)%)$")
+  if parenthesized then
+    for ormatch in parenthesized:gmatch("[^%|]+") do
+      if match_path_part(ppart, ormatch) then
+        return true
+      end
+    end
+    return false
+  end
+  
   if ppart ~= mpart and mpart ~= "*" and mpart ~= "**" then
     local ppart_left, ppart_right = ppart:match("^([^:]+):(.*)$")
     if not ppart_left then
@@ -728,7 +739,15 @@ function Config.match_path(path, match)
     end
     m=m-1
   end
-  return m == 0
+  if m == 0 then
+    return true
+  end
+  for i=m,1,-1 do
+    if match[i] ~= "**" then
+      return false
+    end
+  end
+  return true
 end
 
 do --config
