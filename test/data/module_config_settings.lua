@@ -71,6 +71,18 @@ function testmod:initialize_config(block)
     assert(block:setting_value("bar", 1, "local")==nil)
   elseif block.name == "block3" then
     assert(block.path == "/block1/block2/block3")
+    local setting = block:setting("bar")
+    assert(setting)
+    assert(setting:value(1, "string") == "block3_1")
+    assert(setting:value(2, "string") == "block3_2")
+    
+    local foo = block:setting("foo")
+    assert(foo:value(1, "string") == "100")
+    local numval = foo:value(1, "number")
+    assert(math.type(numval) == "float")
+    assert(numval == 100)
+    local intval = foo:value(1, "integer")
+    assert(math.type(intval) == "integer")
   else
     error("unexpected block name "..tostring(block.name))
   end
