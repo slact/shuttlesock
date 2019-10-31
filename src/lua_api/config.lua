@@ -1,4 +1,5 @@
 local Core = require "shuttlesock.core"
+local CoreConfig = require "shuttlesock.core.config"
 
 local Config = {}
 
@@ -75,7 +76,28 @@ function block:setting(name)
     self.settings_cache[name] = false
     return nil
   end
+  assert(type(setting_ptr) == "userdata")
   setting = Config.setting(setting_ptr)
+  
+  if self.path ~= setting.path then
+    --this is an inherited setting. make it so
+    local inherited = setmetatable({}, getmetatable(setting))
+    for k,v in pairs(setting) do
+      if k == "values_cache" then
+        local vals = {
+          default = v.default,
+          inherited = #v["local"] > 0  and v["local"] or v["inherited"],
+          ["local"] = {},
+          merged = v.merged
+        }
+        rawset(inherited, k, vals)
+      else
+        rawset(inherited, k, v)
+      end
+    end
+    setting = inherited
+  end
+  
   self.settings_cache[name] = setting
   return setting
 end
@@ -88,8 +110,12 @@ function block:context(module_name)
   return self.contexts[module_name]
 end
 
+function block:match_path(match)
+  return CoreConfig.match_path(self, match)
+end
+
 function block:setting_value(name, n, data_type, value_type)
-  local setting = block:setting(name)
+  local setting = self:setting(name)
   if not setting then
     return nil
   end
@@ -105,7 +131,7 @@ local setting_mt = {
   __name="config.setting"
 }
 function Config.setting(ptr)
-  assert(type(ptr) == "userdata")
+  assert(type(ptr) == "userdata", "setting is a "..type(ptr).. " ".. debug.traceback())
   local self = rawget(settings_cache, ptr)
   if self then
     return self
@@ -119,11 +145,12 @@ function Config.setting(ptr)
   }, setting_mt)
   
   self.values_cache = {}
+  
   for _, vtype in ipairs{"merged", "local", "inherited", "default"} do
     local values = {}
     local valcount = Core.config_setting_values_count(ptr, vtype)
     for i=1,valcount do
-      table.insert(values, Core.config_setting_value(ptr, i, vtype))
+      table.insert(values, assert(Core.config_setting_value(ptr, i, vtype)))
     end
     self.values_cache[vtype] = values
   end
@@ -142,19 +169,38 @@ local possible_value_types = {
   ["defaults"] = true
 }
 
+local possible_data_types = {
+  string = true,
+  integer = true,
+  number = true,
+  raw = true,
+  boolean = true
+}
+
 function setting:value(n, data_type, value_type)
   if type(n) == "string" and not value_type then
-    n, data_type, value_type = 1, n, data_type
+    n, data_type, value_type = nil, n, data_type
   end
-  assert(n, "value index is missing")
   local val
+  
   if not value_type and rawget(possible_value_types, data_type) then
     data_type, value_type = nil, data_type
   end
-  if value_type == "defaults" or not value_type then
+  if value_type == "defaults" then
     -- both are permitted because in C this is called 'defaults', but
     -- it's plural only because the singular 'default' is a reserved keyword
     value_type = "default"
+  end
+  
+  n = n or 1
+  data_type = data_type or "string"
+  value_type = value_type or "merged"
+  
+  if not rawget(possible_data_types, data_type) then
+    error("bad data type " .. tostring(data_type))
+  end
+  if not rawget(possible_value_types, value_type) then
+    error("bad value type " .. tostring(value_type))
   end
   
   val = self.values_cache[value_type]
@@ -167,12 +213,16 @@ function setting:value(n, data_type, value_type)
     return nil, "invalid value index " .. tostring(n)
   end
   
-  val = val[data_type or "string"]
+  val = val[data_type]
   if not val then
     return nil, "invalid value data type' " .. tostring(value_type) .. "'"
   end
   
   return val
+end
+
+function block:match_path(match)
+  return CoreConfig.match_path(self, match)
 end
 
 Config.block_metatable = block_mt

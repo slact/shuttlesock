@@ -125,6 +125,8 @@ function module:add()
     module_table.parent_modules = table.concat(parent_modules)
   end
   
+  module_table.settings = self.settings
+  
   lua_modules[self.name]=self
   
   ok, err = Core.add_module(module_table)

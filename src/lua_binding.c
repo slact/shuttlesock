@@ -454,7 +454,6 @@ static int Lua_watcher_set(lua_State *L) {
       else {
         repeat = luaL_optnumber(L, 3, 0.0);
       }
-      shuso_log_warning(S, "S:%p w: %p, watcher: %p", S, w, &w->watcher);
       shuso_ev_timer_init(S, &w->watcher.timer, after, repeat, (shuso_ev_timer_fn *)watcher_callback, w);
     } break;
     
@@ -1620,6 +1619,7 @@ static int Lua_shuso_add_module(lua_State *L) {
   lua_pop(L, 1);
   
   lua_getfield(L, 1, "settings");
+  
   //settings need to be generated, thus also checked
   if(!lua_isnil(L, -1) && !lua_istable(L, -1)) {
     return luaL_error(L, "settings field is not a nil or table", m->name);
@@ -1630,7 +1630,7 @@ static int Lua_shuso_add_module(lua_State *L) {
     if(!settings) {
       return luaL_error(L, "not enough memory for settings");
     }
-    for(int i = 1; i < count; i++) {
+    for(int i = 0; i < count; i++) {
       lua_geti(L, -1, i+1);
       if(!lua_istable(L, -1)) {
         return luaL_error(L, "settings value is not a table");
@@ -1697,6 +1697,7 @@ static int Lua_shuso_add_module(lua_State *L) {
   
   m->initialize_config = lua_module_initialize_config;
   m->initialize = lua_module_initialize;
+  
   
   if(!shuso_add_module(S, m)) {
     lua_pushnil(L);
@@ -1819,22 +1820,27 @@ static int Lua_shuso_block_setting_pointer(lua_State *L) {
   luaL_checktype(L, 1, LUA_TLIGHTUSERDATA);
   luaL_checkstring(L, 2);
   
-  lua_getlib_field(L, "shuttlesock.core.config", "block");
-  lua_pushvalue(L, 1);
-  lua_call(L, 1, 1);
+  const shuso_setting_block_t *block = lua_topointer(L, 1);
+  
+  luaS_get_config_pointer_ref(L, block->setting);
   if(!lua_istable(L, -1)) {
     lua_pushnil(L);
     lua_pushstring(L, "block not found");
     return 2;
   }
-  lua_getfield(L, -1, "settings");
-  lua_pushvalue(L, -2);
-  lua_pushvalue(L, 2);
-  luaS_call(L, 2, 1);
-  if(lua_isnil(L, -1)) {
+  
+  luaS_pcall_config_method(L, "find_setting", 2, true);
+  if(!lua_toboolean(L, -1)) {
     lua_pushstring(L, "setting not found");
     return 2;
   }
+  lua_getfield(L, -1, "ptr");
+  if(lua_type(L, -1) != LUA_TLIGHTUSERDATA) {
+    lua_pushnil(L);
+    lua_pushstring(L, "setting is missing ptr field");
+    return 2;
+  }  
+  
   return 1;
 }
 
@@ -1850,7 +1856,7 @@ static int Lua_shuso_setting_block_pointer(lua_State *L) {
   return 1;
 }
 
-static const shuso_setting_values_t *setting_values_type(lua_State *L, const shuso_setting_t     *setting, int nindex) {
+static const shuso_setting_values_t *setting_values_type(lua_State *L, const shuso_setting_t *setting, int nindex) {
   lua_pushliteral(L, "merged");
   if(nindex == 0 || lua_compare(L, nindex, -1, LUA_OPEQ)) {
     lua_pop(L, 1);
@@ -1918,7 +1924,7 @@ static int Lua_shuso_setting_value(lua_State *L) {
     lua_pushfstring(L, "invalid value index %d (as in lua, the indices start at 1, not 0)", n);
     return 2;
   }
-  else if(vals->count > n) {
+  else if(n > vals->count) {
     lua_pushnil(L);
     lua_pushfstring(L, "no value at index %d", n);
     return 2;

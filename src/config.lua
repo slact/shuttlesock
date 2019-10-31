@@ -45,7 +45,7 @@ local function resolve_path(prefix, name)
 end
 
 local function glob(globstr)
-  local system = require "shuttlesock.system"
+  local system = require "shuttlesock.core.system"
   return system.glob(globstr)
 end
 
@@ -655,7 +655,7 @@ function Config.split_path(pathy_thing)
   if type(pathy_thing)=="string" then
     pathy_thing = {path=pathy_thing}
   end
-  
+  assert(type(pathy_thing) == "table", "path isn't a string or table" .. debug.traceback())
   if pathy_thing.split_path then
     return pathy_thing.split_path
   end
@@ -758,8 +758,6 @@ do --config
       return require("shuttlesock.core.config").metatable
     end
   }
-
-
   
   function config:parse(str, name)
     assert(type(str) == "string")
@@ -808,19 +806,44 @@ do --config
     else
       module, name = name:match("^([^%:]+)%:(.*)")
     end
+    local current_context = context
     
-    while context and context.parent ~= context do
-      for _, d in ipairs(context.block.settings) do
+    while current_context do
+      for _, d in ipairs(current_context.block.settings) do
         if name == d.name and (module and module == d.module or true) then
-          return d
+          local handler = d.handled_by and self.handlers[d.handled_by] or nil
+          if handler and Config.match_path(context.block, handler) then
+            return d
+          end
         end
       end
-      context = context.parent
+      
+      if current_context ~= current_context.parent then
+        current_context = current_context.parent
+      else
+        current_context = nil
+      end
     end
     
+    --not in parent context. maybe use a default value?
+    local path = self:get_path(context.block)
+    local fakesetting = {
+      name = name,
+      path = path
+    }
+    local found_handler = self:find_handler_for_setting(fakesetting)
+    if found_handler then
+      --copy?
+      local default_setting = {}
+      for k, v in pairs(found_handler.default_setting) do
+        rawset(default_setting, k, v)
+      end
+      setmetatable(default_setting, getmetatable(found_handler.default_setting))
+      return default_setting
+    end
     return false
   end
-  
+
   function config:location(block_or_setting)
     local parser = self.parsers[block_or_setting.setting.parser_index]
     if not parser then
@@ -828,7 +851,7 @@ do --config
     end
     return parser:location(block_or_setting.position.start)
   end
-  
+
   function config:find_handler_for_setting(setting)
     if setting.full_name then
       local handler = self.handlers[setting.full_name]
@@ -840,6 +863,7 @@ do --config
     else
       local name = "*:"..setting.name
       local possible_handlers = self.handlers_any_module[name]
+      
       if not possible_handlers then
         return nil, "unknown setting " .. setting.name
       end
@@ -863,7 +887,7 @@ do --config
       end
     end
   end
-  
+
   function config:get_path(block_or_setting)
     if block_or_setting.path then
       return block_or_setting.path
@@ -896,7 +920,7 @@ do --config
       return setting.path
     end
   end
-  
+
   function config:error(block_or_setting, message, ...)
     if select("#", ...) > 0 then
       message = message:format(...)
@@ -941,6 +965,7 @@ do --config
     for setting in self:each_setting() do
       local ok, handler, err
       handler, err = self:find_handler_for_setting(setting)
+      
       if handler and (not handler_name or handler_name == handler.full_name) then
         if handler.handler then
           ok, err = handler.handler(setting.values, handler.default)
@@ -1017,6 +1042,7 @@ do --config
     local description
     local args_min, args_max
     local block
+    local default_setting
     local default_values
     local function ensure(condition, fmt, ...)
       if not condition then
@@ -1050,7 +1076,7 @@ do --config
     
     ensure_type("path", "string")
     ensure(not setting.path:match("%/%/"), "path '%s' is invalid", setting.path)
-    ensure(setting.path:match("^[%w%:_%.%/]*$"), "path '%s' is invalid", setting.path)
+    ensure(setting.path:match("^[%w%:_%.%/%*]*$"), "path '%s' is invalid", setting.path)
     path = setting.path:match("^(.+)/$") or setting.path
     
     description = ensure(setting.description, "description is required, draconian as that may seem")
@@ -1098,7 +1124,9 @@ do --config
       local default_value_parser = Parser.new(setting.name .. " default value", ("%s %s;"):format(setting.name, setting.default))
       local default_parsed, err = default_value_parser:parse()
       ensure(default_parsed, "default string invalid: %s", err)
-      default_values = default_parsed.block.settings[1].values
+      default_setting = default_parsed.block.settings[1]
+      default_values = default_setting.values
+      
       assert(default_values)
     end
     
@@ -1119,6 +1147,7 @@ do --config
       nargs_max = args_max,
       nargs_min = args_min,
       default_values = default_values,
+      default_setting = default_setting,
       block = block,
       handler = setting.handler,
       internal_handler = setting.internal_handler

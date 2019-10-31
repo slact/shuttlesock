@@ -118,7 +118,14 @@ static shuso_setting_values_t  *lua_setting_values_to_c_struct(lua_State *L, shu
   v->count = values_count;
   for(int i = 1; i <= values_count; i++) {
     lua_rawgeti(L, -1, i);
+    lua_getfield(L, -1, "value");
     shuso_setting_value_t *val = &v->array[i-1];
+    
+    lua_getfield(L, -1, "raw");
+    if(lua_isstring(L, -1)) {
+      val->raw = lua_tolstring(L, -1, &val->raw_len);
+    }
+    lua_pop(L, 1);
     
     lua_getfield(L, -1, "string");
     if(lua_isstring(L, -1)) {
@@ -148,7 +155,7 @@ static shuso_setting_values_t  *lua_setting_values_to_c_struct(lua_State *L, shu
     }
     lua_pop(L, 1);
     
-    lua_pop(L, 1);
+    lua_pop(L, 2);
   }
   return v;
 }
@@ -185,6 +192,7 @@ bool shuso_config_system_generate(shuso_t *S) {
     .setting = NULL,
     .path="",
   };
+  
   if(!shuso_context_list_initialize(S, NULL, &root_block->context_list, &S->stalloc)) {
     lua_settop(L, top);
     return shuso_set_error(S, "unable to initialize root block module context list");
@@ -210,6 +218,7 @@ bool shuso_config_system_generate(shuso_t *S) {
     .path="",
     .block = root_block
   };
+  
   lua_pushlightuserdata(L, root_setting);
   lua_setfield(L, -2, "ptr");
   
@@ -353,35 +362,18 @@ bool shuso_config_system_generate(shuso_t *S) {
     
     for(unsigned i=0; i< S->common->modules.count; i++) {
       shuso_module_t *module = S->common->modules.array[i];
-      
-      lua_pushvalue(L, -1);
-      lua_pushstring(L, module->name);
-      if(!luaS_pcall_config_method(L, "block_handled_by_module", 2, true)) {
+      int errcount = shuso_error_count(S);
+      if(module->initialize_config && !module->initialize_config(S, module, block)) {
+        if(shuso_last_error(S) == NULL) {
+          lua_settop(L, top);
+          return shuso_set_error(S, "module %s failed to initialize config, but reported no error", module->name);
+        }
         lua_settop(L, top);
         return false;
       }
-      bool handled_by_module = lua_toboolean(L, -1);
-      lua_pop(L, 1);
-      if(handled_by_module) {
-        /*if(!module->initialize_config) {
-          lua_settop(L, top);
-          return shuso_set_error(S, "module %s initialize_config is required, but is set to NULL", module->name);
-        }
-        */
-        int errcount = shuso_error_count(S);
-        if(module->initialize_config && !module->initialize_config(S, module, block)) {
-          if(shuso_last_error(S) == NULL) {
-            lua_settop(L, top);
-            return shuso_set_error(S, "module %s failed to initialize config, but reported no error", module->name);
-          }
-          lua_settop(L, top);
-          return false;
-        }
-        if(shuso_error_count(S) > errcount) {
-          lua_settop(L, top);
-          return false;
-        }
-        
+      if(shuso_error_count(S) > errcount) {
+        lua_settop(L, top);
+        return false;
       }
     }
     lua_pop(L, 1);
