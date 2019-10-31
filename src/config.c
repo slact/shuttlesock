@@ -132,12 +132,18 @@ static shuso_setting_values_t  *lua_setting_values_to_c_struct(lua_State *L, shu
       val->valid.string = true;
       val->string = lua_tolstring(L, -1, &val->string_len);
     }
+    else {
+      val->valid.string = false;
+    }
     lua_pop(L, 1);
     
     lua_getfield(L, -1, "number");
     if(lua_isnumber(L, -1)) {
       val->valid.number = true;
       val->number = lua_tonumber(L, -1);
+    }
+    else {
+      val->valid.number = false;
     }
     lua_pop(L, 1);
     
@@ -146,12 +152,18 @@ static shuso_setting_values_t  *lua_setting_values_to_c_struct(lua_State *L, shu
       val->valid.integer = true;
       val->integer = lua_tointeger(L, -1);
     }
+    else {
+      val->valid.integer = false;
+    }
     lua_pop(L, 1);
     
     lua_getfield(L, -1, "boolean");
     if(lua_isboolean(L, -1)) {
       val->valid.boolean = true;
       val->boolean = lua_toboolean(L, -1);
+    }
+    else {
+      val->valid.boolean = false;
     }
     lua_pop(L, 1);
     
