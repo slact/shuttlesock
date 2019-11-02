@@ -247,6 +247,10 @@ static bool shuso_module_finalize(shuso_t *S, shuso_module_t *mod) {
     event->data_type = lua_tostring(L, -1);
     lua_pop(L, 1);
     
+    lua_getfield(L, -1, "cancelable");
+    event->cancelable = lua_toboolean(L, -1);
+    lua_pop(L, 1);
+    
     lua_getfield(L, -1, "listeners");
     int listeners_count = luaL_len(L, -1);
     
@@ -271,6 +275,12 @@ static bool shuso_module_finalize(shuso_t *S, shuso_module_t *mod) {
       lua_getfield(L, -1, "privdata");
       cur->pd = (void *)lua_topointer(L, -1);
       lua_pop(L, 1);
+      
+#ifdef SHUTTLESOCK_DEBUG_MODULE_SYSTEM
+      lua_getfield(L, -1, "priority");
+      cur->priority = lua_tointeger(L, -1);
+      lua_pop(L, 1);
+#endif
       
       lua_pop(L, 1);
       
@@ -384,27 +394,27 @@ static void core_gxcopy(shuso_t *S, shuso_event_state_t *evs, intptr_t status, v
 static bool core_module_initialize(shuso_t *S, shuso_module_t *self) {
   shuso_core_module_events_t *events = shuso_stalloc(&S->stalloc, sizeof(*events));
   shuso_events_initialize(S, self, events, (shuso_event_init_t[]){
-    {"configure",       &events->configure,         NULL},
-    {"configure.after", &events->configure_after,   NULL},
+    {"configure",       &events->configure,         NULL, false},
+    {"configure.after", &events->configure_after,   NULL, false},
     
-    {"master.start",    &events->start_master,      NULL},
-    {"manager.start",   &events->start_manager,     NULL},
-    {"worker.start",    &events->start_worker,      NULL},
-    {"worker.start.before.lua_gxcopy",&events->start_worker_before_lua_gxcopy, "shuttlesock_state"},
-    {"worker.start.before",&events->start_worker_before, "shuttlesock_state"},
+    {"master.start",    &events->start_master,      NULL, false},
+    {"manager.start",   &events->start_manager,     NULL, false},
+    {"worker.start",    &events->start_worker,      NULL, false},
+    {"worker.start.before.lua_gxcopy",&events->start_worker_before_lua_gxcopy, "shuttlesock_state", false},
+    {"worker.start.before",&events->start_worker_before, "shuttlesock_state", false},
     
-    {"master.stop",     &events->stop_master,       NULL},
-    {"manager.stop",    &events->stop_manager,      NULL},
-    {"worker.stop",     &events->stop_worker,       NULL},
+    {"master.stop",     &events->stop_master,       NULL, false},
+    {"manager.stop",    &events->stop_manager,      NULL, false},
+    {"worker.stop",     &events->stop_worker,       NULL, false},
     
-    {"manager.workers_started",   &events->manager_all_workers_started, NULL},
-    {"master.workers_started",    &events->master_all_workers_started,  NULL},
-    {"worker.workers_started",    &events->worker_all_workers_started,  NULL},
-    {"manager.worker_exited",     &events->worker_exited,               NULL},
-    {"master.manager_exited",     &events->manager_exited,              NULL},
+    {"manager.workers_started",   &events->manager_all_workers_started, NULL, false},
+    {"master.workers_started",    &events->master_all_workers_started,  NULL, false},
+    {"worker.workers_started",    &events->worker_all_workers_started,  NULL, false},
+    {"manager.worker_exited",     &events->worker_exited,               NULL, false},
+    {"master.manager_exited",     &events->manager_exited,              NULL, false},
     
-    {"error",                     &events->error,              "string"},
-    {NULL, NULL, NULL}
+    {"error",                     &events->error,              "string", false},
+    {.name=NULL}
   });
   
   shuso_event_listen(S, "core:worker.start.before.lua_gxcopy", core_gxcopy, self);

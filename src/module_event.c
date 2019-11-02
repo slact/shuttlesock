@@ -4,7 +4,7 @@ void *shuso_events(shuso_t *S, shuso_module_t *module) {
   return S->common->modules.events[module->index];
 }
 
-static bool shuso_event_initialize(shuso_t *S, shuso_module_t *mod, const char *name, shuso_module_event_t *mev, const char *data_type) {
+static bool shuso_event_initialize(shuso_t *S, shuso_module_t *mod, const char *name, shuso_module_event_t *mev, const char *data_type, bool cancelable) {
   lua_State       *L = S->lua.state;
   if(mod == NULL) {
     return shuso_set_error(S, "can't initialize event from outside a shuttlesock module");
@@ -19,12 +19,13 @@ static bool shuso_event_initialize(shuso_t *S, shuso_module_t *mod, const char *
   else {
     lua_pushnil(L);
   }
-  return luaS_function_call_result_ok(L, 4, false);
+  lua_pushboolean(L, cancelable);
+  return luaS_function_call_result_ok(L, 5, false);
 }
 
 bool shuso_events_initialize(shuso_t *S, shuso_module_t *module,  void *events_struct, shuso_event_init_t *event_init) {
   for(shuso_event_init_t *cur = event_init; cur && cur->name && cur->event; cur++) {
-    if(!shuso_event_initialize(S, module, cur->name, cur->event, cur->data_type)) {
+    if(!shuso_event_initialize(S, module, cur->name, cur->event, cur->data_type, cur->cancelable)) {
       return false;
     }
   }
@@ -33,6 +34,10 @@ bool shuso_events_initialize(shuso_t *S, shuso_module_t *module,  void *events_s
 }
 
 bool shuso_event_listen(shuso_t *S, const char *name, shuso_module_event_fn *callback, void *pd) {
+  return shuso_event_listen_with_priority(S, name, callback, pd, 0);
+}
+
+bool shuso_event_listen_with_priority(shuso_t *S, const char *name, shuso_module_event_fn *callback, void *pd, int8_t priority) {
   lua_State       *L = S->lua.state;
   shuso_module_t  *module;
   
@@ -56,29 +61,63 @@ bool shuso_event_listen(shuso_t *S, const char *name, shuso_module_event_fn *cal
   lua_pushlightuserdata(L, module);
   lua_pushlightuserdata(L, *((void **)&callback));
   lua_pushlightuserdata(L, pd);
+  lua_pushnumber(L, priority);
     
-  if(!luaS_function_call_result_ok(L, 4, false)) {
+  if(!luaS_function_call_result_ok(L, 5, false)) {
     lua_pop(L, 1);
     return false;
   }
   lua_pop(L, 1);
   return true;
-  
 }
 
+typedef struct {
+  shuso_module_event_t  *event;
+  shuso_event_state_t    state;
+  bool                   canceled;
+} complete_evstate_t;
+
 bool shuso_event_publish(shuso_t *S, shuso_module_t *publisher_module, shuso_module_event_t *event, intptr_t code, void *data) {
-  shuso_event_state_t evstate = {
-    .publisher = publisher_module,
-    .name = event->name,
-    .data_type = event->data_type
+  complete_evstate_t cev = {
+    .event = event,
+    .state = {
+      .publisher = publisher_module,
+      .name = event->name,
+      .data_type = event->data_type,
+    },
+    .canceled = false
   };
-  for(shuso_module_event_listener_t *cur = &event->listeners[0]; cur->fn != NULL; cur++) {
-    evstate.module = cur->module;
-    cur->fn(S, &evstate, code, data, cur->pd);
+  if(!event->cancelable) {
+    for(shuso_module_event_listener_t *cur = &event->listeners[0]; cur->fn != NULL; cur++) {
+      cev.state.module = cur->module;
+      cur->fn(S, &cev.state, code, data, cur->pd);
+    }
+  }
+  else {
+    for(shuso_module_event_listener_t *cur = &event->listeners[0]; cur->fn != NULL; cur++) {
+      if(cev.canceled) {
+        break;
+      }
+      cev.state.module = cur->module;
+      cur->fn(S, &cev.state, code, data, cur->pd);
+    }
   }
 #ifdef SHUTTLESOCK_DEBUG_MODULE_SYSTEM
   event->fired_count++;
 #endif
+  return true;
+}
+
+bool shuso_event_cancel(shuso_t *S, shuso_event_state_t *evstate) {
+  complete_evstate_t *cev = container_of(evstate, complete_evstate_t, state);
+  if(!cev->event->cancelable) {
+    shuso_set_error(S, "event %s:%s cannot be canceled", cev->state.publisher->name, cev->state);
+#ifdef SHUTTLESOCK_DEBUG_MODULE_SYSTEM
+    raise(SIGABRT);
+#endif
+    return false;
+  }
+  cev->canceled = true;
   return true;
 }
 

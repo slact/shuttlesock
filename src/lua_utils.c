@@ -108,7 +108,6 @@ int luaS_passthru_error_handler(lua_State *L) {
 bool luaS_pcall(lua_State *L, int nargs, int nresults) {
 #ifndef NDEBUG
   if(!lua_isfunction(L, -(nargs+1))) {
-    luaS_printstack(L);
     shuso_log_error(shuso_state(L), "nargs: %i", nargs);
     assert(lua_isfunction(L, -(nargs+1)));
   }
@@ -1036,7 +1035,7 @@ bool luaS_streq(lua_State *L, int index, const char *str) {
 }
 int luaS_table_count(lua_State *L, int idx) {
   int absidx = lua_absindex(L, idx);
-  luaL_checktype(L, absidx, LUA_TTABLE);
+  assert(lua_type(L, absidx) == LUA_TTABLE);
   lua_pushnil(L);
   int count = 0;
   while(lua_next(L, absidx) != 0) {

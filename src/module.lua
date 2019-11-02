@@ -258,7 +258,7 @@ function Module.new_core_module(name, ...)
   return module
 end
 
-function Module.initialize_event(module_id, event_name, event_ptr, event_data_type)
+function Module.initialize_event(module_id, event_name, event_ptr, event_data_type, cancelable)
   local module, event, err
   module, err = Module.find(module_id)
   if not module then return nil, err end
@@ -266,7 +266,7 @@ function Module.initialize_event(module_id, event_name, event_ptr, event_data_ty
   event, err = module:event(event_name)
   if not event then return nil, err end
   
-  return event:initialize(event_ptr, event_data_type)
+  return event:initialize(event_ptr, event_data_type, cancelable)
 end
 
 do

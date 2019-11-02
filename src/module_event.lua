@@ -3,6 +3,9 @@ local Event = {}
 local events_by_name = {}
 local data_type_map = {}
 
+Event.FIRST_PRIORITY = 127
+Event.LAST_PRIORITY  = -127
+
 local event_mt
 function Event.find(module_name, event_name)
   if type(module_name)=="string" and not event_name then
@@ -60,10 +63,18 @@ do
     return self.module_name..":"..self.name
   end
   
-  function event:add_listener(dst_module_ptr, listener_ptr, privdata_ptr)
+  function event:add_listener(dst_module_ptr, listener_ptr, privdata_ptr, priority)
     assert(type(dst_module_ptr) == "userdata")
     assert(type(listener_ptr) == "userdata")
     assert(type(privdata_ptr) == "userdata")
+    assert(type(priority) == "number")
+    if priority < Event.LAST_PRIORITY then
+      error("listener priority cannot be below " .. tostring(Event.LAST_PRIORITY))
+    end
+    if priority > Event.FIRST_PRIORITY then
+      error("listener priority cannot be above " .. tostring(Event.FIRST_PRIORITY))
+    end
+    
     local Module = require "shuttlesock.core.module"
     
     local subscriber_module = Module.find(dst_module_ptr)
@@ -88,14 +99,32 @@ do
     local listener = {
       module = subscriber_module,
       listener = listener_ptr,
-      privdata = privdata_ptr
+      privdata = privdata_ptr,
+      priority = priority
     }
     
-    table.insert(self.listeners, listener)
+    if priority == Event.LAST_PRIORITY then
+      table.insert(self.listeners, listener)
+    elseif priority == Event.FIRST_PRIORITY then
+      table.insert(self.listeners, 1, listener)
+    else
+      local inserted
+      for i, v in ipairs(self.listeners) do
+        if priority >= v.priority then
+          table.insert(self.listeners, i, listener)
+          inserted = true
+          break
+        end
+      end
+      if not inserted then
+        table.insert(self.listeners, #self.listeners+1, listener)
+      end
+    end
+    
     return listener
   end
   
-  function event:initialize(init_ptr, data_type)
+  function event:initialize(init_ptr, data_type, cancelable)
     local Module = require "shuttlesock.core.module"
     assert(type(init_ptr) == "userdata")
     if self.initialized then
@@ -105,6 +134,7 @@ do
     self.initialized = true
     self.ptr = init_ptr
     self.data_type = data_type
+    self.cancelable = cancelable or false
     return self
   end
 end
