@@ -255,7 +255,7 @@ static bool shuso_module_finalize(shuso_t *S, shuso_module_t *mod) {
     int listeners_count = luaL_len(L, -1);
     
     shuso_module_event_listener_t *cur;
-    shuso_module_event_listener_t *listeners = shuso_stalloc(&S->stalloc, sizeof(*listeners) * (mod->submodules.count+1));
+    shuso_module_event_listener_t *listeners = shuso_stalloc(&S->stalloc, sizeof(*listeners) * (listeners_count+1));
     if(listeners == NULL) {
       return shuso_set_error(S, "failed to allocate memory for event listeners");
     }
@@ -393,7 +393,7 @@ static void core_gxcopy(shuso_t *S, shuso_event_state_t *evs, intptr_t status, v
 
 static bool core_module_initialize(shuso_t *S, shuso_module_t *self) {
   shuso_core_module_events_t *events = shuso_stalloc(&S->stalloc, sizeof(*events));
-  shuso_events_initialize(S, self, events, (shuso_event_init_t[]){
+  shuso_events_initialize(S, self, (shuso_event_init_t[]){
     {"configure",       &events->configure,         NULL, false},
     {"configure.after", &events->configure_after,   NULL, false},
     

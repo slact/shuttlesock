@@ -4,7 +4,7 @@ void *shuso_events(shuso_t *S, shuso_module_t *module) {
   return S->common->modules.events[module->index];
 }
 
-static bool shuso_event_initialize(shuso_t *S, shuso_module_t *mod, const char *name, shuso_module_event_t *mev, const char *data_type, bool cancelable) {
+bool shuso_event_initialize(shuso_t *S, shuso_module_t *mod, shuso_module_event_t *mev, const char *name, const char *data_type, bool cancelable) {
   lua_State       *L = S->lua.state;
   if(mod == NULL) {
     return shuso_set_error(S, "can't initialize event from outside a shuttlesock module");
@@ -23,9 +23,9 @@ static bool shuso_event_initialize(shuso_t *S, shuso_module_t *mod, const char *
   return luaS_function_call_result_ok(L, 5, false);
 }
 
-bool shuso_events_initialize(shuso_t *S, shuso_module_t *module,  void *events_struct, shuso_event_init_t *event_init) {
+bool shuso_events_initialize(shuso_t *S, shuso_module_t *module, shuso_event_init_t *event_init) {
   for(shuso_event_init_t *cur = event_init; cur && cur->name && cur->event; cur++) {
-    if(!shuso_event_initialize(S, module, cur->name, cur->event, cur->data_type, cur->cancelable)) {
+    if(!shuso_event_initialize(S, module, cur->event, cur->name, cur->data_type, cur->cancelable)) {
       return false;
     }
   }

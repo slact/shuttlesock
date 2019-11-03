@@ -1,11 +1,15 @@
 local Core = require "shuttlesock.core"
+local Event = require "shuttlesock.core.module_event"
 
 local Module = {}
 
+Module.FIRST_PRIORITY = Event.FIRST_PRIORITY
+Module.LAST_PRIORITY  = Event.LAST_PRIORITY
+
 local wrapped_modules = {}
 local lua_modules = {}
-local lua_module_publish = {}
 
+Module.module_publish_events = {}
 Module.module_subscribers = {}
 Module.event_subscribers = {}
 
@@ -56,7 +60,7 @@ function Module.new(mod, version)
   assert(type(mod) == "table")
   setmetatable(mod, module_mt)
   Module.module_subscribers[mod]={}
-  lua_module_publish[mod]={}
+  Module.module_publish_events[mod]={}
   if mod.subscribe then
     subscribe_to_event_names(mod)
   end
@@ -78,32 +82,6 @@ function Module.find(name)
   end
   return found
 end
---[[
-function Module.receive_event(publisher_module_name, module_name, event_name, code, data)
-  local full_event_name = ("%s:%s"):format(publisher_module_name, event_name)
-  if not any_module_subscribes_to_event[full_event_name] then
-    return true
-  end
-  local self = assert(lua_modules[module_name])
-  
-  local subscribers = rawget(rawget(Module.module_subscribers, self), full_event_name)
-  if not subscribers or #subscribers == 0 then
-    return true
-  end
-  
-  local publisher = Module.find(publisher_module_name)
-  if not publisher then
-    publisher = Module.wrap(publisher_module_name)
-  end
-  
-  local ok = true
-  for _, subscriber in ipairs(subscribers) do
-    ok = ok and Core.pcall(subscriber, self, code, data, event_name, publisher)
-  end
-  
-  return ok
-end
-]]
 
 local event_mt = {__index = function(self, k)
   if k == "cancel" then
@@ -159,10 +137,28 @@ function module:add()
 
   module_table.subscribe = table.concat(subs, " ")
   
-  for _, v in ipairs(self.publish or {}) do
-    lua_module_publish[self][v]=true
+  for k, v in pairs(self.publish or {}) do
+    local name, opts
+    if type(k)=="number" then
+      name, opts = v, {}
+    else
+      assert(type(k) == "string", "publish key isn't a number or string")
+      assert(type(v) == "table", "publish value isn't a string or table")
+      name, opts = k, v
+    end
+    if name:match("%s") then
+      error("publish name " .. name .. " can't contain spaces")
+    elseif name:match("%:%;") then
+      error("publish name " .. name .. " can't contain punctuation other than '.'")
+    end
+    Module.module_publish_events[self][name]=opts
   end
-  module_table.publish = table.concat(lua_module_publish[self], " ")
+  local publish_keys = {}
+  for k, _ in pairs(Module.module_publish_events[self] or {}) do
+    table.insert(publish_keys, k)
+  end
+  
+  module_table.publish = table.concat(publish_keys, " ")
   local parent_modules = {}
   for _, v in ipairs(self.parent_modules or {}) do
     table.insert(parent_modules, v)
@@ -208,7 +204,7 @@ setmetatable(Module, {
     return {
       lua_modules = lua_modules,
       module_subscribers = Module.module_subscribers,
-      lua_module_publish = lua_module_publish,
+      module_publish_events = Module.module_publish_events,
       event_subscribers = Module.event_subscribers,
       wrapped_modules = wrapped_modules,
     }
@@ -217,7 +213,7 @@ setmetatable(Module, {
     lua_modules = state.lua_modules
     Module.module_subscribers = state.module_subscribers
     Module.event_subscribers = state.event_subscribers
-    lua_module_publish = state.lua_module_publish
+    Module.module_publish_events = state.module_publish_events
     wrapped_modules = state.wrapped_modules
     
   end

@@ -545,6 +545,13 @@ describe(lua_api) {
       shuso_run(S);
       assert_shuso_ran_ok(S);
     }
+    
+    test("module with event prioritites") {
+      assert_luaL_dofile(S->lua.state, "event_priorities.lua");
+      assert_shuso(S, shuso_configure_finish(S));
+      shuso_run(S);
+      assert_shuso_ran_ok(S);
+    }
   }
   
   test("lazy atomics") {
@@ -918,7 +925,6 @@ describe(stack_allocator) {
       shuso_stalloc_empty(&st);
     }
     
-    
     test("push") {
       fill_stalloc(&st, &stats, 1, 256, 30, 1000, 8);
     }
@@ -962,7 +968,6 @@ void resolver_test(shuso_t *S, void *pd) {
   }
   shuso_resolve_hostname(&S->resolver, "google.com", AF_INET, resolve_check_ok, S);
 }
-
 
 describe(resolver) {
   static shuso_t *S = NULL;
