@@ -30,7 +30,6 @@ struct shuso_module_s {
   uint8_t                *parent_modules_index_map;
   int                     index; //global module number
   shuso_module_setting_t *settings;
-  void                   *events; //module struct ptr for calling events, set during intiialize_events
   struct {
     int                     count;
     shuso_module_t        **array;
@@ -49,31 +48,30 @@ struct shuso_module_context_list_s {
   void          **context;
 }; //shuso_module_context_list_t
 
-typedef struct {
-  shuso_module_event_t configure;
-  shuso_module_event_t configure_after;
-  
-  shuso_module_event_t start_master;
-  shuso_module_event_t start_manager;
-  shuso_module_event_t start_worker;
-  shuso_module_event_t start_worker_before;
-  shuso_module_event_t start_worker_before_lua_gxcopy;
-  
-  shuso_module_event_t stop_master;
-  shuso_module_event_t stop_manager;
-  shuso_module_event_t stop_worker;
-  
-  shuso_module_event_t manager_all_workers_started;
-  shuso_module_event_t master_all_workers_started;
-  shuso_module_event_t worker_all_workers_started;
-  shuso_module_event_t worker_exited;
-  shuso_module_event_t manager_exited;
-  
-  shuso_module_event_t error;
-} shuso_core_module_events_t;
-
 struct shuso_core_module_ctx_s {
   shuso_module_context_list_t context_list;
+  struct {
+    shuso_module_event_t configure;
+    shuso_module_event_t configure_after;
+    
+    shuso_module_event_t start_master;
+    shuso_module_event_t start_manager;
+    shuso_module_event_t start_worker;
+    shuso_module_event_t start_worker_before;
+    shuso_module_event_t start_worker_before_lua_gxcopy;
+    
+    shuso_module_event_t stop_master;
+    shuso_module_event_t stop_manager;
+    shuso_module_event_t stop_worker;
+    
+    shuso_module_event_t manager_all_workers_started;
+    shuso_module_event_t master_all_workers_started;
+    shuso_module_event_t worker_all_workers_started;
+    shuso_module_event_t worker_exited;
+    shuso_module_event_t manager_exited;
+    
+    shuso_module_event_t error;
+  } events;
 }; //shuso_core_module_ctx_t
 
 

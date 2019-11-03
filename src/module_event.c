@@ -23,13 +23,12 @@ static bool shuso_event_initialize(shuso_t *S, shuso_module_t *mod, const char *
   return luaS_function_call_result_ok(L, 5, false);
 }
 
-bool shuso_events_initialize(shuso_t *S, shuso_module_t *module,  void *events_struct, shuso_event_init_t *event_init) {
+bool shuso_events_initialize(shuso_t *S, shuso_module_t *module, shuso_event_init_t *event_init) {
   for(shuso_event_init_t *cur = event_init; cur && cur->name && cur->event; cur++) {
     if(!shuso_event_initialize(S, module, cur->name, cur->event, cur->data_type, cur->cancelable)) {
       return false;
     }
   }
-  S->common->modules.events[module->index] = events_struct;
   return true;
 }
 

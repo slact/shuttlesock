@@ -43,8 +43,7 @@ struct shuso_event_state_s {
   const char           *data_type;
 }; //shuso_event_state_t
 //event stuff
-void *shuso_events(shuso_t *S, shuso_module_t *module);
-bool shuso_events_initialize(shuso_t *S, shuso_module_t *module,  void *events_struct, shuso_event_init_t *events_init);
+bool shuso_events_initialize(shuso_t *S, shuso_module_t *module, shuso_event_init_t *events_init);
 
 bool shuso_event_listen(shuso_t *S, const char *name, shuso_module_event_fn *callback, void *pd);
 bool shuso_event_listen_with_priority(shuso_t *S, const char *name, shuso_module_event_fn *callback, void *pd, int8_t priority);

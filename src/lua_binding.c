@@ -1540,7 +1540,7 @@ static bool lua_module_initialize(shuso_t *S, shuso_module_t *module) {
       };
     }
     events_init[npub]=(shuso_event_init_t ){.name = NULL, .event = NULL};
-    if(!shuso_events_initialize(S, module, events, events_init)) {
+    if(!shuso_events_initialize(S, module, events_init)) {
       free(events_init);
       lua_settop(L, top);
       return false;
