@@ -1513,41 +1513,18 @@ static void lua_module_event_listener(shuso_t *S, shuso_event_state_t *evs, intp
   return;
 }
 
+typedef struct {
+  shuso_module_event_t   *events;
+  int                     events_count;
+} lua_module_core_ctx_t;
+
 static bool lua_module_initialize(shuso_t *S, shuso_module_t *module) {
   lua_State *L = S->lua.state;
   int top = lua_gettop(L);
   
-  luaS_find_module_table(L, module->name);
-  lua_getfield(L, -1, "events");
-  
-  lua_getfield(L, -1, "publish");
-  int npub = luaS_table_count(L, -1);
-  if(npub > 0) {
-    shuso_module_event_t *events = shuso_stalloc(&S->stalloc, sizeof(*events) * npub);
-    shuso_event_init_t *events_init = malloc(sizeof(*events_init) * (npub + 1));
-    if(events == NULL || events_init == NULL) {
-      if(events_init) free(events_init);
-      lua_settop(L, top);
-      return shuso_set_error(S, "failed to allocate lua module published events array");
-    }
-    lua_pushnil(L);
-    for(int i=0; lua_next(L, -2) != 0; i++) {
-      assert(i<npub);
-      lua_pop(L, 1);
-      events_init[i]=(shuso_event_init_t ){
-        .name = lua_tostring(L, -1),
-        .event = &events[i],
-      };
-    }
-    events_init[npub]=(shuso_event_init_t ){.name = NULL, .event = NULL};
-    if(!shuso_events_initialize(S, module, events_init)) {
-      free(events_init);
-      lua_settop(L, top);
-      return false;
-    }
-    free(events_init);
-  }
-  lua_settop(L, top);
+  lua_module_core_ctx_t *ctx = shuso_stalloc(&S->stalloc, sizeof(*ctx));
+  shuso_set_core_context(S, module, ctx);
+  ctx->events = NULL;
   
   luaS_push_lua_module_field(L, "shuttlesock.module", "find");
   lua_pushstring(L, module->name);
@@ -1557,11 +1534,55 @@ static bool lua_module_initialize(shuso_t *S, shuso_module_t *module) {
   }
   assert(lua_istable(L, -1));
   
+  luaS_push_lua_module_field(L, "shuttlesock.module", "module_publish_events");
+  lua_pushvalue(L, -2);
+  lua_gettable(L, -2);
+  lua_remove(L, -2);
+  if(lua_istable(L, -1)) {
+    int npub = luaS_table_count(L, -1);
+    shuso_module_event_t *events = shuso_stalloc(&S->stalloc, sizeof(*events) * npub);
+    if(events == NULL) {
+      lua_settop(L, top);
+      return shuso_set_error(S, "failed to allocate lua module published events array");
+    }
+    
+    ctx->events = events;
+    ctx->events_count = npub;
+    lua_pushnil(L);
+    int i = 0;
+    while(lua_next(L, -2)) {
+      const char   *pub_event_name = lua_tostring(L, -2);
+      bool          cancelable = false;
+      assert(lua_istable(L, -1));
+      lua_getfield(L, -1, "cancelable");
+      cancelable = lua_toboolean(L, -1);
+      lua_pop(L, 1);
+      lua_getfield(L, -1, "cancellable"); //throw the brits a bone
+      cancelable = cancelable || lua_toboolean(L, -1);
+      lua_pop(L, 1);
+      
+      lua_getfield(L, -1, "data_type");
+      const char *data_type = lua_tostring(L, -1);
+      lua_pop(L, 1);
+      
+      if(!shuso_event_initialize(S, module, &events[i], pub_event_name, data_type, cancelable)) {
+        lua_pushboolean(L, 1);
+        lua_setfield(L, -2, "initialization_failed");
+      }
+      else {
+        lua_pushinteger(L, i);
+        lua_setfield(L, -2, "index");
+      }
+      i++;
+      lua_pop(L, 1);
+    }
+  }
+  lua_pop(L, 1);
+  
   luaS_push_lua_module_field(L, "shuttlesock.module", "module_subscribers");
   lua_pushvalue(L, -2);
   lua_gettable(L, -2);
   lua_remove(L, -2);
-  
   if(lua_istable(L, -1)) {
     lua_pushnil(L);
     while(lua_next(L, -2)) {
@@ -1580,8 +1601,8 @@ static bool lua_module_initialize(shuso_t *S, shuso_module_t *module) {
       }
       lua_pop(L, 1);
     }
-    lua_pop(L, 1);
   }
+  lua_pop(L, 1);
   
   assert(top + 1 == lua_gettop(L));
   
@@ -1795,6 +1816,77 @@ static int Lua_shuso_module_event_cancel(lua_State *L) {
     lua_pushliteral(L, "event cannot be canceled");
     return 2;
   }
+}
+
+static int Lua_shuso_module_event_publish(lua_State *L) {
+  shuso_t                 *S = shuso_state(L);
+  int                      nargs = lua_gettop(L);
+  luaL_checktype(L, 1, LUA_TTABLE);
+  const char              *evname = luaL_checkstring(L, 2);
+  intptr_t                 code;
+  switch(lua_type(L, 3)) {
+    case LUA_TNUMBER:
+      code = lua_tointeger(L, 3);
+      break;
+    case LUA_TBOOLEAN:
+      code = lua_toboolean(L, 3);
+      break;
+    /* could be allowed in theory, but it's probably best forbidden to train developers of non-C modules
+    case LUA_TUSERDATA:
+    case LUA_TLIGHTUSERDATA:
+      code = lua_topointer(L, 3);
+      break;
+    */
+    default:
+      lua_pushnil(L);
+      lua_pushfstring(L, "published event code cannot have type %s", lua_typename(L, 3));
+      return 2;
+  }
+  
+  lua_getfield(L, 1, "name");
+  const char              *modname = lua_tostring(L, -1);
+  lua_pop(L, 1);
+  shuso_module_t          *module = shuso_get_module(S, modname);
+  assert(module);
+  lua_module_core_ctx_t   *ctx = shuso_core_context(S, module);
+  assert(ctx);
+  
+  luaS_push_lua_module_field(L, "shuttlesock.module", "module_publish_events");
+  lua_pushvalue(L, -2);
+  lua_gettable(L, -2);
+  lua_remove(L, -2);
+  if(!lua_istable(L, -1)) {
+    return luaL_error(L, "couldn't find module_publish_events table");
+  }
+  
+  lua_getfield(L, -1, evname);
+  if(lua_isnil(L, -1)) {
+    lua_pushnil(L);
+    lua_pushfstring(L, "can't publish event '%s:%s', it's not registed as a publishable event for module %s", modname, evname, modname);
+    return 2;
+  }
+  
+  lua_getfield(L, -1, "index");
+  if(!lua_isinteger(L, -1)) {
+    lua_pushnil(L);
+    lua_pushfstring(L, "can't publish event '%s:%s', it hasn't been initialized", modname, evname);
+    return 2;
+  }
+  int evindex = lua_tointeger(L, -1);
+  assert(evindex > 0);
+  assert(ctx->events_count < evindex);
+  
+  lua_settop(L, nargs);
+  
+  //TODO: unwrap
+  
+  void *data = NULL;
+  bool ok = shuso_event_publish(S, module, &ctx->events[evindex], code, data);
+  
+  //TODO: unwrap cleanup
+  
+  lua_pushboolean(L, ok);
+  return 1;
 }
 
 static void lua_module_gxcopy(shuso_t *S, shuso_event_state_t *es, intptr_t code, void *data, void *pd) {
@@ -2148,6 +2240,7 @@ luaL_Reg shuttlesock_core_module_methods[] = {
   {"module_pointer", Lua_shuso_module_pointer},
   {"module_name", Lua_shuso_module_name},
   {"module_version", Lua_shuso_module_version},
+  {"module_event_publish", Lua_shuso_module_event_publish},
   {"module_event_cancel", Lua_shuso_module_event_cancel},
   
 //ipc

@@ -255,7 +255,7 @@ static bool shuso_module_finalize(shuso_t *S, shuso_module_t *mod) {
     int listeners_count = luaL_len(L, -1);
     
     shuso_module_event_listener_t *cur;
-    shuso_module_event_listener_t *listeners = shuso_stalloc(&S->stalloc, sizeof(*listeners) * (mod->submodules.count+1));
+    shuso_module_event_listener_t *listeners = shuso_stalloc(&S->stalloc, sizeof(*listeners) * (listeners_count+1));
     if(listeners == NULL) {
       return shuso_set_error(S, "failed to allocate memory for event listeners");
     }
