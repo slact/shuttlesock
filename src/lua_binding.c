@@ -1423,6 +1423,7 @@ int Lua_shuso_ipc_send_workers(lua_State *L) {
 }
 
 //lua modules
+/*
 static int luaS_find_module_table(lua_State *L, const char *name) {
   lua_getglobal(L, "require");
   lua_pushliteral(L, "shuttlesock.core.module");
@@ -1433,6 +1434,7 @@ static int luaS_find_module_table(lua_State *L, const char *name) {
   lua_call(L, 1, 1);
   return 1;
 }
+*/
 
 static bool lua_module_initialize_config(shuso_t *S, shuso_module_t *module, shuso_setting_block_t *block) {
   lua_State *L = S->lua.state;
@@ -1469,6 +1471,82 @@ static bool lua_module_initialize_config(shuso_t *S, shuso_module_t *module, shu
   return true;
 }
 
+static bool luaS_push_wrapped_event_data(lua_State *L, const char *type, void *data) {
+  if(type == NULL || data == NULL) {
+    lua_pushnil(L);
+    return true;
+  }
+  
+  lua_pushstring(L, type);
+  if(luaS_streq_literal(L, -1, "string")) {
+    lua_pop(L, 1);
+    lua_pushstring(L, (char *)data);
+    return true;
+  }
+  else if(luaS_streq_literal(L, -1, "float")) {
+    lua_pop(L, 1);
+    lua_pushnumber(L, *(double *)data);
+    return true;
+  }
+  else if(luaS_streq_literal(L, -1, "integer")) {
+    lua_pop(L, 1);
+    lua_pushinteger(L, *(int *)data);
+    return true;
+  }
+  else {
+    shuso_set_error(shuso_state(L), "don't know how to wrap event data type '%s'", type);
+    lua_pop(L, 1);
+    lua_pushnil(L);
+    return false;
+  }
+}
+
+static bool luaS_wrap_event_data_cleanup(lua_State *L, const char *type, void *data) {
+  return true;
+}
+
+static lua_reference_t luaS_unwrap_event_data(lua_State *L, const char *type, int narg, void **ret) {
+  if(type  == NULL) {
+    *ret = NULL;
+    return LUA_NOREF;
+  }
+  
+  lua_pushstring(L, type);
+  if(luaS_streq_literal(L, -1, "string")) {
+    lua_pop(L, 1);
+    *(const char **)ret = lua_tostring(L, narg);
+    lua_pushvalue(L, narg);
+    return luaL_ref(L, LUA_REGISTRYINDEX);
+  }
+  else if(luaS_streq_literal(L, -1, "float")) {
+    lua_pop(L, 1);
+    double *dubs = lua_newuserdata(L, sizeof(double));
+    *dubs = lua_tonumber(L, narg);
+    *ret = dubs;
+    return luaL_ref(L, LUA_REGISTRYINDEX);
+  }
+  else if(luaS_streq_literal(L, -1, "integer")) {
+    int *integer = lua_newuserdata(L, sizeof(int));
+    *integer = lua_tointeger(L, narg);
+    *ret = integer;
+    return luaL_ref(L, LUA_REGISTRYINDEX);
+  }
+  else {
+    *ret = NULL;
+    shuso_set_error(shuso_state(L), "don't know how to unwrap event data type '%s'", type);
+    return LUA_NOREF;
+  }
+}
+
+static void luaS_unwrap_event_data_cleanup(lua_State *L, const char *datatype, lua_reference_t ref, void *data) {
+  if(ref == LUA_REFNIL || ref == LUA_NOREF) {
+    //nothing to clean up
+    return;
+  }
+  luaL_unref(L, LUA_REGISTRYINDEX, ref);
+  return;
+}
+
 static void lua_module_event_listener(shuso_t *S, shuso_event_state_t *evs, intptr_t code, void *data, void *pd) {
   lua_State *L = S->lua.state;
   int top = lua_gettop(L);
@@ -1483,32 +1561,14 @@ static void lua_module_event_listener(shuso_t *S, shuso_event_state_t *evs, intp
   lua_pushstring(L, evs->name);
   lua_pushinteger(L, code);
   
-  if(evs->data_type) {
-    const shuso_event_data_type_map_t     *map;
-    luaS_push_lua_module_field(L, "shuttlesock.core.module_event", "data_type_map");
-    lua_pushliteral(L, "Lua");
-    lua_pushstring(L, evs->data_type);
-    if(!luaS_function_call_result_ok(L, 2, true)) {
-      shuso_set_error(S, "failed to map data type \"%s\" for event \"%s\" to Lua: %s", evs->data_type, evs->name, shuso_last_error(S));
-      lua_settop(L, top);
-      return;
-    }
-    map = lua_topointer(L, -1);
-    lua_pop(L, 1);
-    assert(map);
-    if(!map->wrap(S, data, map->privdata)) {
-      shuso_set_error(S, "failed to map data type \"%s\" for event \"%s\" to Lua", evs->data_type, evs->name);
-      lua_settop(L, top);
-      return;
-    }
-  }
-  else {
-    lua_pushnil(L);
-  }
+  luaS_push_wrapped_event_data(L, evs->data_type, data);
   
   lua_pushlightuserdata(L, evs);
 
   luaS_function_call_result_ok(L, 6, false);
+  
+  luaS_wrap_event_data_cleanup(L, evs->data_type, data);
+  
   assert(lua_gettop(L) == top);
   return;
 }
@@ -1878,11 +1938,14 @@ static int Lua_shuso_module_event_publish(lua_State *L) {
   
   lua_settop(L, nargs);
   
-  //TODO: unwrap
+  const char    *datatype = ctx->events[evindex].data_type;
+  void          *data;
   
-  void *data = NULL;
+  lua_reference_t unwrapref = luaS_unwrap_event_data(L, datatype, 4, &data);
+  
   bool ok = shuso_event_publish(S, module, &ctx->events[evindex], code, data);
   
+  luaS_unwrap_event_data_cleanup(L, datatype, unwrapref, data);
   //TODO: unwrap cleanup
   
   lua_pushboolean(L, ok);
@@ -2286,28 +2349,3 @@ shuso_module_t shuso_lua_bridge_module = {
    " core:worker.start.before.lua_gxcopy",
   .initialize = lua_bridge_module_initialize
 };
-
-static bool datatype_string_wrap(shuso_t *S, void *d, void *pd) {
-  lua_State *L = S->lua.state;
-  const char *str = d;
-  lua_pushstring(L, str);
-  return true;
-}
-static bool datatype_string_unwrap(shuso_t *S, void **d, void *pd) {
-  return false;
-}
-//data types
-bool shuso_register_lua_event_data_types(shuso_t *S) {
-  shuso_event_data_type_map_t map;
-  
-  map = (shuso_event_data_type_map_t ){
-    .wrap = datatype_string_wrap,
-    .unwrap = datatype_string_unwrap,
-    .language = "Lua",
-    .data_type = "string"
-  };
-  if(!shuso_register_event_data_type_mapping(S, &map, &shuso_lua_bridge_module, true)) {
-    return false;
-  }
-  return true;
-}

@@ -460,8 +460,6 @@ bool shuso_lua_initialize(shuso_t *S) {
     shuso_register_lua_ipc_handler(S);
   }
   
-  shuso_register_lua_event_data_types(S);
-  
   return true;
 }
 

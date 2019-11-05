@@ -120,6 +120,7 @@ bool shuso_event_cancel(shuso_t *S, shuso_event_state_t *evstate) {
   return true;
 }
 
+/*
 bool shuso_register_event_data_type_mapping(shuso_t *S, shuso_event_data_type_map_t *t, shuso_module_t *registering_module, bool replace_if_present) {
   lua_State *L = S->lua.state;
   
@@ -162,3 +163,4 @@ bool shuso_register_event_data_type_mapping(shuso_t *S, shuso_event_data_type_ma
   
   return luaS_function_call_result_ok(L, 4, false);
 }
+*/
