@@ -1,7 +1,6 @@
 local Event = {}
 
 local events_by_name = {}
-local data_type_map = {}
 
 Event.FIRST_PRIORITY = 127
 Event.LAST_PRIORITY  = -127
@@ -141,62 +140,15 @@ end
 
 Event.metatable = event_mt
 
-function Event.register_data_type(language, data_type_name, registering_module_name, callbacks_ptr)
-  assert(type(language)=="string")
-  assert(type(data_type_name)=="string")
-  assert(type(callbacks_ptr)=="userdata")
-  assert(type(registering_module_name) == "string")
-  
-  if not data_type_map[data_type_name] then
-    data_type_map[data_type_name] = {}
-  end
-  local map = data_type_map[data_type_name]
-  
-  if map[language] then
-    return nil, ("%s event data type \"%s\" is already registered by module %s"):format(language, data_type_name, map[language].module)
-  end
-  map[language] = {
-    ptr = callbacks_ptr,
-    module = registering_module_name
-  }
-  return true
-end
-
-function Event.unregister_data_type(language, data_type_name)
-  if not data_type_map[data_type_name] then
-    return nil, "no such data type mapping"
-  end
-  local current = data_type_map[data_type_name][language]
-  if not current then
-    return nil, "no suck data type mapping"
-  end
-  data_type_map[data_type_name][language] = nil
-  return true
-end
-
-function Event.data_type_map(language, data_type_name)
-  if not data_type_map[data_type_name] then
-    return nil, "unknown event data type " .. tostring(data_type_name)
-  end
-  local mapping = data_type_map[data_type_name][language]
-  if not mapping then
-    return nil, ("no %s mapping for event datatype %s"):format(tostring(language), tostring(data_type_name))
-  end
-  assert(type(mapping.ptr)=="userdata")
-  return mapping.ptr, mapping.module
-end
-
 setmetatable(Event, {
   __gxcopy_save_module_state = function()
     local k = {
       by_name = events_by_name,
-      data_type_map = data_type_map
     }
     return k
   end,
   __gxcopy_load_module_state = function(state)
     events_by_name = assert(state.by_name, "by_name missing from global Event state")
-    data_type_map = assert(state.data_type_map, "data_type_map missing from global Event state")
   end
 })
 
