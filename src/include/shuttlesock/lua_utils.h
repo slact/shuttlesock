@@ -60,7 +60,7 @@ bool luaS_gxcopy_finish(lua_State *source, lua_State *destination);
 
 bool luaS_streq(lua_State *L, int index, const char *str);
 #define luaS_streq_literal(L, index, str) \
- (lua_pushliteral(L, str) && luaS_streq(L, index, NULL))
+ (lua_pushliteral(L, str) && luaS_streq(L, index < 0 ? index - 1 : index, NULL))
 
 int luaS_table_concat(lua_State *L, const char *delimeter); //table.concat the table at the top of the stack, popping it and pushing the concatenated string
 int luaS_table_count(lua_State *L, int idx); //count all non-nil elements in table. O(n)

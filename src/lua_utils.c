@@ -1024,10 +1024,10 @@ bool luaS_gxcopy_module_state(lua_State *Ls, lua_State *Ld, const char *module_n
 }
 bool luaS_streq(lua_State *L, int index, const char *str) {
   if(str) {
+    index = lua_absindex(L, index);
     lua_pushstring(L, str);
   }
-  int n = lua_absindex(L, index);
-  bool equal = lua_compare(L, n, -1, LUA_OPEQ);
+  bool equal = lua_compare(L, index, -1, LUA_OPEQ);
   lua_pop(L, 1);
   return equal;
 }
