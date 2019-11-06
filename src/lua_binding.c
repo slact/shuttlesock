@@ -1595,8 +1595,7 @@ static bool lua_module_initialize(shuso_t *S, shuso_module_t *module) {
   assert(lua_istable(L, -1));
   
   luaS_push_lua_module_field(L, "shuttlesock.module", "module_publish_events");
-  lua_pushvalue(L, -2);
-  lua_gettable(L, -2);
+  lua_getfield(L, -1, module->name);
   lua_remove(L, -2);
   if(lua_istable(L, -1)) {
     int npub = luaS_table_count(L, -1);
@@ -1633,6 +1632,7 @@ static bool lua_module_initialize(shuso_t *S, shuso_module_t *module) {
         lua_pushinteger(L, i);
         lua_setfield(L, -2, "index");
       }
+      
       i++;
       lua_pop(L, 1);
     }
@@ -1881,39 +1881,44 @@ static int Lua_shuso_module_event_cancel(lua_State *L) {
 static int Lua_shuso_module_event_publish(lua_State *L) {
   shuso_t                 *S = shuso_state(L);
   int                      nargs = lua_gettop(L);
-  luaL_checktype(L, 1, LUA_TTABLE);
+  const char              *modname = luaL_checkstring(L, 1);
   const char              *evname = luaL_checkstring(L, 2);
   intptr_t                 code;
-  switch(lua_type(L, 3)) {
-    case LUA_TNUMBER:
-      code = lua_tointeger(L, 3);
-      break;
-    case LUA_TBOOLEAN:
-      code = lua_toboolean(L, 3);
-      break;
-    /* could be allowed in theory, but it's probably best forbidden to train developers of non-C modules
-    case LUA_TUSERDATA:
-    case LUA_TLIGHTUSERDATA:
-      code = lua_topointer(L, 3);
-      break;
-    */
-    default:
-      lua_pushnil(L);
-      lua_pushfstring(L, "published event code cannot have type %s", lua_typename(L, 3));
-      return 2;
+  if(nargs < 3) {    
+    code = 0;
+  }
+  else {
+    switch(lua_type(L, 3)) {
+      case LUA_TNUMBER:
+        code = lua_tointeger(L, 3);
+        break;
+      case LUA_TBOOLEAN:
+        code = lua_toboolean(L, 3);
+        break;
+      /* could be allowed in theory, but it's probably best forbidden to train developers of non-C modules
+      case LUA_TUSERDATA:
+      case LUA_TLIGHTUSERDATA:
+        code = lua_topointer(L, 3);
+        break;
+      */
+      default:
+        lua_pushnil(L);
+        lua_pushfstring(L, "published event code cannot have type %s", lua_typename(L, 3));
+        return 2;
+    }
   }
   
-  lua_getfield(L, 1, "name");
-  const char              *modname = lua_tostring(L, -1);
-  lua_pop(L, 1);
   shuso_module_t          *module = shuso_get_module(S, modname);
-  assert(module);
+  if(!module) {
+    lua_pushnil(L);
+    lua_pushfstring(L, "no such module '%s'", modname);
+    return 2;
+  }
   lua_module_core_ctx_t   *ctx = shuso_core_context(S, module);
   assert(ctx);
   
   luaS_push_lua_module_field(L, "shuttlesock.module", "module_publish_events");
-  lua_pushvalue(L, -2);
-  lua_gettable(L, -2);
+  lua_getfield(L, -1, modname);
   lua_remove(L, -2);
   if(!lua_istable(L, -1)) {
     return luaL_error(L, "couldn't find module_publish_events table");
@@ -1933,20 +1938,28 @@ static int Lua_shuso_module_event_publish(lua_State *L) {
     return 2;
   }
   int evindex = lua_tointeger(L, -1);
-  assert(evindex > 0);
-  assert(ctx->events_count < evindex);
+  assert(evindex >= 0);
+  assert(evindex < ctx->events_count);
   
   lua_settop(L, nargs);
   
+  assert(evname == ctx->events[evindex].name);
+  
   const char    *datatype = ctx->events[evindex].data_type;
   void          *data;
-  
-  lua_reference_t unwrapref = luaS_unwrap_event_data(L, datatype, 4, &data);
+  lua_reference_t unwrapref;
+  if(nargs >=4) {
+    unwrapref = luaS_unwrap_event_data(L, datatype, 4, &data);
+  }
+  else {
+    data = NULL;
+  }
   
   bool ok = shuso_event_publish(S, module, &ctx->events[evindex], code, data);
   
-  luaS_unwrap_event_data_cleanup(L, datatype, unwrapref, data);
-  //TODO: unwrap cleanup
+  if(nargs >= 4) {
+    luaS_unwrap_event_data_cleanup(L, datatype, unwrapref, data);
+  }
   
   lua_pushboolean(L, ok);
   return 1;

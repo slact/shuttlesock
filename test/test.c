@@ -514,7 +514,6 @@ describe(lua_bridge) {
   }
 }
 
-
 describe(lua_api) {
   static shuso_t          *S = NULL;
   static test_runcheck_t  *chk = NULL;
@@ -524,6 +523,24 @@ describe(lua_api) {
   after_each() {
     if(S) shusoT_destroy(S, &chk);
   }
+  
+  subdesc(utils) {
+    test("streq") {
+      lua_State *L = S->lua.state;
+      lua_pushliteral(L, "beep");
+      lua_pushliteral(L, "bamp");
+      assert(!luaS_streq(L, -1, "fizz"));
+      assert(!luaS_streq(L, -2, "buzz"));
+      assert(luaS_streq(L, -1, "bamp"));
+      assert(luaS_streq(L, -2, "beep"));
+      
+      assert(!luaS_streq_literal(L, -1, "fizz"));
+      assert(!luaS_streq_literal(L, -2, "buzz"));
+      assert(luaS_streq_literal(L, -1, "bamp"));
+      assert(luaS_streq_literal(L, -2, "beep"));
+    }
+  }
+  
   subdesc(modules) {
     skip("a module") {
       lua_State *L = S->lua.state;
@@ -545,6 +562,21 @@ describe(lua_api) {
       shuso_run(S);
       assert_shuso_ran_ok(S);
     }
+    
+    test("module publishing events") {
+      assert_luaL_dofile(S->lua.state, "module_publishing_events.lua");
+      assert_shuso(S, shuso_configure_finish(S));
+      shuso_run(S);
+      assert_shuso_ran_ok(S);
+    }
+    /*
+    test("module subscribing to optional events") {
+      assert_luaL_dofile(S->lua.state, "module_with_optional_events.lua");
+      assert_shuso(S, shuso_configure_finish(S));
+      shuso_run(S);
+      assert_shuso_ran_ok(S);
+    }
+    */
   }
   
   test("lazy atomics") {

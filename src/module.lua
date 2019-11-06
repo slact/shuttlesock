@@ -10,25 +10,28 @@ local Module = {
 local function split_subscribe_list_string(str)
   local Event = require "shuttlesock.core.module_event"
   local events = {}
-  local badchar = str:match("[^%s%w%_%.%:]")
+  local events_required = {}
+  local badchar = str:match("[^%~%s%w%_%.%:]")
   if badchar then
-    return nil, "invalid character '"..badchar.."' in subscribe string"
+    return nil, nil, "invalid character '"..badchar.."' in subscribe string"
   end
   for mevname in str:gmatch("%S+") do
-    local modname, evname = mevname:match("^([%w%_%.]+):([%w%_%.]+)$")
+    local optional, modname, evname = mevname:match("^(~?)([%w%_%.]+):([%w%_%.]+)$")
+    optional = (optional == "~")
     if not modname or not evname then
-      return nil, "invalid value \""..mevname.."\" in subscribe string"
+      return nil, nil, "invalid value \""..mevname.."\" in subscribe string"
     end
     if not modname:match("^[%w%_]+$") then
-      return nil, "invalid module name \""..modname.."\" in value \""..mevname.."\" in subscribe string"
+      return nil, nil, "invalid module name \""..modname.."\" in value \""..mevname.."\" in subscribe string"
     end
     if events[mevname] then
-      return nil, "duplicate value \""..mevname.."\" in subscribe string"
+      return nil, nil, "duplicate value \""..mevname.."\" in subscribe string"
     end
     
-    events[mevname]=Event.get(modname, evname)
+    events[mevname] = Event.get(modname, evname)
+    events_required[mevname] = not optional
   end
-  return events
+  return events, events_required
 end
 
 local function split_publish_list_string(modname, str)
@@ -101,7 +104,11 @@ function Module.currently_initializing_module()
   end
 end
 
-function Module.add_dependency(provider, dependent)
+function Module.add_optional_dependency(provider, dependent)
+  return Module.add_dependency(provider, dependent, true)
+end
+
+function Module.add_dependency(provider, dependent, optional)
   assert(type(provider) == "string")
   assert(type(dependent) == "string")
   if not Module.deps[provider] then
@@ -200,7 +207,8 @@ function Module.new(name, ptr, version, subscribe_string, publish_string, parent
     parent_module_names = {},
     events = {
       publish = {},
-      subscribe = {}
+      subscribe = {},
+      subscribe_required = {}
     }
   }
   setmetatable(self, module_mt)
@@ -211,13 +219,17 @@ function Module.new(name, ptr, version, subscribe_string, publish_string, parent
     return nil, ("failed to add module %s: %s"):format(name, err)
   end
   
-  self.events.subscribe, err = split_subscribe_list_string(subscribe_string)
+  self.events.subscribe, self.events.subscribe_required, err = split_subscribe_list_string(subscribe_string)
   if not self.events.subscribe then
     return nil, ("failed to add module %s: %s"):format(name, err)
   end
   
-  for _, event in pairs(self.events.subscribe) do
-    Module.add_dependency(event.module_name, self.name);
+  for evname, event in pairs(self.events.subscribe) do
+    if self.events.subscribe_required[evname] then
+      Module.add_dependency(event.module_name, self.name)
+    else
+      Module.add_optional_dependency(event.module_name, self.name)
+    end
   end
   
   self.events.publish, err = split_publish_list_string(name, publish_string)

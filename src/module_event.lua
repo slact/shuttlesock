@@ -24,7 +24,7 @@ function Event.find(module_name, event_name)
   return event
 end
 
-function Event.get(module_name, event_name)
+function Event.get(module_name, event_name, opts)
   if type(module_name)=="string" and not event_name then
     module_name, event_name = module_name:match(Event.MODULE_EVENT_NAME_PATTERN)
   end

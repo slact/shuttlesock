@@ -60,7 +60,9 @@ function Module.new(mod, version)
   assert(type(mod) == "table")
   setmetatable(mod, module_mt)
   Module.module_subscribers[mod]={}
-  Module.module_publish_events[mod]={}
+  if mod.name then
+    Module.module_publish_events[mod.name]={}
+  end
   if mod.subscribe then
     subscribe_to_event_names(mod)
   end
@@ -136,8 +138,9 @@ function module:add()
   end
 
   module_table.subscribe = table.concat(subs, " ")
+  self.subscribe = nil
   
-  for k, v in pairs(self.publish or {}) do
+  for k, v in pairs(rawget(self, "publish") or {}) do
     local name, opts
     if type(k)=="number" then
       name, opts = v, {}
@@ -151,12 +154,13 @@ function module:add()
     elseif name:match("%:%;") then
       error("publish name " .. name .. " can't contain punctuation other than '.'")
     end
-    Module.module_publish_events[self][name]=opts
+    Module.module_publish_events[self.name][name]=opts
   end
   local publish_keys = {}
-  for k, _ in pairs(Module.module_publish_events[self] or {}) do
+  for k, _ in pairs(Module.module_publish_events[self.name] or {}) do
     table.insert(publish_keys, k)
   end
+  self.publish = nil
   
   module_table.publish = table.concat(publish_keys, " ")
   local parent_modules = {}
@@ -192,6 +196,10 @@ function module:subscribe(event_name, subscriber_function, priority)
     subscriber = subscriber_function
   })
   return self
+end
+
+function module:publish(event_name, code, data)
+  return Core.module_event_publish(self.name, event_name, code, data)
 end
 
 function module:type()
