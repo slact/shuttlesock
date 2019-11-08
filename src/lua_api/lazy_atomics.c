@@ -150,7 +150,7 @@ static int Lua_lazy_atomics_value_set(lua_State *L) {
     }
     default: {
       lua_pushnil(L);
-      lua_pushfstring(L, "can't set atomic value type %s", lua_typename(L, 2));
+      lua_pushfstring(L, "can't set atomic value type %s", lua_typename(L, type));
       return 2;
     }
   }

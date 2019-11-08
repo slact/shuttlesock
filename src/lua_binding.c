@@ -1649,6 +1649,13 @@ static bool lua_module_initialize(shuso_t *S, shuso_module_t *module) {
       const char *event_name = lua_tostring(L, -2);
       lua_pushnil(L);
       while(lua_next(L, -2)) {
+        
+        lua_getfield(L, -1, "optional_event_name");
+        if(lua_isstring(L, -1)) {
+          event_name = lua_tostring(L, -1);
+        }
+        lua_pop(L, 1);
+        
         lua_getfield(L, -1, "priority");
         int priority = lua_tointeger(L, -1);
         lua_pop(L, 1);
@@ -1884,6 +1891,7 @@ static int Lua_shuso_module_event_publish(lua_State *L) {
   const char              *modname = luaL_checkstring(L, 1);
   const char              *evname = luaL_checkstring(L, 2);
   intptr_t                 code;
+  
   if(nargs < 3) {    
     code = 0;
   }
@@ -1895,6 +1903,9 @@ static int Lua_shuso_module_event_publish(lua_State *L) {
       case LUA_TBOOLEAN:
         code = lua_toboolean(L, 3);
         break;
+      case LUA_TNIL:
+        code = 0;
+        break;
       /* could be allowed in theory, but it's probably best forbidden to train developers of non-C modules
       case LUA_TUSERDATA:
       case LUA_TLIGHTUSERDATA:
@@ -1903,7 +1914,7 @@ static int Lua_shuso_module_event_publish(lua_State *L) {
       */
       default:
         lua_pushnil(L);
-        lua_pushfstring(L, "published event code cannot have type %s", lua_typename(L, 3));
+        lua_pushfstring(L, "published event code cannot have type %s", luaL_typename(L, 3));
         return 2;
     }
   }

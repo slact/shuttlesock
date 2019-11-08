@@ -62,7 +62,7 @@ do
     return self.module_name..":"..self.name
   end
   
-  function event:add_listener(dst_module_ptr, listener_ptr, privdata_ptr, priority)
+  function event:add_listener(dst_module_ptr, listener_ptr, privdata_ptr, priority, optional)
     assert(type(dst_module_ptr) == "userdata")
     assert(type(listener_ptr) == "userdata")
     assert(type(privdata_ptr) == "userdata")
@@ -99,7 +99,8 @@ do
       module = subscriber_module,
       listener = listener_ptr,
       privdata = privdata_ptr,
-      priority = priority
+      priority = priority,
+      optional = optional
     }
     
     if priority == Event.LAST_PRIORITY then
@@ -118,6 +119,12 @@ do
       if not inserted then
         table.insert(self.listeners, #self.listeners+1, listener)
       end
+    end
+    
+    if self.optional == nil and listener.optional then
+      self.optional = true
+    elseif self.optional and not listener.optional then
+      self.optional = false
     end
     
     return listener

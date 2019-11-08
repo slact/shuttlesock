@@ -39,6 +39,12 @@ bool shuso_event_listen(shuso_t *S, const char *name, shuso_module_event_fn *cal
 bool shuso_event_listen_with_priority(shuso_t *S, const char *name, shuso_module_event_fn *callback, void *pd, int8_t priority) {
   lua_State       *L = S->lua.state;
   shuso_module_t  *module;
+  int              top = lua_gettop(L);
+  
+  bool optional = name[0] == '~';
+  if(optional) {
+    name = &name[1];
+  }
   
   luaS_push_lua_module_field(L, "shuttlesock.core.module", "currently_initializing_module");
   if(!luaS_function_call_result_ok(L, 0, true)) {
@@ -51,9 +57,20 @@ bool shuso_event_listen_with_priority(shuso_t *S, const char *name, shuso_module
   
   luaS_push_lua_module_field(L, "shuttlesock.core.module_event", "find");
   lua_pushstring(L, name);
-  if(!luaS_function_call_result_ok(L, 1, true)) {
-    return false;
+  luaS_call(L, 1, 2);
+  if(lua_isnil(L, -2)) {
+    //module not found
+    if(optional) {
+      lua_settop(L, top);
+      return true;
+    }
+    else {
+      shuso_set_error(S, "%s", lua_isnil(L, -1) ? "failed to find module" : lua_tostring(L, -1));
+      lua_settop(L, top);
+      return false;
+    }
   }
+  lua_pop(L, 1);
   
   lua_getfield(L, -1, "add_listener");
   lua_pushvalue(L, -2);
@@ -62,11 +79,19 @@ bool shuso_event_listen_with_priority(shuso_t *S, const char *name, shuso_module
   lua_pushlightuserdata(L, pd);
   lua_pushnumber(L, priority);
     
-  if(!luaS_function_call_result_ok(L, 5, false)) {
-    lua_pop(L, 1);
-    return false;
+  luaS_call(L, 5, 2);
+  if(lua_isnil(L, -2)) {
+    if(optional) {
+      lua_settop(L, top);
+      return true;
+    }
+    else {
+      shuso_set_error(S, "%s", lua_isnil(L, -1) ? "failed to add listener" : lua_tostring(L, -1));
+      lua_settop(L, top);
+      return false;
+    }
   }
-  lua_pop(L, 1);
+  lua_settop(L, top);
   return true;
 }
 

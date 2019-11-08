@@ -54,15 +54,13 @@ end
 
 function Module.new(mod, version)
   if type(mod) == "string" then
-    assert(type(version) == "string")
-    mod = { name = module, version = version }
+    assert(type(version) == "string", "Lua module version missing")
+    mod = { name = mod, version = version }
   end
+  assert(type(mod.name) == "string", "Lua module name missing")
   assert(type(mod) == "table")
   setmetatable(mod, module_mt)
   Module.module_subscribers[mod]={}
-  if mod.name then
-    Module.module_publish_events[mod.name]={}
-  end
   if mod.subscribe then
     subscribe_to_event_names(mod)
   end
@@ -119,8 +117,15 @@ function module:add()
   local subs = {}
   local subs_unique = {}
   
+  if lua_modules[self.name] and lua_modules[self.name] ~= self then
+    error(("a different module named %s has already been added to Shuttlesock"):format(self.name))
+  elseif lua_modules[self.name] == self then
+    return nil, "This module has already been added"
+  end
+  
   subscribe_to_event_names(self)
   for full_event_name, subscribers in pairs(Module.module_subscribers[self]) do
+    local optional = true
     for _, sub in ipairs(subscribers) do
       local subscriber = sub.subscriber
       sub.wrapper = function (publisher_module_name, module_name, event_name, code, data, event_ptr)
@@ -130,16 +135,20 @@ function module:add()
       end
       table.insert(Module.event_subscribers, sub.wrapper)
       sub.index = #Module.event_subscribers
-      if not subs_unique[full_event_name] then
-        subs_unique[full_event_name] = true
-        table.insert(subs, full_event_name)
-      end
+      optional = sub.optional_event_name and optional
+    end
+    if not subs_unique[full_event_name] then
+      subs_unique[full_event_name] = true
+      table.insert(subs, (optional and "~" or "") .. full_event_name)
     end
   end
 
   module_table.subscribe = table.concat(subs, " ")
   self.subscribe = nil
   
+  if not Module.module_publish_events[self.name] then
+    Module.module_publish_events[self.name] = {}
+  end
   for k, v in pairs(rawget(self, "publish") or {}) do
     local name, opts
     if type(k)=="number" then
@@ -188,12 +197,23 @@ function module:subscribe(event_name, subscriber_function, priority)
   end
   assert(type(event_name) == "string", "event name must be a string")
   assert(type(subscriber_function) == "function", "subscriber function must be a function in case that's not perfectly clear")
+  
+  local optional
+  optional, event_name = event_name:match("^(%~?)(.*)")
+  optional = #optional > 0
+  
+  if lua_modules[self.name] and not Module.module_subscribers[self][event_name] then
+    --module already added, but the subscribe event name wasn't declared upfront
+    error(("Lua module %s can't subscribe to undeclared event %s when it's already been added to Shuttlesock"):format(self.name, event_name))
+  end
+    
   if not Module.module_subscribers[self][event_name] then
     Module.module_subscribers[self][event_name] = {}
   end
   table.insert(Module.module_subscribers[self][event_name], {
     priority = tonumber(priority) or 0,
-    subscriber = subscriber_function
+    subscriber = subscriber_function,
+    optional_event_name = optional and ("~"..event_name) or nil
   })
   return self
 end

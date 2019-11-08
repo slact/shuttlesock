@@ -542,7 +542,7 @@ describe(lua_api) {
   }
   
   subdesc(modules) {
-    skip("a module") {
+    test("a module") {
       lua_State *L = S->lua.state;
       assert_luaL_dofile(L, "module_simple.lua");
       assert_shuso(S, shuso_configure_finish(S));
@@ -550,7 +550,7 @@ describe(lua_api) {
       assert_shuso_ran_ok(S);
     }
     
-    skip("a module that can't be gxcopied") {
+    test("a module that can't be gxcopied") {
       lua_State *L = S->lua.state;
       assert_luaL_dofile( L, "module_with_bad_gxcopy.lua");
       shuso_configure_finish(S);
@@ -569,14 +569,13 @@ describe(lua_api) {
       shuso_run(S);
       assert_shuso_ran_ok(S);
     }
-    /*
+    
     test("module subscribing to optional events") {
       assert_luaL_dofile(S->lua.state, "module_with_optional_events.lua");
       assert_shuso(S, shuso_configure_finish(S));
       shuso_run(S);
       assert_shuso_ran_ok(S);
     }
-    */
   }
   
   test("lazy atomics") {

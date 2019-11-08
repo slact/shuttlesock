@@ -309,13 +309,21 @@ do
     end
     for event_name, event in pairs(self.events.subscribe) do
       local publishing_module = Module.find(event.module_name)
+      local required = self.events.subscribe_required[event_name]
+      local event_present = true
       if not publishing_module then
-        return nil, ("module %s depends on event %s, but module %s was not found"):format(self.name, event_name, event.module_name)
+        event_present = false
+        if required then
+          return nil, ("module %s depends on event %s, but module %s was not found"):format(self.name, event_name, event.module_name)
+        end
       end
-      if not publishing_module:event(event.name) then
-        return nil, ("module %s depends on event %s, but module %s does not publish such an event"):format(self.name, event_name, event.module_name)
+      if not publishing_module:event(event.name) and not event.optional then
+        event_present = false
+        if required then
+          return nil, ("module %s depends on event %s, but module %s does not publish such an event"):format(self.name, event_name, event.module_name)
+        end
       end
-      if not parent_modules_unique[publishing_module] then
+      if event_present and not parent_modules_unique[publishing_module] then
         parent_modules_unique[publishing_module]=true
         table.insert(self.parent_modules, publishing_module)
       end
