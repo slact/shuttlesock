@@ -6,6 +6,8 @@
 
 extern shuso_module_t shuso_core_module;
 
+#define SHUSO_MODULE_INDEX_INVALID 255
+
 struct shuso_module_setting_s {
   const char             *name;
   const char             *aliases;

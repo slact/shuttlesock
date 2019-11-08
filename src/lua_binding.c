@@ -1597,8 +1597,8 @@ static bool lua_module_initialize(shuso_t *S, shuso_module_t *module) {
   luaS_push_lua_module_field(L, "shuttlesock.module", "module_publish_events");
   lua_getfield(L, -1, module->name);
   lua_remove(L, -2);
-  if(lua_istable(L, -1)) {
-    int npub = luaS_table_count(L, -1);
+  int npub;
+  if(lua_istable(L, -1) && (npub = luaS_table_count(L, -1)) > 0) {
     shuso_module_event_t *events = shuso_stalloc(&S->stalloc, sizeof(*events) * npub);
     if(events == NULL) {
       lua_settop(L, top);

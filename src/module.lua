@@ -5,6 +5,9 @@ local Module = {
   index_counter = 0,
   max_module_count = 255
 }
+Module.dependents_indexed = {}
+Module.dependents = {}
+Module.providers = {}
 
 
 local function split_subscribe_list_string(str)
@@ -71,10 +74,6 @@ end
 
 local module_mt
 
-
-Module.deps_indexed = {}
-Module.deps = {}
-
 function Module.start_initializing_module(module_name)
   if Module.currently_initializing_module_name then
     return nil, "another module ("..Module.currently_initializing_module_name..") is already initializing"
@@ -104,31 +103,31 @@ function Module.currently_initializing_module()
   end
 end
 
-function Module.add_optional_dependency(provider, dependent)
-  return Module.add_dependency(provider, dependent, true)
-end
-
-function Module.add_dependency(provider, dependent, optional)
-  assert(type(provider) == "string")
-  assert(type(dependent) == "string")
-  if not Module.deps[provider] then
-    Module.deps[provider] = {}
-    Module.deps_indexed[provider] = {}
+function Module.add_dependency(provider_name, dependent_name)
+  assert(type(provider_name) == "string")
+  assert(type(dependent_name) == "string")
+  if not Module.dependents[provider_name] then
+    Module.dependents[provider_name] = {}
+    Module.dependents_indexed[provider_name] = {}
   end
-  if not Module.deps_indexed[provider][dependent] then
-    table.insert(Module.deps[provider], dependent)
-    Module.deps_indexed[provider][dependent] = #Module.deps[provider]
+  if not Module.dependents_indexed[provider_name][dependent_name] then
+    table.insert(Module.dependents[provider_name], dependent_name)
+    Module.dependents_indexed[provider_name][dependent_name] = #Module.dependents[provider_name]
   end
+  if not Module.providers[dependent_name] then
+    Module.providers[dependent_name]={}
+  end
+  Module.providers[dependent_name][provider_name]=true
   return true
 end
 
 function Module.dependency_index(provider, dependent)
   assert(type(provider) == "string")
   assert(type(dependent) == "string")
-  if not Module.deps[provider] then
+  if not Module.dependents[provider] then
     return nil, "unknown provider module "..provider
   end
-  local index = Module.deps_indexed[provider][dependent]
+  local index = Module.dependents_indexed[provider][dependent]
   if not index then
     return nil, "unknown dependent module "..dependent
   end
@@ -137,13 +136,13 @@ end
 
 function Module.get_dependencies(provider)
   assert(type(provider) == "string")
-  return Module.deps[provider] or {}
+  return Module.dependents[provider] or {}
 end
 
 function Module.each_dependency()
   return coroutine.wrap(function()
-    for _, provider in pairs(Module.deps) do
-      for _, dependent in ipairs(Module.deps[provider]) do
+    for _, provider in pairs(Module.dependents) do
+      for _, dependent in ipairs(Module.dependents[provider]) do
         coroutine.yield(provider, dependent)
       end
     end
@@ -227,8 +226,6 @@ function Module.new(name, ptr, version, subscribe_string, publish_string, parent
   for evname, event in pairs(self.events.subscribe) do
     if self.events.subscribe_required[evname] then
       Module.add_dependency(event.module_name, self.name)
-    else
-      Module.add_optional_dependency(event.module_name, self.name)
     end
   end
   
@@ -247,6 +244,9 @@ function Module.new(name, ptr, version, subscribe_string, publish_string, parent
   if Module.core then
     Module.add_dependency(Module.core.name, self.name);
   end
+  
+  --everyone depends on the core module
+  Module.add_dependency("core", self.name)
   
   return self
 end
@@ -295,17 +295,12 @@ do
     if self.frozen then
       return true
     end
-    local parent_modules_unique = {}
-    self.parent_modules = {}
     for _, modname in ipairs(self.parent_module_names) do
       local parent = Module.find(modname)
       if not parent then
         return nil, "module "..self.name.." requires parent module "..modname..", which was not found"
       end
-      if not parent_modules_unique[parent] then
-        parent_modules_unique[parent]=true
-        table.insert(self.parent_modules, parent)
-      end
+      Module.add_dependency(parent.name, self.name)
     end
     for event_name, event in pairs(self.events.subscribe) do
       local publishing_module = Module.find(event.module_name)
@@ -323,9 +318,8 @@ do
           return nil, ("module %s depends on event %s, but module %s does not publish such an event"):format(self.name, event_name, event.module_name)
         end
       end
-      if event_present and not parent_modules_unique[publishing_module] then
-        parent_modules_unique[publishing_module]=true
-        table.insert(self.parent_modules, publishing_module)
+      if event_present then
+        Module.add_dependency(publishing_module.name, self.name)
       end
     end
     
@@ -335,11 +329,13 @@ do
   
   function module:create_parent_modules_index_map()
     assert(self.frozen)
+    
     local map = {}
     for i=1, Module.count() do
       map[i]=0
     end
-    for _, parent in ipairs(self.parent_modules) do
+    for parent_name, _ in pairs(Module.providers[self.name]) do
+      local parent = Module.find(parent_name)
       for i, child in ipairs(parent:dependent_modules()) do
         if child == self then
           map[parent.index] = i
@@ -399,7 +395,10 @@ setmetatable(Module, {
       by_name = Module.by_name,
       by_ptr = Module.by_ptr,
       index_counter = Module.index_counter,
-      max_module_count = Module.max_module_count
+      max_module_count = Module.max_module_count,
+      dependents_indexed = Module.dependents_indexed,
+      dependents = Module.dependents,
+      providers = Module.providers
     }
   end,
   __gxcopy_load_module_state = function(state)
@@ -408,6 +407,9 @@ setmetatable(Module, {
     Module.by_ptr = assert(state.by_ptr)
     Module.index_counter = assert(state.index_counter)
     Module.max_module_count = assert(state.max_module_count)
+    Module.dependents_indexed = state.dependents_indexed
+    Module.dependents = state.dependents
+    Module.providers = state.providers
   end
 })
 

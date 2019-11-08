@@ -156,7 +156,9 @@ static bool shuso_module_freeze(shuso_t *S, shuso_module_t *mod) {
   }
   for(int i=0; i<n; i++) {
     lua_rawgeti(L, -1, i+1);
-    mod->parent_modules_index_map[i]=lua_tointeger(L, -1) - 1; //-1 for lua-to-C index conversion
+    int index = lua_tointeger(L, -1); //lua index
+    index = index > 0 ? index - 1 : SHUSO_MODULE_INDEX_INVALID; //-1 for lua-to-c conversion
+    mod->parent_modules_index_map[i]=index;
     lua_pop(L, 1);
   }
   lua_pop(L, 1);
@@ -172,7 +174,7 @@ static bool shuso_module_freeze(shuso_t *S, shuso_module_t *mod) {
   
 #ifdef SHUTTLESOCK_DEBUG_MODULE_SYSTEM
   luaS_push_lua_module_field(L, "shuttlesock.core.module", "count");
-  if(!luaS_function_call_result_ok(L, 1, true)) {
+  if(!luaS_function_call_result_ok(L, 0, true)) {
     return false;
   }
   
@@ -329,12 +331,33 @@ bool shuso_context_list_initialize(shuso_t *S, shuso_module_t *parent, shuso_mod
   return true;
 }
 
+#ifdef SHUTTLESOCK_DEBUG_MODULE_SYSTEM
+#define check_context_offset(S, parent, module, context_list, offset) \
+  do { \
+    if(offset == SHUSO_MODULE_INDEX_INVALID) { \
+      shuso_set_error(S, "No context for module %s in %s", module->name, parent->name); \
+      raise(SIGABRT); \
+      return NULL; \
+    } \
+    assert(offset > 0 && offset < context_list->parent->submodules.count); \
+  } while(0)
+#else
+#define check_context_offset(S, parent, module, context_list, offset) \
+  do { \
+    if(offset == SHUSO_MODULE_INDEX_INVALID) { \
+      shuso_set_error(S, "No context for module %s in %s", module->name, parent->name); \
+      return NULL; \
+    } \
+  } while(0)
+#endif
+
 void *shuso_context(shuso_t *S, shuso_module_t *parent, shuso_module_t *module, shuso_module_context_list_t *context_list) {
 #ifdef SHUTTLESOCK_DEBUG_MODULE_SYSTEM
   assert(context_list->parent == parent);
   assert(parent->submodules.submodule_presence_map[module->index] == 1);
 #endif
   int offset = module->parent_modules_index_map[parent->index];
+  check_context_offset(S, parent, module, context_list, offset);
   return context_list->context[offset];
 }
 
@@ -344,6 +367,7 @@ bool shuso_set_context(shuso_t *S, shuso_module_t *parent, shuso_module_t *modul
   assert(parent->submodules.submodule_presence_map[module->index] == 1);
 #endif
   int offset = module->parent_modules_index_map[parent->index];
+  check_context_offset(S, parent, module, context_list, offset);
   context_list->context[offset] = ctx;
   return true;
 }
