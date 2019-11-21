@@ -84,7 +84,6 @@ typedef struct shuso_setting_block_s shuso_setting_block_t;
 typedef struct shuso_setting_s shuso_setting_t;
 
 typedef struct shuso_config_s shuso_config_t;
-typedef struct shuso_config_file_s shuso_config_file_t;
 
 typedef struct shuso_module_s shuso_module_t;
 typedef struct shuso_module_event_s shuso_module_event_t;

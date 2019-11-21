@@ -104,13 +104,6 @@ struct shuso_config_s {
   int                 workers;
 }; // shuso_config_t
 
-struct shuso_config_file_s {
-  const char *path;
-  int         fd;
-  size_t      sz;
-  const char *data;
-}; // shuso_config_file_t
-
 typedef struct {
   pid_t           pid;
   enum {
