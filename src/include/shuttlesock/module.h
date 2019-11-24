@@ -4,8 +4,6 @@
 #include <shuttlesock/module_event.h>
 //core-facing stuff
 
-extern shuso_module_t shuso_core_module;
-
 #define SHUSO_MODULE_INDEX_INVALID 255
 
 struct shuso_module_setting_s {
@@ -50,32 +48,6 @@ struct shuso_module_context_list_s {
   void          **context;
 }; //shuso_module_context_list_t
 
-struct shuso_core_module_ctx_s {
-  shuso_module_context_list_t context_list;
-  struct {
-    shuso_module_event_t configure;
-    shuso_module_event_t configure_after;
-    
-    shuso_module_event_t start_master;
-    shuso_module_event_t start_manager;
-    shuso_module_event_t start_worker;
-    shuso_module_event_t start_worker_before;
-    shuso_module_event_t start_worker_before_lua_gxcopy;
-    
-    shuso_module_event_t stop_master;
-    shuso_module_event_t stop_manager;
-    shuso_module_event_t stop_worker;
-    
-    shuso_module_event_t manager_all_workers_started;
-    shuso_module_event_t master_all_workers_started;
-    shuso_module_event_t worker_all_workers_started;
-    shuso_module_event_t worker_exited;
-    shuso_module_event_t manager_exited;
-    
-    shuso_module_event_t error;
-  } events;
-}; //shuso_core_module_ctx_t
-
 
 bool shuso_set_core_module(shuso_t *S, shuso_module_t *module);
 bool shuso_add_module(shuso_t *S, shuso_module_t *module);
@@ -88,11 +60,6 @@ bool shuso_context_list_initialize(shuso_t *S, shuso_module_t *parent, shuso_mod
 
 void *shuso_context(shuso_t *S, shuso_module_t *parent, shuso_module_t *module, shuso_module_context_list_t *context_list);
 bool shuso_set_context(shuso_t *S, shuso_module_t *parent, shuso_module_t *module, void *ctx, shuso_module_context_list_t *context_list);
-
-void *shuso_core_context(shuso_t *S,  shuso_module_t *module);
-bool shuso_set_core_context(shuso_t *S, shuso_module_t *module, void *ctx);
-
-bool shuso_core_module_event_publish(shuso_t *S, const char *name, intptr_t code, void *data);
 
 // internal stuff
 bool shuso_module_system_initialize(shuso_t *S, shuso_module_t *core_module);

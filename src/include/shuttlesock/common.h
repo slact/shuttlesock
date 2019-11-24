@@ -90,7 +90,6 @@ typedef struct shuso_module_event_s shuso_module_event_t;
 typedef struct shuso_module_context_list_s shuso_module_context_list_t;
 typedef struct shuso_module_setting_s shuso_module_setting_t;
 typedef struct shuso_event_state_s shuso_event_state_t;
-typedef struct shuso_core_module_ctx_s shuso_core_module_ctx_t;
 
 typedef struct shuso_hostinfo_s shuso_hostinfo_t;
 typedef struct shuso_sockopts_s shuso_sockopts_t;

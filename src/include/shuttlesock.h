@@ -23,8 +23,9 @@
 #include <shuttlesock/config.h>
 #include <shuttlesock/lua_utils.h>
 #include <shuttlesock/sysutil.h>
-
 #include <shuttlesock/module_event.h>
+
+#include <shuttlesock/modules/core.h>
 
 struct shuso_process_s {
   pid_t                             pid;
@@ -71,7 +72,7 @@ struct shuso_socket_s {
   shuso_hostinfo_t  host;
   int               fd;
   shuso_socket_fn  *handler;
-  shuso_socket_fn  *cheanup;
+  shuso_socket_fn  *cleanup;
   void              *data;
 }; //shuso_socket_t;
 

@@ -1,4 +1,5 @@
 #include <shuttlesock.h>
+#include <shuttlesock/modules/lua_bridge.h>
 #include <lua.h>
 #include <lualib.h>
 #include <lauxlib.h>
@@ -1976,37 +1977,6 @@ static int Lua_shuso_module_event_publish(lua_State *L) {
   return 1;
 }
 
-static void lua_module_gxcopy(shuso_t *S, shuso_event_state_t *es, intptr_t code, void *data, void *pd) {
-  shuso_t *Sm = data;
-  lua_State *L = S->lua.state;
-  lua_State *Lm = Sm->lua.state;
-  
-  //copy over all required modules that have a metatable and __gxcopy
-  lua_getglobal(Lm, "package");
-  lua_getfield(Lm, -1, "loaded");
-  lua_remove(Lm, -2);
-  lua_pushnil(Lm);  /* first key */
-  while(lua_next(Lm, -2) != 0) {
-    if(!lua_getmetatable(Lm, -1)) {
-      lua_pop(Lm, 1);
-      continue;
-    }
-    lua_getfield(Lm, -1, "__gxcopy_save_module_state");
-    if(lua_isnil(Lm, -1)) {
-      lua_pop(Lm, 3);
-      continue;
-    }
-    lua_pop(Lm, 3);
-    
-    luaS_gxcopy_module_state(Lm, L, lua_tostring(Lm, -1));
-  }
-  lua_pop(Lm, 1);
-}
-
-typedef struct {
-  int           placeholder;
-} lua_bridge_module_ctx_t;
-
 /*
 static void *lua_shared_allocator(void *ud, void *ptr, size_t osize, size_t nsize) {
   shuso_shared_slab_t *shm = ud;
@@ -2028,16 +1998,6 @@ static void *lua_shared_allocator(void *ud, void *ptr, size_t osize, size_t nsiz
   }
 }
 */
-
-static bool lua_bridge_module_initialize(shuso_t *S, shuso_module_t *self) {
-  shuso_event_listen(S, "core:worker.start.before.lua_gxcopy", lua_module_gxcopy, self);
-  
-  lua_bridge_module_ctx_t *ctx = shuso_stalloc(&S->stalloc, sizeof(*ctx));
-  
-  shuso_set_core_context(S, self, ctx);
-  
-  return true;
-}
 
 static int Lua_shuso_block_parent_setting_pointer(lua_State *L) {
   luaL_checktype(L, 1, LUA_TLIGHTUSERDATA);
@@ -2365,11 +2325,3 @@ int luaS_push_system_module(lua_State *L) {
   luaL_newlib(L, shuttlesock_system_module_methods);
   return 1;
 }
-
-shuso_module_t shuso_lua_bridge_module = {
-  .name = "lua_bridge",
-  .version = "0.0.1",
-  .subscribe = 
-   " core:worker.start.before.lua_gxcopy",
-  .initialize = lua_bridge_module_initialize
-};

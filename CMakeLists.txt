@@ -13,7 +13,12 @@ include(MakeCmakeALittleLessTerribleForOurUseCase)
 include(TargetRequirePackage)
 
 #set(CMAKE_VERBOSE_MAKEFILE ON)
-set(libsrc 
+
+
+add_library(shuttlesock SHARED)
+set_property(TARGET shuttlesock PROPERTY C_STANDARD 11)
+
+target_sources(shuttlesock PRIVATE
   src/shuttlesock.c
   src/log.c
   src/watchers.c
@@ -32,9 +37,6 @@ set(libsrc
   src/lua_binding.c
   src/lua_utils.c
 )
-
-add_library(shuttlesock SHARED ${libsrc})
-set_property(TARGET shuttlesock PROPERTY C_STANDARD 11)
 
 target_include_directories(shuttlesock PUBLIC ${CMAKE_CURRENT_BINARY_DIR}/src/include)
 target_include_directories(shuttlesock PUBLIC src/include)
@@ -69,14 +71,12 @@ else()
     INSTALL_COMMAND make install
     BUILD_IN_SOURCE 1
   )
-  include_directories(${LIBEV_PREFIX_DIR}/include)
+  target_include_directories(shuttlesock PUBLIC ${LIBEV_PREFIX_DIR}/include)
   add_dependencies(shuttlesock libev_autoconf)
   add_library(libev STATIC IMPORTED)
   set_target_properties(libev PROPERTIES IMPORTED_LOCATION ${LIBEV_PREFIX_DIR}/lib/libev.a)
   target_link_libraries(shuttlesock PRIVATE libev)
 endif()
-  
-
 
 test_big_endian(SHUTTLESOCK_BIG_ENDIAN)
 
@@ -219,3 +219,19 @@ add_lua_module("shuttlesock.config"       src/lua_api/config.lua)
 add_lua_module("shuttlesock.ipc"          src/lua_api/ipc.lua)
 
 set_lua_packed_script_file("src/embedded_lua_scripts.c")
+
+
+#core module
+target_sources(shuttlesock PRIVATE
+  src/modules/core.c
+)
+
+#lua bridge module
+target_sources(shuttlesock PRIVATE
+  src/modules/lua_bridge.c
+)
+
+#server module
+target_sources(shuttlesock PRIVATE
+  src/modules/server.c
+)
