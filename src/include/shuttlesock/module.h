@@ -26,7 +26,7 @@ struct shuso_module_s {
   const char             *publish; //space-separated list of event_names this module may publish
   void                   *privdata;
   
-  
+  //internal stuff, don't use it unless you're a shuttlesock developer
   uint8_t                *parent_modules_index_map;
   int                     index; //global module number
   shuso_module_setting_t *settings;
@@ -39,8 +39,6 @@ struct shuso_module_s {
   }                       submodules;
 }; //shuso_module_t
 
-
-
 struct shuso_module_context_list_s {
 #ifdef SHUTTLESOCK_DEBUG_MODULE_SYSTEM
   shuso_module_t *parent;
@@ -49,8 +47,8 @@ struct shuso_module_context_list_s {
 }; //shuso_module_context_list_t
 
 
-bool shuso_set_core_module(shuso_t *S, shuso_module_t *module);
 bool shuso_add_module(shuso_t *S, shuso_module_t *module);
+
 bool shuso_load_module(shuso_t *S, const char *filename);
 bool shuso_initialize_added_modules(shuso_t *S);
 
@@ -63,5 +61,6 @@ bool shuso_set_context(shuso_t *S, shuso_module_t *parent, shuso_module_t *modul
 
 // internal stuff
 bool shuso_module_system_initialize(shuso_t *S, shuso_module_t *core_module);
+bool shuso_add_core_modules(shuso_t *S, char *errbuf, size_t errbuflen); //used during initialization
 
 #endif //SHUTTLESOCK_MODULE_H

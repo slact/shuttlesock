@@ -4,9 +4,19 @@
 
 static bool shuso_module_freeze(shuso_t *S, shuso_module_t *mod);
 static bool shuso_module_finalize(shuso_t *S, shuso_module_t *mod);
+static bool set_core_module(shuso_t *S, shuso_module_t *module);
+
+
+shuso_module_t *core_modules[] = {
+  &shuso_lua_bridge_module,
+};
+
+const char *core_lua_modules[] = {
+  NULL
+};
 
 bool shuso_module_system_initialize(shuso_t *S, shuso_module_t *core_module) {
-  return shuso_set_core_module(S, core_module);
+  return set_core_module(S, core_module);
 }
 
 static bool add_module(shuso_t *S, shuso_module_t *module, const char *adding_function_name) {
@@ -66,14 +76,45 @@ bool shuso_add_module(shuso_t *S, shuso_module_t *module) {
   return add_module(S, module, "new");
 }
 
-bool shuso_set_core_module(shuso_t *S, shuso_module_t *module) {
+bool shuso_add_core_modules(shuso_t *S, char *errbuf, size_t errbuflen) {
+  for(unsigned i=0; i<sizeof(core_modules) / sizeof(shuso_module_t *); i++) {
+    if(core_modules[i] && !shuso_add_module(S, core_modules[i])) {
+      snprintf(errbuf, errbuflen, "failed to add core module %s", core_modules[i]->name);
+      return false;
+    }
+  }
+  
+  lua_State *L = S->lua.state;
+  int        top = lua_gettop(L);
+  for(unsigned i=0; i<sizeof(core_lua_modules) / sizeof(char *); i++) {
+    if(core_lua_modules[i]) {
+      lua_getglobal(L, "require");
+      lua_pushfstring(L, "shuttlesock.module.%s", core_lua_modules[i]);
+      if(!luaS_function_call_result_ok(L, 1, true)) {
+        snprintf(errbuf, errbuflen, "%s", shuso_last_error(S));
+        lua_settop(L, top);
+        return false;
+      }
+      
+      lua_getfield(L, -1, "add");
+      lua_pushvalue(L, -2);
+      if(!luaS_call_noerror(L, 1, 2)) {
+        snprintf(errbuf, errbuflen, "%s", lua_tostring(L, -1));
+        lua_settop(L, top);
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+static bool set_core_module(shuso_t *S, shuso_module_t *module) {
   if(!add_module(S, module, "new_core_module")) {
     return false;
   }
   assert(module->index == 0);
   return true;
 }
-
 
 bool shuso_initialize_added_modules(shuso_t *S) {
   lua_State *L = S->lua.state;
