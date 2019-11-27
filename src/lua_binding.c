@@ -2218,6 +2218,11 @@ static int Lua_shuso_raise_sigabrt(lua_State *L) {
   return 0;
 }
 
+static int Lua_shuso_version(lua_State *L) {
+  lua_pushstring(L, SHUTTLESOCK_VERSION_STRING);
+  return 1;
+}
+
 luaL_Reg shuttlesock_core_module_methods[] = {
 // creation, destruction
   {"create", Lua_shuso_create},
@@ -2297,9 +2302,11 @@ luaL_Reg shuttlesock_core_module_methods[] = {
   {"ipc_send_message", luaS_ipc_send_message_noyield},
   {"ipc_send_message_yield", luaS_ipc_send_message_yield},
   {"ipc_send_message_to_all_workers", Lua_shuso_ipc_send_workers},
+
+//etc
+  {"version", Lua_shuso_version},
   
-  
-  //for debugging
+//for debugging
   {"raise_signal", Lua_shuso_raise_signal},
   {"raise_SIGABRT", Lua_shuso_raise_sigabrt},
   
@@ -2315,6 +2322,7 @@ luaL_Reg shuttlesock_system_module_methods[] = {
 
 int luaS_push_core_module(lua_State *L) {
   luaL_newlib(L, shuttlesock_core_module_methods);
+  
   lua_pushvalue(L, -1);
   luaS_do_embedded_script(L, "lua_binding", 1);
   lua_pop(L, 1);

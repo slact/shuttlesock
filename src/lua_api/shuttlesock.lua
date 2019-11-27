@@ -33,4 +33,7 @@ function Shuttlesock.configure_finish()
   return pcall(Core.configure_finish)
 end
 
+Shuttlesock.VERSION = Core.version()
+Shuttlesock._VERSION = Shuttlesock.VERSION
+
 return Shuttlesock

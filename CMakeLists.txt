@@ -4,6 +4,8 @@ include(SetProjectCompiler)
 
 project(shuttlesock LANGUAGES "C" VERSION 0.0.1)
 set(DESCRIPTION "speedy server library with a focus on moving sockets between processes")
+include(PaddedVersionNumber)
+padded_version_number(shuttlesock_VERSION_PADDED shuttlesock)
 
 include(CheckSymbolExists)
 include(CMakePushCheckState)

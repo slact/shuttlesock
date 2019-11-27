@@ -419,6 +419,10 @@ static int luaS_requiref_embedded_script(lua_State *L) {
 bool shuso_lua_initialize(shuso_t *S) {
   lua_State *L = S->lua.state;
   luaS_set_shuttlesock_state_pointer(L, S);
+  
+  lua_pushstring(L, SHUTTLESOCK_VERSION_STRING);
+  lua_setglobal(L, "_SHUTTLESOCK_VERSION");
+  
 #ifdef SHUTTLESOCK_DEBUG_LUACOV
   lua_getglobal(L, "require");
   lua_pushliteral(L, "luacov");

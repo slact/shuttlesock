@@ -66,7 +66,7 @@ static bool core_module_initialize(shuso_t *S, shuso_module_t *self) {
 
 shuso_module_t shuso_core_module = {
   .name = "core",
-  .version = "0.0.1",
+  .version = SHUTTLESOCK_VERSION_STRING,
   .publish = 
    " configure"
    " configure.after"

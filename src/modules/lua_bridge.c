@@ -40,7 +40,7 @@ static bool lua_bridge_module_initialize(shuso_t *S, shuso_module_t *self) {
 
 shuso_module_t shuso_lua_bridge_module = {
   .name = "lua_bridge",
-  .version = "0.0.1",
+  .version = SHUTTLESOCK_VERSION_STRING,
   .subscribe = 
    " core:worker.start.before.lua_gxcopy",
   .initialize = lua_bridge_module_initialize

@@ -594,7 +594,18 @@ describe(lua_api) {
     assert_shuso_ran_ok(S);
   }
   
-
+  test("version string") {
+    lua_State *L = S->lua.state;
+    lua_pushstring(L, SHUTTLESOCK_VERSION_STRING);
+    lua_pushinteger(L, SHUTTLESOCK_VERSION_MAJOR);
+    lua_pushinteger(L, SHUTTLESOCK_VERSION_MINOR);
+    lua_pushinteger(L, SHUTTLESOCK_VERSION_PATCH);
+    lua_pushinteger(L, SHUTTLESOCK_VERSION);
+    assert_luaL_dofile_args(L, "check_shuttlesock_version.lua", 5);
+    assert_shuso(S, shuso_configure_finish(S));
+    shuso_run(S);
+    assert_shuso_ran_ok(S);
+  }
   
   subdesc(ipc) {
     test("pack/unpack data") {

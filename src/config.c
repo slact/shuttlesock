@@ -553,7 +553,7 @@ static bool config_init_config(shuso_t *S, shuso_module_t *self, shuso_setting_b
 
 shuso_module_t shuso_config_module = {
   .name = "config",
-  .version = "0.0.1",
+  .version = SHUTTLESOCK_VERSION_STRING,
   .subscribe = "core:worker.start.before.lua_gxcopy",
   .initialize = config_initialize,
   .initialize_config = config_init_config,
