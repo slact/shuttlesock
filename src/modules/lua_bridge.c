@@ -1,5 +1,5 @@
 #include <shuttlesock.h>
-#include <shuttlesock/modules/lua_bridge.h>
+#include "lua_bridge.h"
 
 static void lua_module_gxcopy(shuso_t *S, shuso_event_state_t *es, intptr_t code, void *data, void *pd) {
   shuso_t *Sm = data;

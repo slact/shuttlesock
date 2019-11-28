@@ -1,4 +1,5 @@
 #include <shuttlesock.h>
+#include "core.h"
 
 bool shuso_core_module_event_publish(shuso_t *S, const char *name, intptr_t code, void *data) {
   shuso_core_module_ctx_t *ctx = S->common->module_ctx.core;

@@ -1,5 +1,5 @@
-#ifndef SHUSO_CORE_MODULE_H
-#define SHUSO_CORE_MODULE_H
+#ifndef SHUTTLESOCK_CORE_MODULE_H
+#define SHUTTLESOCK_CORE_MODULE_H
 
 #include <shuttlesock/common.h>
 
@@ -35,4 +35,4 @@ bool shuso_core_module_event_publish(shuso_t *S, const char *name, intptr_t code
 void *shuso_core_context(shuso_t *S,  shuso_module_t *module);
 bool shuso_set_core_context(shuso_t *S, shuso_module_t *module, void *ctx);
 
-#endif //SHUSO_CORE_MODULE_H
+#endif //SHUTTLESOCK_CORE_MODULE_H

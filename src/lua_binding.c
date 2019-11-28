@@ -1,5 +1,4 @@
 #include <shuttlesock.h>
-#include <shuttlesock/modules/lua_bridge.h>
 #include <lua.h>
 #include <lualib.h>
 #include <lauxlib.h>

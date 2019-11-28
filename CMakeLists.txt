@@ -195,8 +195,6 @@ endif()
 
 include(PackLuaScripts)
 
-configure_file(src/include/shuttlesock/build_config.h.tmpl src/include/shuttlesock/build_config.h)
-
 #utils used inside shuttlesock.core
 pack_lua_script("lua_binding" src/lua_binding.lua)
 
@@ -222,9 +220,18 @@ pack_lua_module("shuttlesock.ipc"          src/lua_api/ipc.lua)
 
 set_lua_packed_script_file("src/embedded_lua_scripts.c")
 
-#core module
-add_core_module("core" core.c)
-add_core_module("lua_bridge" lua_bridge.c)
+add_static_module("core" 
+  SOURCES core.c
+  HEADERS core.h
+)
+add_static_module("lua_bridge"
+  SOURCES lua_bridge.c
+  HEADERS lua_bridge.h
+)
+
+finish_adding_static_modules("src/include/shuttlesock/core_modules.h")
+configure_file(src/include/shuttlesock/build_config.h.tmpl src/include/shuttlesock/build_config.h)
+
 #add_core_module("server"
 #  server/server.c
 #  HEADER
