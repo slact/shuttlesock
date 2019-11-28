@@ -7,7 +7,8 @@
 #include <arpa/inet.h>
 #include <ares.h>
 #include <errno.h>
-#include "lua_api/lua_ipc.h"
+#include "api/lua_ipc.h"
+#include <shuttlesock/modules/config/private.h>
 
 typedef enum {
   LUA_EV_WATCHER_IO =       0,

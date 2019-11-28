@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <shuttlesock.h>
+#include <shuttlesock/modules/config/private.h>
 #include <assert.h>
 #include <unistd.h>
 #include <sys/types.h>

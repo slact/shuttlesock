@@ -32,11 +32,7 @@ target_sources(shuttlesock PRIVATE
   src/shared_slab.c
   src/module.c
   src/module_event.c
-  src/config.c
   src/embedded_lua_scripts.c
-  src/lua_api/lazy_atomics.c
-  src/lua_api/lua_ipc.c
-  src/lua_binding.c
   src/lua_utils.c
 )
 
@@ -195,40 +191,54 @@ endif()
 
 include(PackLuaScripts)
 
-#utils used inside shuttlesock.core
-pack_lua_script("lua_binding" src/lua_binding.lua)
-
 #some luarocks we use
 pack_lua_bundled_module("argparse" src/luarocks/argparse/src/argparse.lua)
 pack_lua_bundled_module("mm"       src/luarocks/mm.lua)
 pack_lua_bundled_module("inspect"  src/luarocks/inspect.lua)
 
 #modules used by the shuttlesock core
-pack_lua_module("shuttlesock.core.config"        src/config.lua)
 pack_lua_module("shuttlesock.core.module"        src/module.lua)
 pack_lua_module("shuttlesock.core.module_event"  src/module_event.lua)
 
-#API for Lua modules
-pack_lua_module("shuttlesock"              src/lua_api/shuttlesock.lua)
-pack_lua_module("shuttlesock.log"          src/lua_api/log.lua)
-pack_lua_module("shuttlesock.module"       src/lua_api/module.lua)
-pack_lua_module("shuttlesock.atomics"      src/lua_api/atomics.lua)
-pack_lua_module("shuttlesock.watcher"      src/lua_api/watcher.lua)
-pack_lua_module("shuttlesock.process"      src/lua_api/process.lua)
-pack_lua_module("shuttlesock.config"       src/lua_api/config.lua)
-pack_lua_module("shuttlesock.ipc"          src/lua_api/ipc.lua)
-
-set_lua_packed_script_file("src/embedded_lua_scripts.c")
-
-add_static_module("core" 
+add_static_module("core"
   SOURCES core.c
   HEADERS core.h
 )
-add_static_module("lua_bridge"
-  SOURCES lua_bridge.c
-  HEADERS lua_bridge.h
+
+add_static_module("config"
+  SOURCES config.c
+  LUA_MODULES
+    "shuttlesock.core.config" config/config.lua
+  HEADERS
+    config.h
+    PRIVATE config/private.h
 )
 
+add_static_module("lua_bridge"
+  SOURCES
+    lua_bridge.c
+    lua_bridge/api/lazy_atomics.c
+    lua_bridge/api/lua_ipc.c
+    lua_bridge/lua_binding.c
+  HEADERS
+    lua_bridge.h
+    PRIVATE lua_bridge/private.h
+    PRIVATE lua_bridge/api/lazy_atomics.h
+    PRIVATE lua_bridge/api/lua_ipc.h
+  LUA_MODULES
+    #API for Lua modules
+    "shuttlesock"              lua_bridge/api/shuttlesock.lua
+    "shuttlesock.log"          lua_bridge/api/log.lua
+    "shuttlesock.module"       lua_bridge/api/module.lua
+    "shuttlesock.atomics"      lua_bridge/api/atomics.lua
+    "shuttlesock.watcher"      lua_bridge/api/watcher.lua
+    "shuttlesock.process"      lua_bridge/api/process.lua
+    "shuttlesock.config"       lua_bridge/api/config.lua
+    "shuttlesock.ipc"          lua_bridge/api/ipc.lua
+  LUA_SOURCES
+    #utils used inside "shuttlesock.core" lua_binding
+    "lua_binding" lua_bridge/lua_binding.lua
+)
 
 #add_core_module("server"
 #  server/server.c
@@ -238,5 +248,8 @@ add_static_module("lua_bridge"
 #    server/server.lua
 #)
 
+
+
+set_lua_packed_script_file("src/embedded_lua_scripts.c")
 finish_adding_static_modules("src/include/shuttlesock/core_modules.h")
 configure_file(src/include/shuttlesock/build_config.h.tmpl src/include/shuttlesock/build_config.h)

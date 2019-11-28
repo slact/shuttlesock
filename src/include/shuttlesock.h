@@ -20,11 +20,9 @@
 #include <shuttlesock/shared_slab.h>
 #include <shuttlesock/log.h>
 #include <shuttlesock/module.h>
-#include <shuttlesock/config.h>
 #include <shuttlesock/lua_utils.h>
 #include <shuttlesock/sysutil.h>
 #include <shuttlesock/module_event.h>
-
 #include <shuttlesock/core_modules.h>
 
 struct shuso_process_s {

@@ -1,4 +1,5 @@
 #include <shuttlesock.h>
+#include <shuttlesock/modules/config/private.h>
 #include <shuttlesock/embedded_lua_scripts.h>
 #include <lauxlib.h>
 

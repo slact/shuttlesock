@@ -1,5 +1,6 @@
-#ifndef SHUSO_SETTINGS_H
-#define SHUSO_SETTINGS_H
+#ifndef SHUTTLESOCK_CONFIG_MODULE_H
+#define SHUTTLESOCK_CONFIG_MODULE_H
+
 #include <shuttlesock/common.h>
 
 extern shuso_module_t shuso_config_module;
@@ -86,17 +87,4 @@ bool shuso_config_block_error(shuso_t *S, shuso_setting_block_t *b, const char *
     shuso_setting_block_t * : shuso_config_block_error, \
   )(S, thing, __VA_ARGS__)
 
-//for shuttlesock developers' eyes only
-bool shuso_config_register_setting(shuso_t *S, shuso_module_setting_t *setting, shuso_module_t *module);
-
-bool shuso_config_system_initialize(shuso_t *S);
-bool shuso_config_system_initialize_worker(shuso_t *workerState, shuso_t *managerState);
-bool shuso_config_system_generate(shuso_t *S);
-
-bool shuso_configure_string(shuso_t *S,  const char *str, const char *str_title);
-bool shuso_configure_file(shuso_t *S, const char *path);
-
-
-bool luaS_get_config_pointer_ref(lua_State *L, const void *ptr);
-bool luaS_pcall_config_method(lua_State *L, const char *method_name, int nargs, bool keep_result);
-#endif //SHUSO_SETTINGS_H
+#endif //SHUTTLESOCK_CONFIG_MODULE_H

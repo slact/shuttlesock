@@ -90,8 +90,8 @@ macro(pack_lua_script_internal module_name source_file)
     COMMENT "${command_action}${command_check}${is_bundled} Lua ${script_kind} \"${module_name}\" ${source_file}"
   )
   
-  set(packed_lua_scripts_target_deps ${packed_lua_scripts_target_deps} ${outfile} PARENT_SCOPE)
-  set(packed_lua_scripts_config "${packed_lua_scripts_config} {src='${source_file}', name='${module_name}', file='${CMAKE_CURRENT_BINARY_DIR}/${outfile}', module=${is_module}, compiled=${source_compiled}}," PARENT_SCOPE)
+  set(packed_lua_scripts_target_deps ${packed_lua_scripts_target_deps} ${outfile} CACHE INTERNAL "packed lua scripts deps" FORCE)
+  set(packed_lua_scripts_config "${packed_lua_scripts_config} {src='${source_file}', name='${module_name}', file='${CMAKE_CURRENT_BINARY_DIR}/${outfile}', module=${is_module}, compiled=${source_compiled}}," CACHE INTERNAL "packed lua scripts config" FORCE)
 endmacro()
 
 
