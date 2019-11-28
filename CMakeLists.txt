@@ -229,8 +229,6 @@ add_static_module("lua_bridge"
   HEADERS lua_bridge.h
 )
 
-finish_adding_static_modules("src/include/shuttlesock/core_modules.h")
-configure_file(src/include/shuttlesock/build_config.h.tmpl src/include/shuttlesock/build_config.h)
 
 #add_core_module("server"
 #  server/server.c
@@ -239,3 +237,6 @@ configure_file(src/include/shuttlesock/build_config.h.tmpl src/include/shuttleso
 #  LUA_MODULES
 #    server/server.lua
 #)
+
+finish_adding_static_modules("src/include/shuttlesock/core_modules.h")
+configure_file(src/include/shuttlesock/build_config.h.tmpl src/include/shuttlesock/build_config.h)
