@@ -13,7 +13,7 @@ include(TestBigEndian)
 include(GNUInstallDirs)
 include(MakeCmakeALittleLessTerribleForOurUseCase)
 include(TargetRequirePackage)
-
+include(ShuttlesockModule)
 #set(CMAKE_VERBOSE_MAKEFILE ON)
 
 
@@ -198,42 +198,37 @@ include(PackLuaScripts)
 configure_file(src/include/shuttlesock/build_config.h.tmpl src/include/shuttlesock/build_config.h)
 
 #utils used inside shuttlesock.core
-add_lua_script("lua_binding" src/lua_binding.lua)
+pack_lua_script("lua_binding" src/lua_binding.lua)
 
 #some luarocks we use
-add_lua_bundled_module("argparse" src/luarocks/argparse/src/argparse.lua)
-add_lua_bundled_module("mm"       src/luarocks/mm.lua)
-add_lua_bundled_module("inspect"  src/luarocks/inspect.lua)
+pack_lua_bundled_module("argparse" src/luarocks/argparse/src/argparse.lua)
+pack_lua_bundled_module("mm"       src/luarocks/mm.lua)
+pack_lua_bundled_module("inspect"  src/luarocks/inspect.lua)
 
 #modules used by the shuttlesock core
-add_lua_module("shuttlesock.core.config"        src/config.lua)
-add_lua_module("shuttlesock.core.module"        src/module.lua)
-add_lua_module("shuttlesock.core.module_event"  src/module_event.lua)
+pack_lua_module("shuttlesock.core.config"        src/config.lua)
+pack_lua_module("shuttlesock.core.module"        src/module.lua)
+pack_lua_module("shuttlesock.core.module_event"  src/module_event.lua)
 
 #API for Lua modules
-add_lua_module("shuttlesock"              src/lua_api/shuttlesock.lua)
-add_lua_module("shuttlesock.log"          src/lua_api/log.lua)
-add_lua_module("shuttlesock.module"       src/lua_api/module.lua)
-add_lua_module("shuttlesock.atomics"      src/lua_api/atomics.lua)
-add_lua_module("shuttlesock.watcher"      src/lua_api/watcher.lua)
-add_lua_module("shuttlesock.process"      src/lua_api/process.lua)
-add_lua_module("shuttlesock.config"       src/lua_api/config.lua)
-add_lua_module("shuttlesock.ipc"          src/lua_api/ipc.lua)
+pack_lua_module("shuttlesock"              src/lua_api/shuttlesock.lua)
+pack_lua_module("shuttlesock.log"          src/lua_api/log.lua)
+pack_lua_module("shuttlesock.module"       src/lua_api/module.lua)
+pack_lua_module("shuttlesock.atomics"      src/lua_api/atomics.lua)
+pack_lua_module("shuttlesock.watcher"      src/lua_api/watcher.lua)
+pack_lua_module("shuttlesock.process"      src/lua_api/process.lua)
+pack_lua_module("shuttlesock.config"       src/lua_api/config.lua)
+pack_lua_module("shuttlesock.ipc"          src/lua_api/ipc.lua)
 
 set_lua_packed_script_file("src/embedded_lua_scripts.c")
 
-
 #core module
-target_sources(shuttlesock PRIVATE
-  src/modules/core.c
-)
-
-#lua bridge module
-target_sources(shuttlesock PRIVATE
-  src/modules/lua_bridge.c
-)
-
-#server module
-target_sources(shuttlesock PRIVATE
-  src/modules/server.c
-)
+add_core_module("core" core.c)
+add_core_module("lua_bridge" lua_bridge.c)
+#add_core_module("server"
+#  server/server.c
+#  HEADER
+#    server.h
+#  LUA_MODULES
+#    server/server.lua
+#)

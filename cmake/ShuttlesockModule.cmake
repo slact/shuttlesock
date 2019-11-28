@@ -1,0 +1,53 @@
+include(CMakeParseArguments)
+
+#function(include_shuttlesock_module module_path SHUTTLESOCK_INCLUDED_MODULE_NAME)
+#  add_subdirectory("${module_path}")
+#  add_library("shuttlesock_${SHUTTLESOCK_INCLUDED_MODULE_NAME}" SHARED)
+#endfunction()
+#
+#macro(shuttlesock_module SHUTTLESOCK_MODULE_NAME)
+#  cmake_parse_arguments(SHUTTLESOCK_MODULE "" "LANGUAGE;VERSION;DESCRIPTION" "SOURCE;INCLUDE" ${ARGN})
+#  set(SHUTTLESOCK_MODULE_LIBRARY "shuttlesock_${SHUTTLESOCK_MODULE_NAME}")
+#  project("${SHUTTLESOCK_MODULE_LIBRARY}" LANGUAGES C VERSION ${SHUTTLESOCK_MODULE_VERSION})
+  
+#  set(DESCRIPTION "${SHUTTLESOCK_MODULE_DESCRIPTION}")
+#  target_link_libraries("${SHUTTLESOCK_MODULE_LIBRARY}" PRIVATE shuttlesock)
+#  add_library(${SHUTTLESOCK_MODULE_LIBRARY} ${SHUTTLESOCK_MODULE_SOURCE})
+#endmacro()
+
+function(add_core_module MODULE_NAME)
+  cmake_parse_arguments(CORE "" "" "SOURCE;LUA_SOURCE;LUA_MODULES" ${ARGN})
+  list(APPEND CORE_SOURCE ${CORE_UNPARSED_ARGUMENTS})
+  list(LENGTH CORE_SOURCE CORE_SOURCES_LENGTH)
+  list(LENGTH CORE_LUA_MODULES LUA_MODULES_LENGTH)
+  list(LENGTH CORE_LUA_SOURCE LUA_SOURCE_LENGTH)
+  math(EXPR EVERYTHING_LENGTH "${CORE_SOURCES_LENGTH} + ${LUA_MODULES_LENGTH} + ${LUA_SOURCE_LENGTH}")
+  if(EVERYTHING_LENGTH EQUAL 0)
+    message(FATAL_ERROR "core module ${MODULE_NAME} has no sources")
+  endif()
+  
+  foreach(CORE_SRC IN LISTS CORE_SOURCE)
+    list(APPEND CORE_PATHED_SOURCES "src/modules/${CORE_SRC}")
+  endforeach()
+  
+  target_sources(shuttlesock PRIVATE ${CORE_PATHED_SOURCES})
+  
+  math(EXPR LUA_MODULES_HALFLENGTH "${LUA_MODULES_LENGTH} / 2")
+  if(LUA_MODULES_HALFLENGTH MATCHES "\\D")
+    message(FATAL_ERROR "failed to add module ${MODULE_NAME}: odd number of LUA_MODULES parameters")
+  endif()
+  foreach(index RANGE 0 ${LUA_MODULES_LENGTH} 2)
+    math(EXPR index1 "${index}+1")
+    list(GET "${CORE_LUA_MODULES}" "${index}" lmname)
+    list(GET "${CORE_LUA_MODULES}" "${index1}" lmfile)
+    pack_lua_module("shuttlesock.module.${lmname}" "src/modules/${lmpath}")
+  endforeach()
+  
+  foreach(index RANGE 0 ${LUA_SOURCE_LENGTH} 2)
+    math(EXPR index1 "${index}+1")
+    list(GET "${CORE_LUA_SOURCE}" "${index}" lsname)
+    list(GET "${CORE_LUA_SOURCE}" "${index1}" lsfile)
+    pack_lua_script("shuttlesock.module.${lsname}" "src/modules/${lspath}")
+  endforeach()
+  
+endfunction()
