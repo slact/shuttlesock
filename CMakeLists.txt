@@ -200,12 +200,12 @@ pack_lua_bundled_module("inspect"  src/luarocks/inspect.lua)
 pack_lua_module("shuttlesock.core.module"        src/module.lua)
 pack_lua_module("shuttlesock.core.module_event"  src/module_event.lua)
 
-add_static_module("core"
+add_core_module("core"
   SOURCES core.c
   HEADERS core.h
 )
 
-add_static_module("config"
+add_core_module("config"
   SOURCES config.c
   LUA_MODULES
     "shuttlesock.core.config" config/config.lua
@@ -214,7 +214,7 @@ add_static_module("config"
     PRIVATE config/private.h
 )
 
-add_static_module("lua_bridge"
+add_core_module("lua_bridge"
   SOURCES
     lua_bridge.c
     lua_bridge/api/lazy_atomics.c
@@ -251,5 +251,5 @@ add_static_module("lua_bridge"
 
 
 set_lua_packed_script_file("src/embedded_lua_scripts.c")
-finish_adding_static_modules("src/include/shuttlesock/core_modules.h")
+finish_adding_core_modules()
 configure_file(src/include/shuttlesock/build_config.h.tmpl src/include/shuttlesock/build_config.h)

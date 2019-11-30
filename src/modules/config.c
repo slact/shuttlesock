@@ -1,6 +1,7 @@
 #include <shuttlesock.h>
 #include "config.h"
 #include "config/private.h"
+#include <lauxlib.h>
 
 static void config_worker_gxcopy(shuso_t *S, shuso_event_state_t *evs, intptr_t code, void *data, void *pd) {
   assert(strcmp(evs->data_type, "shuttlesock_state") == 0);
@@ -46,9 +47,6 @@ static void config_worker_gxcopy(shuso_t *S, shuso_event_state_t *evs, intptr_t 
   
   return;
 }
-
-#include <shuttlesock.h>
-#include <lauxlib.h>
 
 static bool luaS_push_config_function(lua_State *L, const char *funcname) {
   lua_getglobal(L, "require");
@@ -140,9 +138,6 @@ bool shuso_config_system_initialize(shuso_t *S) {
   shuso_config_module_ctx_t *ctx = shuso_stalloc(&S->stalloc, sizeof(*ctx));
   if(!ctx) {
     return shuso_set_error(S, "failed to allocate module context");
-  }
-  if(!shuso_add_module(S, &shuso_config_module)) {
-    return false;
   }
   luaS_push_config_function(L, "new");
   if(!luaS_function_call_result_ok(L, 0, true)) {

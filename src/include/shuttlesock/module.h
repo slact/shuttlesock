@@ -48,7 +48,6 @@ struct shuso_module_context_list_s {
 
 
 bool shuso_add_module(shuso_t *S, shuso_module_t *module);
-
 bool shuso_load_module(shuso_t *S, const char *filename);
 bool shuso_initialize_added_modules(shuso_t *S);
 
@@ -60,7 +59,6 @@ void *shuso_context(shuso_t *S, shuso_module_t *parent, shuso_module_t *module, 
 bool shuso_set_context(shuso_t *S, shuso_module_t *parent, shuso_module_t *module, void *ctx, shuso_module_context_list_t *context_list);
 
 // internal stuff
-bool shuso_module_system_initialize(shuso_t *S, shuso_module_t *core_module);
 bool shuso_add_core_modules(shuso_t *S, char *errbuf, size_t errbuflen); //used during initialization
 
 #endif //SHUTTLESOCK_MODULE_H

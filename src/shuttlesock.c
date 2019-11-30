@@ -126,17 +126,12 @@ shuso_t *shuso_create_with_lua(lua_State *lua, const char **err) {
     goto fail;
   }
   
-  if(!shuso_module_system_initialize(S, &shuso_core_module)) {
-    errmsg = "failed to initialize module system";
-    goto fail;
-  }
-  
   if(!shuso_config_system_initialize(S)) {
     errmsg = "failed to initialize config system";
     goto fail;
   }
   
-  char msgbuf[255];
+  static char msgbuf[255];
   if(!shuso_add_core_modules(S, msgbuf, 255)) {
     errmsg = msgbuf;
     goto fail;

@@ -24,6 +24,45 @@ bool set_test_options(int *argc, char **argv) {
   return true;
 }
 
+static void stop_shuttlesock(shuso_t *S, void *pd) {
+  intptr_t procnum = (intptr_t)pd;
+  assert(S->procnum == procnum);
+  shuso_stop(S, SHUSO_STOP_ASK);
+  
+}
+
+describe(init_and_shutdown) {
+  static shuso_t          *S = NULL;
+  static test_runcheck_t  *chk = NULL;
+  before_each() {
+    S = shusoT_create(&chk, 25);
+  }
+  after_each() {
+    shusoT_destroy(S, &chk);
+  }
+  test("lua stack doesn't grow") {  
+    assert(lua_gettop(S->lua.state) == 0);
+    shuso_configure_finish(S);
+    assert(lua_gettop(S->lua.state) == 0);
+  }
+  test("run loop, stop from manager") {
+    shuso_configure_finish(S);
+    shusoT_run_test(S, SHUTTLESOCK_MANAGER, stop_shuttlesock, NULL, (void *)(intptr_t)SHUTTLESOCK_MANAGER);
+    assert_shuso_ran_ok(S);
+  }
+  
+  test("stop from master") {
+    shuso_configure_finish(S);
+    shusoT_run_test(S, SHUTTLESOCK_MASTER, stop_shuttlesock, NULL, (void *)(intptr_t)SHUTTLESOCK_MASTER);
+    assert_shuso_ran_ok(S);
+  }
+  test("stop from worker") {
+    shuso_configure_finish(S);
+    shusoT_run_test(S, 0, stop_shuttlesock, NULL, (void *)(intptr_t)0);
+    assert_shuso_ran_ok(S);
+  }
+}
+
 describe(modules) {
   static shuso_t *S = NULL;
   static shuso_module_t test_module;
@@ -115,45 +154,6 @@ describe(modules) {
       
       assert_luaL_dostring(L, "require 'shuttlesock.module'.find('luatest')");
     }
-  }
-}
-
-static void stop_shuttlesock(shuso_t *S, void *pd) {
-  intptr_t procnum = (intptr_t)pd;
-  assert(S->procnum == procnum);
-  shuso_stop(S, SHUSO_STOP_ASK);
-  
-}
-
-describe(init_and_shutdown) {
-  static shuso_t          *S = NULL;
-  static test_runcheck_t  *chk = NULL;
-  before_each() {
-    S = shusoT_create(&chk, 25);
-  }
-  after_each() {
-    shusoT_destroy(S, &chk);
-  }
-  test("lua stack doesn't grow") {  
-    assert(lua_gettop(S->lua.state) == 0);
-    shuso_configure_finish(S);
-    assert(lua_gettop(S->lua.state) == 0);
-  }
-  test("run loop, stop from manager") {
-    shuso_configure_finish(S);
-    shusoT_run_test(S, SHUTTLESOCK_MANAGER, stop_shuttlesock, NULL, (void *)(intptr_t)SHUTTLESOCK_MANAGER);
-    assert_shuso_ran_ok(S);
-  }
-  
-  test("stop from master") {
-    shuso_configure_finish(S);
-    shusoT_run_test(S, SHUTTLESOCK_MASTER, stop_shuttlesock, NULL, (void *)(intptr_t)SHUTTLESOCK_MASTER);
-    assert_shuso_ran_ok(S);
-  }
-  test("stop from worker") {
-    shuso_configure_finish(S);
-    shusoT_run_test(S, 0, stop_shuttlesock, NULL, (void *)(intptr_t)0);
-    assert_shuso_ran_ok(S);
   }
 }
 

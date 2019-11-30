@@ -1,0 +1,19 @@
+#ifndef SHUTTLESOCK_CORE_MODULES_H
+#define SHUTTLESOCK_CORE_MODULES_H
+
+#include <shuttlesock/common.h>
+${SHUTTLESOCK_CORE_MODULES_INCLUDES}
+
+struct shuso_core_module_listing_s {
+  const char       *name;
+  shuso_module_t   *module;
+  const char       *lua_require;
+  const char       *lua_script;
+  bool              lua_module;
+  shuso_handler_fn *prepare_function;
+};
+extern struct shuso_core_module_listing_s shuttlesock_core_modules[${SHUTTLESOCK_CORE_MODULES_LENGTH}];
+
+#define SHUTTLESOCK_CORE_MODULES_COUNT ${SHUTTLESOCK_CORE_MODULES_LENGTH}
+
+#endif //SHUTTLESOCK_CORE_MODULES_H
