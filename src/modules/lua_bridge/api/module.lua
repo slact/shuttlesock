@@ -22,6 +22,13 @@ local module_mt = {
   end
 }
 
+local function assert0(test, err)
+  if not test then
+    error(err, 0)
+  end
+  return test
+end
+
 function Module.wrap(module_name, module_ptr)
   local self = wrapped_modules[module_name]
   if not self then
@@ -34,19 +41,19 @@ end
 local function subscribe_to_event_names(self)
   for k, v in pairs(rawget(self, "subscribe") or {}) do
     if type(k) == "number" then
-      assert(type(v) == "string", "numerically-indexed subscribe event name must be a string")
+      assert0(type(v) == "string", "numerically-indexed subscribe event name must be a string")
       Module.module_subscribers[self][v]={}
     elseif type(k) == "string" then
       if type(v) == "function" then
-        assert(self:subscribe(k, v))
+        assert0(self:subscribe(k, v))
       elseif type(v) == "table" then
-        assert(type(v.subscriber) == "function", "string-indexed subscribe event table key 'subscriber' must be function")
-        assert(self:subscribe(k, v.subscriber, v.priority))
+        assert0(type(v.subscriber) == "function", "string-indexed subscribe event table key 'subscriber' must be function")
+        assert0(self:subscribe(k, v.subscriber, v.priority))
       else
-        error("invalid subscribe type " .. type(v)..", must be function or table")
+        assert0("invalid subscribe type " .. type(v)..", must be function or table", 0)
       end
     else
-      error("invalid subscribe key type " .. type(k))
+      assert0("invalid subscribe key type " .. type(k), 0)
     end
   end
   self.subscribe = nil
@@ -54,11 +61,11 @@ end
 
 function Module.new(mod, version)
   if type(mod) == "string" then
-    assert(type(version) == "string", "Lua module version missing")
+    assert0(type(version) == "string", "Lua module version missing")
     mod = { name = mod, version = version }
   end
-  assert(type(mod.name) == "string", "Lua module name missing")
-  assert(type(mod) == "table")
+  assert0(type(mod.name) == "string", "Lua module name missing")
+  assert0(type(mod) == "table")
   setmetatable(mod, module_mt)
   Module.module_subscribers[mod]={}
   if mod.subscribe then
@@ -75,12 +82,21 @@ function Module.find(name)
   elseif t == "table" and t.name then
     found = lua_modules[t.name]
   else
-    error("expected a module name string, got " .. t)
+    error("expected a module name string, got " .. t, 0)
   end
   if not found then
     return nil, "module '"..tostring(name).."' not found"
   end
   return found
+end
+
+function Module.is_lua_module(tbl)
+  if type(tbl)~="table" then
+    return nil, "" .. type(tbl).. " instead of module table"
+  elseif getmetatable(tbl) ~= module_mt then
+    return nil, "module table was not created with Module.new(...)"
+  end
+  return true
 end
 
 local event_mt = {__index = function(self, k)
@@ -118,7 +134,7 @@ function module:add()
   local subs_unique = {}
   
   if lua_modules[self.name] and lua_modules[self.name] ~= self then
-    error(("a different module named %s has already been added to Shuttlesock"):format(self.name))
+    error(("a different module named %s has already been added to Shuttlesock"):format(self.name), 0)
   elseif lua_modules[self.name] == self then
     return nil, "This module has already been added"
   end
@@ -154,14 +170,14 @@ function module:add()
     if type(k)=="number" then
       name, opts = v, {}
     else
-      assert(type(k) == "string", "publish key isn't a number or string")
-      assert(type(v) == "table", "publish value isn't a string or table")
+      assert0(type(k) == "string", "publish key isn't a number or string")
+      assert0(type(v) == "table", "publish value isn't a string or table")
       name, opts = k, v
     end
     if name:match("%s") then
-      error("publish name " .. name .. " can't contain spaces")
+      error("publish name " .. name .. " can't contain spaces", 0)
     elseif name:match("%:%;") then
-      error("publish name " .. name .. " can't contain punctuation other than '.'")
+      error("publish name " .. name .. " can't contain punctuation other than '.'", 0)
     end
     Module.module_publish_events[self.name][name]=opts
   end
@@ -193,10 +209,10 @@ end
 
 function module:subscribe(event_name, subscriber_function, priority)
   if Core.runstate() ~= "configuring" then
-    error("can't subscribe to module events while " .. Core.runstate())
+    error("can't subscribe to module events while " .. Core.runstate(), 0)
   end
-  assert(type(event_name) == "string", "event name must be a string")
-  assert(type(subscriber_function) == "function", "subscriber function must be a function in case that's not perfectly clear")
+  assert0(type(event_name) == "string", "event name must be a string")
+  assert0(type(subscriber_function) == "function", "subscriber function must be a function in case that's not perfectly clear")
   
   local optional
   optional, event_name = event_name:match("^(%~?)(.*)")
@@ -204,7 +220,7 @@ function module:subscribe(event_name, subscriber_function, priority)
   
   if lua_modules[self.name] and not Module.module_subscribers[self][event_name] then
     --module already added, but the subscribe event name wasn't declared upfront
-    error(("Lua module %s can't subscribe to undeclared event %s when it's already been added to Shuttlesock"):format(self.name, event_name))
+    error(("Lua module %s can't subscribe to undeclared event %s when it's already been added to Shuttlesock"):format(self.name, event_name), 0)
   end
     
   if not Module.module_subscribers[self][event_name] then

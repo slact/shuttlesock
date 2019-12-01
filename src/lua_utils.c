@@ -56,12 +56,13 @@ bool luaS_function_pcall_result_ok(lua_State *L, int nargs, bool preserve_result
 //fails if there's an error or the function returned nil
 //success on anything else, even if the function returns nothing
 bool luaS_call_noerror(lua_State *L, int nargs, int nrets) {
-  int stacksize_before = lua_gettop(L) - nargs - 1;
+  int fn_index = lua_gettop(L) - nargs;
+  int stacksize_before = fn_index - 1;
   
   lua_pushcfunction(L, luaS_traceback_error_handler);
-  lua_insert(L, stacksize_before);
-  int rc = lua_pcall(L, nargs, nrets, stacksize_before);
-  lua_remove(L, stacksize_before);
+  lua_insert(L, fn_index);
+  int rc = lua_pcall(L, nargs, nrets, fn_index);
+  lua_remove(L, fn_index);
   if (rc != LUA_OK) {  
     return false;
   }
@@ -119,7 +120,7 @@ bool luaS_pcall(lua_State *L, int nargs, int nresults) {
   if (rc != LUA_OK) {
     shuso_set_error(shuso_state(L), "Lua error: %s", lua_tostring(L, -1));
     lua_pop(L, 1);
-    lua_gc(L, LUA_GCCOLLECT, 0);
+    //lua_gc(L, LUA_GCCOLLECT, 0);
   }
   lua_remove(L, 1);
   return rc == LUA_OK;

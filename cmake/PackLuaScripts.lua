@@ -54,7 +54,9 @@ elseif ARG[1] == "--pack" then
 ]]
 
   local struct = {}
-
+  
+  local KEEP_ASCII = true
+  
   for _, script in ipairs(scripts) do
     local path = script.file or script.src
     local file = io.open(path, "rb")
@@ -66,12 +68,20 @@ elseif ARG[1] == "--pack" then
     local out
     if script.compiled then
       out = script.data:gsub(".", function(c)
-        return ("\\x%02x"):format(c:byte())
-        --local byte = c:byte()
-        --if byte < 0x30 or byte == 0x22 or byte > 0x7E then
-        --  return ("\\x%02x"):format(c:byte())
-        --end
+        if not KEEP_ASCII then
+          return ("\\x%02x"):format(c:byte())
+        else
+          local byte = c:byte()
+          if byte < 0x30 or byte == 0x22 or byte >= 0x7E or c == '\\' then
+            return ("\\x%02x"):format(c:byte())
+          end
+        end
       end)
+      if KEEP_ASCII then
+        out = out:gsub("\\x[0-9a-fA-F][0-9a-fA-F][0-9a-fA-F]", function(chars)
+          return ("%s\"\"%s"):format(chars:sub(1,4), chars:sub(5))
+        end)
+      end
     else
       out = script.data
       out = out:gsub('\\', '\\\\')

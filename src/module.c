@@ -90,12 +90,11 @@ bool shuso_add_core_modules(shuso_t *S, char *errbuf, size_t errbuflen) {
         return false;
       }
     }
-    
     if(shuttlesock_core_modules[i].lua_script) {
       luaS_do_embedded_script(L, shuttlesock_core_modules[i].lua_script, prepared_lua_args);
-    }
-    if(lua_isnil(L, -1)) {
-      lua_pop(L, 1);
+      if(lua_gettop(L) > top && lua_isnil(L, -1)) {
+        lua_pop(L, 1);
+      }
     }
     if(shuttlesock_core_modules[i].lua_require) {
       lua_getglobal(L, "require");
@@ -105,11 +104,13 @@ bool shuso_add_core_modules(shuso_t *S, char *errbuf, size_t errbuflen) {
         lua_settop(L, top);
         return false;
       }
-    }
-    if(lua_isnil(L, -1)) {
-      lua_pop(L, 1);
+      if(lua_gettop(L) > top && lua_isnil(L, -1)) {
+        lua_pop(L, 1);
+      }
     }
     if(shuttlesock_core_modules[i].lua_module) {
+      int module_stack_index = lua_gettop(L) >= top+1 && lua_istable(L, top+1) ? top+1 : 0;
+
       lua_getglobal(L, "require");
       lua_pushliteral(L, "shuttlesock.module");
       lua_call(L, 1, 1);
@@ -121,18 +122,28 @@ bool shuso_add_core_modules(shuso_t *S, char *errbuf, size_t errbuflen) {
         lua_settop(L, top);
       }
       else {
-        if(!lua_istable(L, top+1)) {
-          snprintf(errbuf, errbuflen, "failed to add core Lua module \"%s\": script or required file didn't return a module table to add", shuttlesock_core_modules[i].name);
+        lua_pop(L, 1);
+        if(module_stack_index == 0) {
+          snprintf(errbuf, errbuflen, "failed to add core Lua module \"%s\": script or required module didn't return a module table", shuttlesock_core_modules[i].name);
           lua_settop(L, top);
           return false;
-        }
-        lua_pop(L, 2);
-        lua_getfield(L, -1, "add");
-        lua_pushvalue(L, top+1);
-        if(!luaS_pcall(L, 1, 2)) {
-          snprintf(errbuf, errbuflen, "failed to add core Lua module \"%s\": %s", shuttlesock_core_modules[i].name, shuso_last_error(S));
-          lua_settop(L, top);
-          return false;
+        } 
+        else {
+          lua_getfield(L, -1, "is_lua_module");
+          lua_pushvalue(L, top+1);
+          lua_call(L, 1, 1);
+          if(lua_isnil(L, -1)) {
+            lua_pop(L, 1);
+            lua_getfield(L, -1, "new");
+            lua_pushvalue(L, top+1);
+            if(lua_pcall(L, 1, 2, 0) != LUA_OK) {
+              snprintf(errbuf, errbuflen, "failed to add core Lua module \"%s\": %s", shuttlesock_core_modules[i].name, lua_tostring(L, -1));
+              lua_settop(L, top);
+              return false;
+            }
+            lua_pop(L, 2);
+          }
+          lua_pop(L, 1);
         }
       }
     }

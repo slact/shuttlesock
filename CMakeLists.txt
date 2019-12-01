@@ -240,13 +240,18 @@ add_core_module("lua_bridge"
     "lua_binding" lua_bridge/lua_binding.lua
 )
 
-#add_core_module("server"
-#  server/server.c
-#  HEADER
-#    server.h
-#  LUA_MODULES
-#    server/server.lua
-#)
+add_core_module("server" LUA
+  LUA_MODULES
+    "shuttlesock.modules.core.server" server.lua
+  LUA_SOURCES
+    "shuttlesock_server_module_setup" server/module_setup.lua
+  SOURCES
+    server/server.c
+  HEADERS
+    server/server.h
+  PREPARE_FUNCTION
+    shuttlesock_server_module_prepare
+)
 
 
 

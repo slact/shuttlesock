@@ -248,7 +248,7 @@ static bool runcheck_module_initialize(shuso_t *S, shuso_module_t *self) {
 shuso_t *shusoT_create(test_runcheck_t **external_ptr, double test_timeout) {
   test_runcheck_t     *chk = shmalloc(chk);
   if(!chk) {
-    snow_fail("failed to mmap test_runcheck");
+    fail("failed to mmap test_runcheck");
     return NULL;
   }
   if(external_ptr) {
@@ -257,7 +257,7 @@ shuso_t *shusoT_create(test_runcheck_t **external_ptr, double test_timeout) {
   const char          *errmsg;
   shuso_t             *S = shuso_create(&errmsg);
   if(!S) {
-    snow_fail("shuso_create failed: %s", errmsg);
+    fail("shuso_create failed: %s", errmsg);
     return NULL;
   }
   if(!test_config.verbose) {
@@ -291,7 +291,9 @@ shuso_t *shusoT_create(test_runcheck_t **external_ptr, double test_timeout) {
   chk->timeout = test_timeout;
   chk->timeout_is_ok = false;
   chk->ignore_errors = 0;
-  shuso_add_module(S, &chk->runcheck_module);
+  if(!shuso_add_module(S, &chk->runcheck_module)) {
+    fail("shusoT_create failed: %s", shuso_last_error(S));
+  }
   return S;
 }
 

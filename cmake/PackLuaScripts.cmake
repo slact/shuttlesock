@@ -1,5 +1,8 @@
 include(CMakeParseArguments)
 
+set(packed_lua_scripts_target_deps "" CACHE INTERNAL "packed lua scripts deps" FORCE)
+set(packed_lua_scripts_config "" CACHE INTERNAL "packed lua scripts config" FORCE)
+
 find_program(LUA_PROGRAM NAMES lua53 lua5.3 lua)
 if(NOT LUA_PROGRAM)
   message(FATAL_ERROR "Could not find Lua program")
