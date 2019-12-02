@@ -49,8 +49,13 @@ static void config_worker_gxcopy(shuso_t *S, shuso_event_state_t *evs, intptr_t 
 }
 
 static bool luaS_push_config_function(lua_State *L, const char *funcname) {
-  lua_getglobal(L, "require");
-  lua_pushliteral(L, "shuttlesock.core.config");
+  shuso_t *S = shuso_state(L);
+  lua_rawgeti(L, LUA_REGISTRYINDEX, S->config.index);
+  if(lua_isnil(L, -1)) {
+    lua_pop(L, 1);
+    lua_getglobal(L, "require");
+    lua_pushliteral(L, "shuttlesock.core.config");
+  }
   lua_call(L, 1, 1);
   lua_getfield(L, -1, funcname);
   lua_remove(L, -2);
@@ -642,6 +647,12 @@ bool shuso_config_block_error(shuso_t *S, shuso_setting_block_t *b, const char *
 }
 
 static bool config_initialize(shuso_t *S, shuso_module_t *self) {
+  lua_State *L = S->lua.state;
+  lua_getglobal(L, "require");
+  lua_pushliteral(L, "shuttlesock.core.config");
+  lua_call(L, 1, 1);
+  S->config.index = luaL_ref(L, LUA_REGISTRYINDEX);
+  
   shuso_event_listen(S, "core:worker.start.before.lua_gxcopy", config_worker_gxcopy, self);
   return true;
 }
