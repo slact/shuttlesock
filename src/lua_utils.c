@@ -632,7 +632,6 @@ static bool gxcopy_package_preloader(lua_gxcopy_state_t *gxs, const char *name) 
 static bool gxcopy_package_loaded(lua_gxcopy_state_t *gxs) {
   lua_State *Ls = gxs->src.state, *Ld = gxs->dst.state;
   luaL_checkstack(Ls, 2, NULL);
-  
   lua_rawgeti(Ls, LUA_REGISTRYINDEX, gxs->src.modules_ref);
   lua_pushvalue(Ls, -2);
   lua_gettable(Ls, -2);
@@ -644,14 +643,12 @@ static bool gxcopy_package_loaded(lua_gxcopy_state_t *gxs) {
   else if(!lua_isstring(Ls, -1)) {
     raise(SIGABRT); //how?..
   }
-  
   lua_remove(Ls, -2);
   
   lua_rawgeti(Ls, LUA_REGISTRYINDEX, gxs->src.preloaders_ref);
   lua_getfield(Ls, -1, lua_tostring(Ls, -2));
   if(!lua_isnil(Ls, -1)) {
     lua_pop(Ls, 3);
-    assert(lua_gettop(Ld) == dtop);
     return false;
   }
   lua_pop(Ls, 2);
@@ -692,8 +689,8 @@ static bool gxcopy_cache_load(lua_gxcopy_state_t *gxs) {
 
 static bool gxcopy_cache_store(lua_gxcopy_state_t *gxs) {
   lua_State *Ls = gxs->src.state, *Ld = gxs->dst.state;
-  luaL_checkstack(Ls, 3, NULL);
-  luaL_checkstack(Ld, 2, NULL);
+  luaL_checkstack(Ls, 4, NULL);
+  luaL_checkstack(Ld, 4, NULL);
   
    //cache copied thing in dst state
   lua_rawgeti(Ld, LUA_REGISTRYINDEX, gxs->dst.copies_ref);
@@ -879,6 +876,9 @@ static bool gxcopy_userdata(lua_gxcopy_state_t *gxs) {
     return true;
   }
   
+  luaL_checkstack(Ls, 4, NULL);
+  luaL_checkstack(Ld, 1, NULL);
+  
   if(!lua_getmetatable(Ls, -1)) {
     return shuso_set_error(shuso_state(gxs->src.state), "failed to gxcopy userdata without metatable: this is impossible");
   }
@@ -917,16 +917,15 @@ static bool gxcopy_thread(lua_gxcopy_state_t *gxs) {
   return shuso_set_error(shuso_state(gxs->src.state), "failed to gxcopy coroutine: this is impossible");
 }
 
-
 static bool gxcopy_any(lua_gxcopy_state_t *gxs) {
   lua_State *Ls = gxs->src.state, *Ld = gxs->dst.state;
+  luaL_checkstack(Ld, 1, NULL);
   int type = lua_type(Ls, -1);
   switch(type) {
     case LUA_TNIL:
       lua_pushnil(Ld);
       break;
     case LUA_TNUMBER:
-      luaL_checkstack(Ld, 1, NULL);
       if(lua_isinteger(Ls, -1)) {
         lua_pushinteger(Ld, lua_tointeger(Ls, -1));
       }
@@ -935,13 +934,11 @@ static bool gxcopy_any(lua_gxcopy_state_t *gxs) {
       }
       break;
     case LUA_TBOOLEAN:
-      luaL_checkstack(Ld, 1, NULL);
       lua_pushboolean(Ld, lua_toboolean(Ls, -1));
       break;
     case LUA_TSTRING: {
       size_t sz;
       const char *str = lua_tolstring(Ls, -1, &sz);
-      luaL_checkstack(Ld, 1, NULL);
       lua_pushlstring(Ld, str, sz);
     } break;
     case LUA_TTABLE:
@@ -965,7 +962,6 @@ static bool gxcopy_any(lua_gxcopy_state_t *gxs) {
       }
       break;
     case LUA_TLIGHTUSERDATA:
-      luaL_checkstack(Ld, 1, NULL);
       lua_pushlightuserdata(Ld, (void *)lua_topointer(Ls, -1));
       break;
   }
@@ -973,6 +969,9 @@ static bool gxcopy_any(lua_gxcopy_state_t *gxs) {
 }
 
 bool luaS_gxcopy_start(lua_State *Ls, lua_State *Ld) {
+  luaL_checkstack(Ls, 10, NULL);
+  luaL_checkstack(Ld, 10, NULL);
+  
   lua_getfield(Ls, LUA_REGISTRYINDEX, "___gxcopy_state___");
   if(!lua_isnil(Ls, -1)) {
     lua_pop(Ls, 1);
@@ -1003,6 +1002,7 @@ bool luaS_gxcopy_start(lua_State *Ls, lua_State *Ld) {
     .src.state = Ls,
     .src.copies_ref = src_copies_ref,
     .src.modules_ref = LUA_REFNIL,
+    .src.preloaders_ref = LUA_REFNIL,
     .dst.state = Ld,
     .dst.copies_ref = dst_copies_ref,
   };
@@ -1027,6 +1027,7 @@ bool luaS_gxcopy_start(lua_State *Ls, lua_State *Ld) {
   return true;
 }
 bool luaS_gxcopy(lua_State *Ls, lua_State *Ld) {
+  luaL_checkstack(Ls, 1, NULL);
   lua_getfield(Ls, LUA_REGISTRYINDEX, "___gxcopy_state___");
   if(!lua_isuserdata(Ls, -1)) {
     lua_pop(Ls, 1);
@@ -1040,6 +1041,7 @@ bool luaS_gxcopy(lua_State *Ls, lua_State *Ld) {
   assert(gxs->src.state == Ls && gxs->dst.state == Ld);
   return gxcopy_any(gxs);
 }
+
 bool luaS_gxcopy_finish(lua_State *Ls, lua_State *Ld) {
   lua_getfield(Ls, LUA_REGISTRYINDEX, "___gxcopy_state___");
   if(!lua_isuserdata(Ls, -1)) {
@@ -1063,6 +1065,8 @@ bool luaS_gxcopy_finish(lua_State *Ls, lua_State *Ld) {
 }
 
 bool luaS_gxcopy_module_state(lua_State *Ls, lua_State *Ld, const char *module_name) {
+  luaL_checkstack(Ls, 5, NULL);
+  luaL_checkstack(Ld, 5, NULL);
   
   lua_getglobal(Ls, "require");
   lua_pushstring(Ls, module_name);
@@ -1112,6 +1116,7 @@ bool luaS_gxcopy_module_state(lua_State *Ls, lua_State *Ld, const char *module_n
   return true;
 }
 bool luaS_streq(lua_State *L, int index, const char *str) {
+  luaL_checkstack(L, 1, NULL);
   if(str) {
     index = lua_absindex(L, index);
     lua_pushstring(L, str);
@@ -1121,6 +1126,7 @@ bool luaS_streq(lua_State *L, int index, const char *str) {
   return equal;
 }
 int luaS_table_count(lua_State *L, int idx) {
+  luaL_checkstack(L, 3, NULL);
   int absidx = lua_absindex(L, idx);
   assert(lua_type(L, absidx) == LUA_TTABLE);
   lua_pushnil(L);
