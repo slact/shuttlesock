@@ -462,6 +462,9 @@ rebuild = Opts.new do
       opt.cmake_opts=[arg]
     end)
   
+  lua_apicheck :debug_flag,
+    cmake_define: {LUA_BUILD_STATIC_APICHECK: true}
+  
   help :flag,
     set: {help: true}
     

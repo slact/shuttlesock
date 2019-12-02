@@ -113,13 +113,49 @@ test_strsignal(SHUTTLESOCK_HAVE_STRSIGNAL)
 set(SHUTTLESOCK_HAVE_STRSIGNAL ${SHUTTLESOCK_HAVE_STRSIGNAL} CACHE INTERNAL "system has strsignal()")
 
 #lua (we want 5.3)
-set(Lua_FIND_VERSION 5.3)
-include(FindLua)
-if(LUA_INCLUDE_DIR)
-  target_include_directories(shuttlesock PUBLIC ${LUA_INCLUDE_DIR})
-  target_link_libraries(shuttlesock PUBLIC ${LUA_LIBRARIES})
+if(NOT LUA_BUILD_STATIC_APICHECK)
+  set(Lua_FIND_VERSION 5.3)
+  include(FindLua)
+  if(LUA_INCLUDE_DIR)
+    target_include_directories(shuttlesock PUBLIC ${LUA_INCLUDE_DIR})
+    target_link_libraries(shuttlesock PUBLIC ${LUA_LIBRARIES})
+  else()
+    message(FATAL_ERROR "Failed to find Lua ${Lua_FIND_VERSION}")
+  endif()
 else()
-  message(FATAL_ERROR "Failed to find Lua ${Lua_FIND_VERSION}")
+  if(CMAKE_SYSTEM_NAME STREQUAL Linux)
+    set(LUA_BUILD_TARGET linux)
+  elseif(CMAKE_SYSTEM_NAME STREQUAL Darwin)
+    set(LUA_BUILD_TARGET macosx)
+  elseif(CMAKE_SYSTEM_NAME STREQUAL FreeBSD)
+    set(LUA_BUILD_TARGET freebsd)
+  elseif(CMAKE_SYSTEM_NAME STREQUAL Solaris)
+    set(LUA_BUILD_TARGET solaris)
+  elseif(CMAKE_SYSTEM_NAME STREQUAL BSD)
+    set(LUA_BUILD_TARGET bsd)
+  else()
+    set(LUA_BUILD_TARGET posix)
+  endif()
+  
+  
+  
+  set(LUA_PREFIX_DIR ${CMAKE_CURRENT_BINARY_DIR}/src/lua_static_apicheck/)
+  include(ExternalProject)
+  ExternalProject_Add(lua_static_apicheck
+    URL "https://www.lua.org/ftp/lua-5.3.5.tar.gz"
+  #  SOURCE_DIR ${LIBEV_DIR}
+    CONFIGURE_COMMAND ""
+    PREFIX ${CMAKE_CURRENT_BINARY_DIR}
+    BUILD_COMMAND make "MYCFLAGS=${CFLAGS} -DLUA_USE_APICHECK -fPIC -g -DLUA_COMPAT_5_2 -DLUA_COMPAT_5_1" ${LUA_BUILD_TARGET}
+    INSTALL_COMMAND ""
+    BUILD_IN_SOURCE 1
+  )
+  target_include_directories(shuttlesock PUBLIC ${LUA_PREFIX_DIR}/src)
+  add_dependencies(shuttlesock lua_static_apicheck)
+  add_library(lualib_apicheck STATIC IMPORTED)
+  set_target_properties(lualib_apicheck PROPERTIES IMPORTED_LOCATION ${LUA_PREFIX_DIR}/src/liblua.a)
+  target_link_libraries(shuttlesock PRIVATE lualib_apicheck)
+  target_link_libraries(shuttlesock PRIVATE dl)
 endif()
 
 #c-ares
@@ -243,14 +279,14 @@ add_core_module("lua_bridge"
 add_core_module("server" LUA
   LUA_MODULES
     "shuttlesock.modules.core.server" server.lua
-  LUA_SOURCES
-    "shuttlesock_server_module_setup" server/module_setup.lua
   SOURCES
     server/server.c
   HEADERS
     server/server.h
   PREPARE_FUNCTION
     shuttlesock_server_module_prepare
+  LUA_REQUIRE
+    shuttlesock.modules.core.server
 )
 
 
