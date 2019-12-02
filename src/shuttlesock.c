@@ -651,6 +651,7 @@ bool shuso_spawn_worker(shuso_t *S, shuso_process_t *proc) {
 #endif
   
   luaS_gxcopy_start(S->lua.state, wS->lua.state);
+  luaS_gxcopy_package_preloaders(S->lua.state, wS->lua.state);
   shuso_core_module_event_publish(wS, "worker.start.before.lua_gxcopy", SHUSO_OK, S);
   luaS_gxcopy_finish(S->lua.state, wS->lua.state);
   

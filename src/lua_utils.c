@@ -576,6 +576,7 @@ typedef struct {
     lua_State       *state;
     lua_reference_t  copies_ref;
     lua_reference_t  modules_ref;
+    lua_reference_t  preloaders_ref;
   }          src;
   struct {
     lua_State       *state;
@@ -586,6 +587,47 @@ typedef struct {
 
 static bool gxcopy_any(lua_gxcopy_state_t *gxs);
 static bool gxcopy_function(lua_gxcopy_state_t *gxs, bool copy_upvalues);
+
+static bool gxcopy_package_preloader(lua_gxcopy_state_t *gxs, const char *name) {
+  bool    ok = true;
+  lua_State *Ls = gxs->src.state, *Ld = gxs->dst.state;
+  luaL_checkstack(Ls, 8, NULL);
+  luaL_checkstack(Ld, 3, NULL);
+  
+  lua_getglobal(Ls, "package");
+  lua_getfield(Ls, -1, "preload");
+  lua_getfield(Ls, -1, name);
+  if(lua_isnil(Ls, -1)) {
+    lua_pop(Ls, 3);
+    return true;
+  }
+  
+  lua_rawgeti(Ls, LUA_REGISTRYINDEX, gxs->src.preloaders_ref);
+  lua_pushboolean(Ls, 1);
+  lua_setfield(Ls, -2, name);
+  lua_pop(Ls, 1);
+  
+  lua_getglobal(Ld, "package");
+  lua_getfield(Ld, -1, "preload");
+  if(gxcopy_any(gxs)) {
+    lua_setfield(Ld, -2, name);
+  }
+  else {
+    ok = false;
+  }
+  lua_pop(Ld, 2);
+  lua_pop(Ls, 3);
+  
+  lua_rawgeti(Ls, LUA_REGISTRYINDEX, gxs->src.preloaders_ref);
+  lua_pushnil(Ls);
+  lua_setfield(Ls, -2, name);
+  lua_pop(Ls, 1);
+  
+  if(!ok) {
+    return shuso_set_error(shuso_state(Ls), "failed to gxcopy package.preload[\"%s\"]", name);
+  }
+  return ok;
+}
 
 static bool gxcopy_package_loaded(lua_gxcopy_state_t *gxs) {
   lua_State *Ls = gxs->src.state, *Ld = gxs->dst.state;
@@ -604,6 +646,17 @@ static bool gxcopy_package_loaded(lua_gxcopy_state_t *gxs) {
   }
   
   lua_remove(Ls, -2);
+  
+  lua_rawgeti(Ls, LUA_REGISTRYINDEX, gxs->src.preloaders_ref);
+  lua_getfield(Ls, -1, lua_tostring(Ls, -2));
+  if(!lua_isnil(Ls, -1)) {
+    lua_pop(Ls, 3);
+    assert(lua_gettop(Ld) == dtop);
+    return false;
+  }
+  lua_pop(Ls, 2);
+  
+  gxcopy_package_preloader(gxs, lua_tostring(Ls, -1));
   
   luaL_checkstack(Ld, 3, NULL);
   lua_getglobal(Ld, "require");
@@ -968,6 +1021,9 @@ bool luaS_gxcopy_start(lua_State *Ls, lua_State *Ld) {
   lua_pop(Ls, 1);
   int src_modules_ref = luaL_ref(Ls, LUA_REGISTRYINDEX);
   gxs->src.modules_ref = src_modules_ref;
+  
+  lua_newtable(Ls);
+  gxs->src.preloaders_ref = luaL_ref(Ls, LUA_REGISTRYINDEX);
   return true;
 }
 bool luaS_gxcopy(lua_State *Ls, lua_State *Ld) {
@@ -995,6 +1051,7 @@ bool luaS_gxcopy_finish(lua_State *Ls, lua_State *Ld) {
   assert(gxs->src.state == Ls && gxs->dst.state == Ld);
   luaL_unref(Ls, LUA_REGISTRYINDEX, gxs->src.copies_ref);
   luaL_unref(Ls, LUA_REGISTRYINDEX, gxs->src.modules_ref);
+  luaL_unref(Ls, LUA_REGISTRYINDEX, gxs->src.preloaders_ref);
   luaL_unref(Ld, LUA_REGISTRYINDEX, gxs->dst.copies_ref);
   
   lua_pushnil(Ls);

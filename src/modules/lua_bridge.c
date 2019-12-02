@@ -1,7 +1,7 @@
 #include <shuttlesock.h>
 #include "lua_bridge.h"
 
-static void lua_module_gxcopy(shuso_t *S, shuso_event_state_t *es, intptr_t code, void *data, void *pd) {
+static void lua_module_gxcopy_loaded_packages(shuso_t *S, shuso_event_state_t *es, intptr_t code, void *data, void *pd) {
   shuso_t *Sm = data;
   lua_State *L = S->lua.state;
   lua_State *Lm = Sm->lua.state;
@@ -29,7 +29,7 @@ static void lua_module_gxcopy(shuso_t *S, shuso_event_state_t *es, intptr_t code
 }
 
 static bool lua_bridge_module_initialize(shuso_t *S, shuso_module_t *self) {
-  shuso_event_listen(S, "core:worker.start.before.lua_gxcopy", lua_module_gxcopy, self);
+  shuso_event_listen(S, "core:worker.start.before.lua_gxcopy", lua_module_gxcopy_loaded_packages, self);
   
   shuso_lua_bridge_module_ctx_t *ctx = shuso_stalloc(&S->stalloc, sizeof(*ctx));
   
