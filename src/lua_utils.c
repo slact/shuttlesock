@@ -1,7 +1,4 @@
 #include <shuttlesock.h>
-#include <lua.h>
-#include <lualib.h>
-#include <lauxlib.h>
 #include <shuttlesock/embedded_lua_scripts.h>
 #include <shuttlesock/modules/lua_bridge/api/lazy_atomics.h>
 #include <shuttlesock/modules/lua_bridge/api/lua_ipc.h>
@@ -1047,6 +1044,82 @@ int luaS_table_count(lua_State *L, int idx) {
     count++;
   }
   return count;
+}
+
+bool luaS_gxcopy_package_preloaders(lua_State *Ls, lua_State *Ld) {
+  bool ok = true;
+  
+  luaL_checkstack(Ls, 4, NULL);
+  luaL_checkstack(Ld, 3, NULL);
+  
+  lua_getglobal(Ls, "package");
+  lua_getfield(Ls, -1, "preload");
+  lua_remove(Ls, -2);
+  int Ls_preload = lua_gettop(Ls);
+  
+  lua_getglobal(Ld, "package");
+  lua_getfield(Ld, -1, "preload");
+  lua_remove(Ld, -2);
+  int Ld_preload = lua_gettop(Ld);
+  
+  lua_pushnil(Ls);
+  while(lua_next(Ls, -2)) {
+    lua_pop(Ls, 1);
+    const char *k = lua_tostring(Ls, -1);
+    lua_getfield(Ls, Ls_preload, k);
+    if(luaS_gxcopy(Ls, Ld)) {
+      lua_setfield(Ld, Ld_preload, k);
+    }
+    else {
+      shuso_set_error(shuso_state(Ls), "Failed to gxcopy Lua package.preload[\"%s\"]", k);
+      ok = false;
+    }
+    lua_pop(Ls, 1);
+  }
+  lua_pop(Ls, 1);
+  lua_pop(Ld, 1);
+  return ok;
+}
+
+bool luaS_pointer_ref(lua_State *L, const char *pointer_table_name, const void *ptr) {
+  lua_getfield(L, LUA_REGISTRYINDEX, pointer_table_name);
+  if(lua_isnil(L, -1)) {
+    lua_pop(L, 1);
+    lua_newtable(L);
+    lua_pushvalue(L, -1);
+    lua_setfield(L, LUA_REGISTRYINDEX, pointer_table_name);
+  }
+  lua_pushlightuserdata(L, (void *)ptr);
+  lua_pushvalue(L, -3);
+  lua_settable(L, -3);
+  lua_pop(L, 2);
+  return true;
+}
+
+bool luaS_pointer_unref(lua_State *L, const char *pointer_table_name, const void *ptr) {
+  lua_getfield(L, LUA_REGISTRYINDEX, pointer_table_name);
+  if(!lua_isnil(L, -1)) {
+    lua_pushlightuserdata(L, (void *)ptr);
+    lua_pushnil(L);
+    lua_settable(L, -3);
+  }
+  lua_pop(L, 1);
+  return true;
+}
+
+bool luaS_get_pointer_ref(lua_State *L, const char *pointer_table_name, const void *ptr) {
+  lua_checkstack(L, 2);
+  lua_getfield(L, LUA_REGISTRYINDEX, pointer_table_name);
+  if(!lua_istable(L, -1)) {
+    lua_pop(L, 1);
+    lua_pushnil(L);
+  }
+  else {
+    lua_pushlightuserdata(L, (void *)ptr);
+    lua_gettable(L, -2);
+    lua_remove(L, -2);
+  }
+  return true;
 }
 
 void luaS_push_runstate(lua_State *L, shuso_runstate_t state) {

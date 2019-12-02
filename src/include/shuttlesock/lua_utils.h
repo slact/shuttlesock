@@ -3,6 +3,8 @@
 
 #include <shuttlesock/common.h>
 #include <lua.h>
+#include <lauxlib.h>
+#include <lualib.h>
 
 extern shuso_module_t shuso_lua_bridge_module;
 
@@ -56,6 +58,7 @@ bool luaS_function_pcall_result_ok(lua_State *L, int nargs, bool preserve_result
 bool luaS_gxcopy_start(lua_State *source, lua_State *destination);
 bool luaS_gxcopy(lua_State *source, lua_State *destination);
 bool luaS_gxcopy_module_state(lua_State *source, lua_State *destination, const char *module_name);
+bool luaS_gxcopy_package_preloaders(lua_State *source, lua_State *destination);
 bool luaS_gxcopy_finish(lua_State *source, lua_State *destination);
 
 bool luaS_streq(lua_State *L, int index, const char *str);
@@ -67,42 +70,11 @@ int luaS_table_count(lua_State *L, int idx); //count all non-nil elements in tab
 
 bool luaS_push_lua_module_field(lua_State *L, const char *module_name, const char *key); //require(module_name)[key]
 
-#define luaS_pointer_ref(L, pointer_table_name, ptr) do { \
-  lua_getfield(L, LUA_REGISTRYINDEX, pointer_table_name); \
-  if(lua_isnil(L, -1)) { \
-    lua_pop(L, 1); \
-    lua_newtable(L); \
-    lua_pushvalue(L, -1); \
-    lua_setfield(L, LUA_REGISTRYINDEX, pointer_table_name); \
-  } \
-  lua_pushlightuserdata(L, (void *)ptr); \
-  lua_pushvalue(L, -3); \
-  lua_settable(L, -3); \
-  lua_pop(L, 2); \
-} while(0)
+bool luaS_register_lib(lua_State *L, const char *name, luaL_Reg *reg);
 
-#define luaS_pointer_unref(L, pointer_table_name, ptr) do { \
-  lua_getfield(L, LUA_REGISTRYINDEX, pointer_table_name); \
-  if(!lua_isnil(L, -1)) { \
-    lua_pushlightuserdata(L, (void *)ptr); \
-    lua_pushnil(L); \
-    lua_settable(L, -3); \
-  } \
-  lua_pop(L, 1); \
-} while(0)
-
-#define luaS_get_pointer_ref(L, pointer_table_name, ptr) do { \
-  lua_getfield(L, LUA_REGISTRYINDEX, pointer_table_name); \
-  if(!lua_istable(L, -1)) { \
-    lua_pop(L, 1); \
-    lua_pushnil(L); \
-  } \
-  else { \
-    lua_pushlightuserdata(L, (void *)ptr); \
-    lua_gettable(L, -2); \
-    lua_remove(L, -2); \
-  } \
-} while(0)
+bool luaS_pointer_ref(lua_State *L, const char *pointer_table_name, const void *ptr);
+bool luaS_pointer_unref(lua_State *L, const char *pointer_table_name, const void *ptr);
+bool luaS_get_pointer_ref(lua_State *L, const char *pointer_table_name, const void *ptr);
 
 //error handlers for lua_pcall
 int luaS_traceback_error_handler(lua_State *L); //sets Lua error + traceback as the shuttlesock error message
