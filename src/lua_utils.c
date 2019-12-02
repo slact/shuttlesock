@@ -902,7 +902,7 @@ static bool gxcopy_userdata(lua_gxcopy_state_t *gxs) {
   
   lua_pushvalue(Ls, -2);
   if(!luaS_function_call_result_ok(Ls, 1, true)) {
-    lua_pop(Ld, 1);
+    lua_pop(Ls, 1);
     return shuso_set_error(shuso_state(Ls), "failed to gxcopy userdata: __gxcopy_save error: %s", shuso_last_error(shuso_state(Ls)));
   }
   
