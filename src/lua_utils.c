@@ -9,6 +9,37 @@
 #define INIT_LUA_ALLOCS 1
 #endif
 
+static int luaS_libloader(lua_State *L) {
+  lua_pushvalue(L, lua_upvalueindex(1));
+  return 1;
+}
+
+bool luaS_register_lib(lua_State *L, const char *name, luaL_Reg *reg) {
+  lua_getglobal(L, "package");
+  lua_getfield(L, -1, "preload");
+  lua_getfield(L, -1, name);
+  
+  if(!lua_isnil(L, -1)) {
+    return luaL_error(L, "can't register C function library \"%s\": package \"%s\" is already in package.preload", name, name);
+  }
+  lua_pop(L, 1);
+  
+  int n = 0;
+  while(reg[n].name != NULL) n++;
+  lua_createtable (L, 0, n);
+  luaL_setfuncs(L, reg, 0);
+  lua_pushcclosure(L, luaS_libloader, 1);
+  lua_setfield(L, -2, name);
+  lua_pop(L, 2);
+  
+  luaL_getsubtable(L, LUA_REGISTRYINDEX, "shuttlesock.registered_libs");
+  lua_pushboolean(L, 1);
+  lua_setfield(L, -2, name);
+  lua_pop(L, 1);
+  
+  return true;
+}
+
 static bool function_result_ok(lua_State *L, bool preserve_result) {
   if(lua_isnil(L, -2)) {
     shuso_t *S = shuso_state(L);
@@ -408,8 +439,8 @@ bool luaS_set_shuttlesock_state_pointer(lua_State *L, shuso_t *S) {
   return true;
 }
 
-static int luaS_requiref_embedded_script(lua_State *L) {
-  const char *name = lua_tostring(L, -1);
+static int luaS_require_embedded_script(lua_State *L) {
+  const char *name = luaL_checkstring(L, 1);
   luaS_do_embedded_script(L, name, 0);
   return 1;
 }
@@ -449,14 +480,13 @@ bool shuso_lua_initialize(shuso_t *S) {
   
   for(shuso_lua_embedded_scripts_t *script = &shuttlesock_lua_embedded_scripts[0]; script->name != NULL; script++) {
     if(script->module) {
-      luaL_requiref(L, script->name, luaS_requiref_embedded_script, 0);
-      lua_pop(L, 1);
+      lua_getglobal(L, "package");
+      lua_getfield(L, -1, "preload");
+      lua_pushcfunction(L, luaS_require_embedded_script);
+      lua_setfield(L, -2, script->name);
+      lua_pop(L, 2);
     }
   }
-  lua_getglobal(L, "require");
-  lua_pushliteral(L, "shuttlesock.core.config");
-  lua_call(L, 1, 1);
-  S->config.index = luaL_ref(L, LUA_REGISTRYINDEX);
   
   if(S->procnum < SHUTTLESOCK_MANAGER) {
     shuso_register_lua_ipc_handler(S);
