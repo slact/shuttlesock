@@ -244,45 +244,45 @@ add_core_module("core"
 add_core_module("config"
   SOURCES config.c
   LUA_MODULES
-    "shuttlesock.core.config" config/config.lua
+    "shuttlesock.core.config" config.lua
   HEADERS
     config.h
-    PRIVATE config/private.h
+    PRIVATE private.h
 )
 
 add_core_module("lua_bridge"
   SOURCES
     lua_bridge.c
-    lua_bridge/api/lazy_atomics.c
-    lua_bridge/api/lua_ipc.c
-    lua_bridge/lua_binding.c
+    api/lazy_atomics.c
+    api/lua_ipc.c
+    lua_binding.c
   HEADERS
     lua_bridge.h
-    PRIVATE lua_bridge/private.h
-    PRIVATE lua_bridge/api/lazy_atomics.h
-    PRIVATE lua_bridge/api/lua_ipc.h
+    PRIVATE private.h
+    PRIVATE api/lazy_atomics.h
+    PRIVATE api/lua_ipc.h
   LUA_MODULES
     #API for Lua modules
-    "shuttlesock"              lua_bridge/api/shuttlesock.lua
-    "shuttlesock.log"          lua_bridge/api/log.lua
-    "shuttlesock.module"       lua_bridge/api/module.lua
-    "shuttlesock.atomics"      lua_bridge/api/atomics.lua
-    "shuttlesock.watcher"      lua_bridge/api/watcher.lua
-    "shuttlesock.process"      lua_bridge/api/process.lua
-    "shuttlesock.config"       lua_bridge/api/config.lua
-    "shuttlesock.ipc"          lua_bridge/api/ipc.lua
+    "shuttlesock"              api/shuttlesock.lua
+    "shuttlesock.log"          api/log.lua
+    "shuttlesock.module"       api/module.lua
+    "shuttlesock.atomics"      api/atomics.lua
+    "shuttlesock.watcher"      api/watcher.lua
+    "shuttlesock.process"      api/process.lua
+    "shuttlesock.config"       api/config.lua
+    "shuttlesock.ipc"          api/ipc.lua
   LUA_SOURCES
     #utils used inside "shuttlesock.core" lua_binding
-    "lua_binding" lua_bridge/lua_binding.lua
+    "lua_binding" lua_binding.lua
 )
 
 add_core_module("server" LUA
   LUA_MODULES
     "shuttlesock.modules.core.server" server.lua
   SOURCES
-    server/server.c
+    server.c
   HEADERS
-    server/server.h
+    server.h
   PREPARE_FUNCTION
     shuttlesock_server_module_prepare
   LUA_REQUIRE

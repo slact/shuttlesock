@@ -1,6 +1,6 @@
 #include <shuttlesock.h>
 #include "config.h"
-#include "config/private.h"
+#include "private.h"
 #include <lauxlib.h>
 
 static void config_worker_gxcopy(shuso_t *S, shuso_event_state_t *evs, intptr_t code, void *data, void *pd) {
