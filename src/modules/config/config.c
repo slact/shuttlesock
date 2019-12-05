@@ -93,10 +93,6 @@ bool luaS_pcall_config_method(lua_State *L, const char *method_name, int nargs, 
   return luaS_function_pcall_result_ok(L, nargs + 1, keep_result);
 }
 
-shuso_module_setting_t SHUTTLESOCK_SETTINGS_END = {
-  .name = NULL,
-};
-
 bool shuso_config_register_setting(shuso_t *S, shuso_module_setting_t *setting, shuso_module_t *module) {
   lua_State *L = S->lua.state;
   lua_newtable(L);

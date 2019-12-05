@@ -211,7 +211,7 @@ endif()
 
 add_executable(shuso_test 
   test/test.c
-  test/util.c
+  test/test_utils.c
 )
 target_link_libraries(shuso_test PRIVATE shuttlesock)
 target_include_directories(shuso_test PRIVATE ${LUA_INCLUDE_DIR})

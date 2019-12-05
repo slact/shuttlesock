@@ -58,8 +58,7 @@ struct shuso_setting_s {
   shuso_setting_block_t  *block;
 }; // shuso_setting_t
 
-extern shuso_setting_value_t SHUTTLESOCK_VALUES_END;
-extern shuso_module_setting_t SHUTTLESOCK_SETTINGS_END;
+#define SHUTTLESOCK_SETTINGS_END (shuso_module_setting_t ){.name = NULL}
 
 //For module developers
 shuso_setting_t *shuso_setting(shuso_t *S, const shuso_setting_block_t *block, const char *name);
