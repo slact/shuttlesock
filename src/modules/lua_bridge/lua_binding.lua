@@ -163,3 +163,47 @@ function core.gxcopy_check(val, what)
   end
   return true
 end
+
+function core.parse_host(str)
+  local ipv6, ipv4, host, port
+  
+  ipv6, port = str:match("^%[([^%]]+%]):(%d+)$")
+  if not ipv6 then
+    ipv6 = str:match("^%[([^%]]+%])$")
+    port = nil
+  end
+  if not ipv6 then
+    ipv4, port = str:match("^(%d+%.%d+%.%d+%.%d+):(%d+)$")
+  end
+  if not ipv4 then
+    ipv4 = str:match("^(%d+%.%d+%.%d+%.%d+)$")
+    port = nil
+  end
+  if not ipv4 then
+    host, port = str:match("^(.*):(%d+)$")
+  end
+  if not host then
+    host = str
+    port = nil
+  end
+  
+  if host and not host:match("^[%D%-%.]$") or host:match("%.%.") then
+    return nil, 'invalid hostname "' .. host ..'"'
+  end
+  
+  local portnum
+  if port then
+    portnum = tonumber(port)
+    if not portnum or portnum < 1 or portnum > 65535 or math.type(portnum) ~= "integer" then
+      return "invalid port ".. tostring(port)
+    end
+    portnum = port
+  end
+  
+  return {
+    ipv4 = ipv4,
+    ipv6 = ipv6,
+    port = portnum,
+    hostname = host
+  }
+end

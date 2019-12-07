@@ -93,23 +93,6 @@ shuso_module_t shuso_core_module = {
   .subscribe = 
    " core:worker.start.before.lua_gxcopy"
   ,
-  .initialize = core_module_initialize,
-  .settings = (shuso_module_setting_t []){
-    {
-      .name = "http",
-      .path = "/",
-      .description = "config block for http and http-like protocol servers",
-      .nargs = "0",
-      .block = true
-    },
-    {
-      .name = "stream",
-      .path = "/",
-      .description = "config block for TCP or UDP servers",
-      .nargs = "0",
-      .block = true
-    },
-    SHUTTLESOCK_SETTINGS_END
-  }
+  .initialize = core_module_initialize
 };
 

@@ -271,6 +271,7 @@ add_core_module("lua_bridge"
     "shuttlesock.process"      api/process.lua
     "shuttlesock.config"       api/config.lua
     "shuttlesock.ipc"          api/ipc.lua
+    "shuttlesock.utils"        api/utils.lua
   LUA_SOURCES
     #utils used inside "shuttlesock.core" lua_binding
     "lua_binding" lua_binding.lua

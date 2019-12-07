@@ -19,7 +19,8 @@ local module_mt = {
   __index = module,
   __gxcopy_metatable = function()
     return require("shuttlesock.module").metatable
-  end
+  end,
+  __gxcopy_loaded_package_directly = true
 }
 
 local function assert0(test, err)

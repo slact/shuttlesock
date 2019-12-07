@@ -5,7 +5,9 @@ local Shuso = require "shuttlesock"
 
 local testmod = Module.new {
   name= "lua_testmod",
-  version = "0.0.0"
+  version = "0.0.0",
+  
+  test_initcfg_times = 0
 }
 
 testmod.settings = {
@@ -39,12 +41,15 @@ testmod.settings = {
 }
 
 testmod:subscribe("core:manager.workers_started", function()
+  assert(testmod.test_initcfg_times == 4)
   Shuso.stop()
 end)
 
 function testmod:initialize_config(block)
   --print(block.setting.name, block.path)
   if block.name=="::ROOT" then
+    local ctx = block:context(self)
+    assert(ctx == block:context(self), "same block context twice")
     assert(block.path == "/", block.path)
     assert(block:match_path("/"))
     assert(not block:match_path("/blarg"))
@@ -54,6 +59,7 @@ function testmod:initialize_config(block)
     assert(setting:value("local") == "yeep")
     assert(setting:value(1) == "yeep")
     assert(setting:value(1, "string", "default") == "hey")
+    testmod.test_initcfg_times = testmod.test_initcfg_times + 1
   elseif block.name=="block1" then
     assert(block.path == "/block1", block.path)
     assert(block:match_path("block1/**"))
@@ -64,11 +70,13 @@ function testmod:initialize_config(block)
     assert(block:setting("bar"):value(1, "inherited")==nil)
     assert(block:setting_value("bar", 2)=="block1_2")
     assert(block:setting_value("bar", 3)==nil)
+    testmod.test_initcfg_times = testmod.test_initcfg_times + 1
   elseif block.name == "block2" then
     assert(block.path == "/block1/block2")
     assert(block:setting_value("bar", 1)=="block1_1")
     assert(block:setting_value("bar", 1, "inherited")=="block1_1")
     assert(block:setting_value("bar", 1, "local")==nil)
+    testmod.test_initcfg_times = testmod.test_initcfg_times + 1
   elseif block.name == "block3" then
     assert(block.path == "/block1/block2/block3")
     local setting = block:setting("bar")
@@ -83,6 +91,7 @@ function testmod:initialize_config(block)
     assert(numval == 100)
     local intval = foo:value(1, "integer")
     assert(math.type(intval) == "integer")
+    testmod.test_initcfg_times = testmod.test_initcfg_times + 1
   else
     error("unexpected block name "..tostring(block.name))
   end

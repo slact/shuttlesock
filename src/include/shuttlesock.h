@@ -151,6 +151,7 @@ struct shuso_common_s {
     bool                io_uring;
   }                   features;
   shuso_shared_slab_t shm;
+  bool                master_has_root;
 }; //shuso_common_t
 
 _Static_assert(offsetof(shuso_common_t, process.worker)+sizeof(shuso_process_t)*SHUTTLESOCK_MASTER == offsetof(shuso_common_t, process.master), "master process offset does not match value of SHUTTLESOCK_MASTER");

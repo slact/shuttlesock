@@ -2205,6 +2205,12 @@ static int Lua_shuso_pcall(lua_State *L) {
 }
 
 
+static int Lua_shuso_master_has_root(lua_State *L) {
+  shuso_t *S = shuso_state(L);
+  lua_pushboolean(L, S->common->master_has_root);
+  return 1;
+}
+
 static int Lua_shuso_raise_signal(lua_State *L) {
   int sig = luaL_checkinteger(L, 1);
   raise(sig);
@@ -2305,6 +2311,7 @@ luaL_Reg shuttlesock_core_module_methods[] = {
 
 //etc
   {"version", Lua_shuso_version},
+  {"master_has_root", Lua_shuso_master_has_root},
   
 //for debugging
   {"raise_signal", Lua_shuso_raise_signal},
