@@ -583,6 +583,7 @@ typedef struct {
     lua_State       *state;
     lua_reference_t  copies_ref;
   }          dst;
+  int                ignore_loaded_package_count;
 } lua_gxcopy_state_t;
 
 
@@ -632,6 +633,11 @@ static bool gxcopy_package_preloader(lua_gxcopy_state_t *gxs, const char *name) 
 
 static bool gxcopy_package_loaded(lua_gxcopy_state_t *gxs) {
   lua_State *Ls = gxs->src.state, *Ld = gxs->dst.state;
+  if(gxs->ignore_loaded_package_count > 0) {
+    gxs->ignore_loaded_package_count--;
+    return false;
+  }
+  
   luaL_checkstack(Ls, 2, NULL);
   lua_rawgeti(Ls, LUA_REGISTRYINDEX, gxs->src.modules_ref);
   lua_pushvalue(Ls, -2);
@@ -647,22 +653,44 @@ static bool gxcopy_package_loaded(lua_gxcopy_state_t *gxs) {
   lua_remove(Ls, -2);
   
   lua_rawgeti(Ls, LUA_REGISTRYINDEX, gxs->src.preloaders_ref);
-  lua_getfield(Ls, -1, lua_tostring(Ls, -2));
+  const char *package_name = lua_tostring(Ls, -2);
+  
+  lua_getfield(Ls, -1, package_name);
   if(!lua_isnil(Ls, -1)) {
     lua_pop(Ls, 3);
     return false;
   }
   lua_pop(Ls, 2);
   
-  gxcopy_package_preloader(gxs, lua_tostring(Ls, -1));
-  
-  luaL_checkstack(Ld, 3, NULL);
-  lua_getglobal(Ld, "require");
-  lua_pushstring(Ld, lua_tostring(Ls, -1));
-  lua_pop(Ls, 1);
-  lua_call(Ld, 1, 1);
-  
-  assert(lua_type(Ls, -1) == lua_type(Ld, -1));
+  if(luaL_getmetafield(Ls, -2, "__gxcopy_loaded_package_directly") != LUA_TNIL && lua_toboolean(Ls, -1)) {
+    lua_pop(Ls, 1);
+    luaL_checkstack(Ls, 1, NULL);
+    lua_pushvalue(Ls, -2);
+    
+    gxs->ignore_loaded_package_count++;
+    if(!gxcopy_any(gxs)) {
+      return false;
+    }
+    luaL_checkstack(Ld, 3, NULL);
+    lua_getglobal(Ld, "package");
+    lua_getfield(Ld, -1, "loaded");
+    lua_remove(Ld, -2);
+    lua_pushvalue(Ld, -2);
+    lua_setfield(Ld, -2, package_name);
+    lua_pop(Ld, 1);
+    lua_pop(Ls, 2);
+  }
+  else {
+    gxcopy_package_preloader(gxs, package_name);
+    
+    luaL_checkstack(Ld, 3, NULL);
+    lua_getglobal(Ld, "require");
+    lua_pushstring(Ld, package_name);
+    lua_pop(Ls, 1);
+    lua_call(Ld, 1, 1);
+    
+    assert(lua_type(Ls, -1) == lua_type(Ld, -1));
+  }
   return true;
 }
 
@@ -1006,6 +1034,7 @@ bool luaS_gxcopy_start(lua_State *Ls, lua_State *Ld) {
     .src.preloaders_ref = LUA_REFNIL,
     .dst.state = Ld,
     .dst.copies_ref = dst_copies_ref,
+    .ignore_loaded_package_count = 0
   };
   
     
