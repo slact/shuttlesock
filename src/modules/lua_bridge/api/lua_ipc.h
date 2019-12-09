@@ -40,9 +40,10 @@ typedef struct {
   const char           *name;
   int                   sender;
   bool                  success;
+  bool                  in_shared_memory;
 } shuso_ipc_lua_data_t;
 
-shuso_ipc_lua_data_t *luaS_lua_ipc_pack_data(lua_State *L, int index);
+shuso_ipc_lua_data_t *luaS_lua_ipc_pack_data(lua_State *L, int index, const char *name, bool use_shared_memory);
 bool luaS_lua_ipc_unpack_data(lua_State *L, shuso_ipc_lua_data_t *d);
 bool luaS_lua_ipc_gc_data(lua_State *L, shuso_ipc_lua_data_t *d);
 

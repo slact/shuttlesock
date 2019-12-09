@@ -25,6 +25,7 @@ typedef struct {
 
 typedef struct {
   shuso_lua_lazy_atomic_value_t *atomic;
+  lua_reference_t                id_string_ref;
 } lua_lazy_atomic_userdata_t;
 
 static bool update_type_safely(shuso_lua_lazy_atomic_value_t *atomic, unsigned old_typemix, unsigned new_type) {
@@ -54,7 +55,7 @@ static int Lua_lazy_atomics_value_create(lua_State *L) {
     lua_pushstring(L, "failed to allocate Lua shared atomic value userdata");
     return 2;
   }
-  
+  ud->id_string_ref = LUA_NOREF;
   ud->atomic = atomicval;
   luaL_setmetatable(L, "shuttlesock.lazy_atomic");
   
@@ -79,6 +80,10 @@ static int Lua_lazy_atomics_value_destroy(lua_State *L) {
   if(atomicval->string) {
     shuso_shared_slab_free(&S->common->shm, atomicval->string);
     atomicval->string = NULL;
+  }
+  if(ud->id_string_ref != LUA_NOREF) {
+    luaL_unref(L, LUA_REGISTRYINDEX, ud->id_string_ref);
+    ud->id_string_ref = LUA_NOREF;
   }
   shuso_shared_slab_free(&S->common->shm, atomicval);
   ud->atomic = NULL;
@@ -270,6 +275,21 @@ static int Lua_lazy_atomics_value_gxcopy_load(lua_State *L) {
   return 1;
 }
 
+int Lua_lazy_atomics_get_id(lua_State *L) {
+  lua_lazy_atomic_userdata_t      *ud = luaL_checkudata(L, 1, "shuttlesock.lazy_atomic");
+  if(ud->id_string_ref != LUA_NOREF) {
+    lua_rawgeti(L, LUA_REGISTRYINDEX, ud->id_string_ref);
+    return 1;
+  }
+  
+  shuso_lua_lazy_atomic_value_t   *atomicval = ud->atomic;
+  lua_pushlightuserdata(L, atomicval);
+  lua_tostring(L, -1);
+  lua_pushvalue(L, -1);
+  ud->id_string_ref = luaL_ref(L, LUA_REGISTRYINDEX);
+  return 1;
+}
+
 int luaS_push_lazy_atomics_module(lua_State *L) {
   luaL_newlib(L, shuttlesock_lua_lazy_atomics_table);
   
@@ -281,6 +301,7 @@ int luaS_push_lazy_atomics_module(lua_State *L) {
       {"value", Lua_lazy_atomics_value_get},
       {"increment", Lua_lazy_atomics_value_increment},
       {"destroy", Lua_lazy_atomics_value_destroy},
+      {"get_id", Lua_lazy_atomics_get_id},
       {NULL, NULL}
     }, 0);
     lua_pop(L, 1);

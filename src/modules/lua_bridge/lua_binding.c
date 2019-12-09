@@ -256,6 +256,26 @@ static int Lua_shuso_count_workers(lua_State *L) {
   return 1;
 }
 
+static int Lua_shuso_procnums_active(lua_State *L) {
+  shuso_t *S = shuso_state(L);
+  lua_newtable(L);
+  int i = 1;
+  lua_pushinteger(L, SHUTTLESOCK_MASTER);
+  lua_rawseti(L, -2, i++);
+  
+  if(*S->common->process.manager.state >= SHUSO_STATE_STARTING) {
+    lua_pushinteger(L, SHUTTLESOCK_MANAGER);
+    lua_rawseti(L, -2, i++);
+  }
+  
+  for(int w = S->common->process.workers_start; w<S->common->process.workers_end; w++) {
+    lua_pushinteger(L, w);
+    lua_rawseti(L, -2, i++);
+  }
+  
+  return 1;
+}
+
 static int Lua_shuso_process_runstate(lua_State *L) {
   shuso_t *S = shuso_state(L);
   if(lua_gettop(L) == 0) {
@@ -267,6 +287,7 @@ static int Lua_shuso_process_runstate(lua_State *L) {
   luaS_push_runstate(L, *proc->state);
   return 1;
 }
+
 /*
 static int Lua_shuso_spawn_manager(lua_State *L) {
   shuso_t *S = shuso_state(L);
@@ -1419,10 +1440,6 @@ static void open_listener_sockets_callback(shuso_t *S, shuso_status_t status, sh
 }
 */
 
-int Lua_shuso_ipc_send_workers(lua_State *L) {
-  return 0;
-}
-
 //lua modules
 /*
 static int luaS_find_module_table(lua_State *L, const char *name) {
@@ -2251,6 +2268,7 @@ luaL_Reg shuttlesock_core_module_methods[] = {
   {"procnum", Lua_shuso_procnum},
   {"count_workers", Lua_shuso_count_workers},
   {"procnum_valid", Lua_shuso_procnum_valid},
+  {"procnums_active", Lua_shuso_procnums_active},
 
 //util
   {"set_log_file", Lua_shuso_set_log_fd},
@@ -2307,7 +2325,6 @@ luaL_Reg shuttlesock_core_module_methods[] = {
   //{"open_listener_sockets", Lua_shuso_ipc_open_listener_sockets},
   {"ipc_send_message", luaS_ipc_send_message_noyield},
   {"ipc_send_message_yield", luaS_ipc_send_message_yield},
-  {"ipc_send_message_to_all_workers", Lua_shuso_ipc_send_workers},
 
 //etc
   {"version", Lua_shuso_version},

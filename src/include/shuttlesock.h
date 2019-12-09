@@ -233,7 +233,7 @@ int shuso_last_errno(shuso_t *S);
 shuso_process_t *shuso_procnum_to_process(shuso_t *S, int procnum);
 int shuso_process_to_procnum(shuso_t *S, shuso_process_t *proc);
 bool shuso_procnum_valid(shuso_t *S, int procnum, const char **err);
-
+bool shuso_processes_share_heap(shuso_t *S, int procnum1, int procnum2);
 
 const char *shuso_process_as_string(int procnum);
 const char *shuso_runstate_as_string(shuso_runstate_t state);

@@ -1,5 +1,4 @@
 local Module = require "shuttlesock.module"
-local Watcher = require "shuttlesock.watcher"
 local Process = require "shuttlesock.process"
 local Shuso = require "shuttlesock"
 local Atomics = require "shuttlesock.atomics"

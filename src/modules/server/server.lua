@@ -1,5 +1,7 @@
 local Module = require "shuttlesock.module"
 local Utils = require "shuttlesock.utils"
+local Semaphore = {}
+--local Semaphore = require "shuttlesock.semaphore"
 
 -- luacheck: ignore CFuncs
 local CFuncs = require "shuttlesock.modules.core.server.cfuncs"
@@ -70,11 +72,19 @@ function Server:initialize_config(block)
   
   self.server_listen[parsed_host.port] = self.server_listen[parsed_host.port] or {}
   
+  self.hosts_resolved = Semaphore.new()
+  
   table.insert(self.server_listen.hosts, parsed_host)
 end
 
 Server:subscribe("master.start", function()
-  
+  --TODO
+end)
+
+Server:subscribe("worker.start", function()
+  coroutine.wrap(function()
+    --TODO
+  end)
 end)
 
 return Server

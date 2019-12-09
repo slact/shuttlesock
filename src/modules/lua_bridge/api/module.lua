@@ -148,7 +148,8 @@ function module:add()
       sub.wrapper = function (publisher_module_name, module_name, event_name, code, data, event_ptr)
         assert(full_event_name:match(":"..event_name.."$"))
         local event = new_event(event_ptr, full_event_name, module_name)
-        return Core.pcall(subscriber, self, code, data, event)
+        --return Core.pcall(subscriber, self, code, data, event)
+        return true, subscriber(self, code, data, event)
       end
       table.insert(Module.event_subscribers, sub.wrapper)
       sub.index = #Module.event_subscribers

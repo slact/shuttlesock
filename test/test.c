@@ -608,12 +608,12 @@ describe(lua_api) {
   }
   
   subdesc(ipc) {
-    test("pack/unpack data") {
+    test("pack/unpack data in heap") {
       lua_State *L = S->lua.state;
       assert_luaL_dostring(L,"\
         local x = {}\n\
         x.x=x\n\
-        return {\n\
+        local self = {\n\
           121,\n\
           x,\n\
           {\n\
@@ -624,9 +624,12 @@ describe(lua_api) {
             x=12,\n\
           },\n\
           {[{}]='!!!'}\n\
-        }"
+        } \n\
+        self.self = self\n\
+        return self\n\
+        "
       );
-      shuso_ipc_lua_data_t *data = luaS_lua_ipc_pack_data(L, -1);
+      shuso_ipc_lua_data_t *data = luaS_lua_ipc_pack_data(L, -1, "beep", false);
       lua_pop(L, 1);
       lua_gc(L, LUA_GCCOLLECT, 0);
       luaS_lua_ipc_unpack_data(L, data);
@@ -637,6 +640,7 @@ describe(lua_api) {
       
       assert_luaL_dostring(L, " \
         assert(type(unpacked) == 'table') \n\
+        assert(unpacked.self == unpacked) \n\
         assert(unpacked[1]==121)\n\
         assert(unpacked[2].x == unpacked[2]) \n\
         assert(unpacked[3][1]==112)\n\
@@ -664,8 +668,40 @@ describe(lua_api) {
       assert_luaL_dostring(L, "assert(next(_G.weak) == nil)");
     }
     
+    test("pack/unpack data in shared memory") {
+      assert_shuso(S, shuso_configure_finish(S));
+      lua_State *L = S->lua.state;
+      assert_luaL_dostring(L,"return {'hello','hello',10,{foo='bar',20,{{}}}}");
+      shuso_ipc_lua_data_t *data = luaS_lua_ipc_pack_data(L, -1, "beep", true);
+      lua_gc(L, LUA_GCCOLLECT, 0);
+      
+      luaS_lua_ipc_unpack_data(L, data);
+      lua_setglobal(L, "unpacked");
+      
+      assert_luaL_dostring(L, " \
+        assert(type(unpacked) == 'table')\n\
+        assert(unpacked[1] == 'hello')\n\
+        assert(unpacked[2] == 'hello')\n\
+        assert(unpacked[3] == 10)\n\
+        assert(unpacked[4]['foo'] == 'bar')\n\
+        assert(unpacked[4][1]==20)\n\
+        assert(type(unpacked[4][2]) == 'table')\n\
+        assert(type(unpacked[4][2][1]) == 'table')\n\
+      ");
+      
+      luaS_lua_ipc_gc_data(L, data);
+      //TODO: test that shared memory gets actually released
+    }
+    
     test("single round-trip") {
       assert_luaL_dofile(S->lua.state, "ipc_single_roundtrip.lua");
+      assert_shuso(S, shuso_configure_finish(S));
+      shuso_run(S);
+      assert_shuso_ran_ok(S);
+    }
+    
+    test("master-manager communiation") {
+      assert_luaL_dofile(S->lua.state, "ipc_master_manager.lua");
       assert_shuso(S, shuso_configure_finish(S));
       shuso_run(S);
       assert_shuso_ran_ok(S);

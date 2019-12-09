@@ -348,6 +348,13 @@ bool shuso_is_master(shuso_t *S) {
   return S->procnum == SHUTTLESOCK_MASTER;
 }
 
+bool shuso_processes_share_heap(shuso_t *S, int procnum1, int procnum2) {
+  if((procnum1 == SHUTTLESOCK_MASTER && procnum2 != SHUTTLESOCK_MASTER) || (procnum2 == SHUTTLESOCK_MASTER && procnum1 != SHUTTLESOCK_MASTER)) {
+    return false;
+  }
+  return true;
+}
+
 static void stop_manager_timer_cb(shuso_loop *loop, shuso_ev_timer *w, int revents) {
   shuso_t           *S = shuso_state(loop, w);
   shuso_stop_manager(S, SHUSO_STOP_ASK);
