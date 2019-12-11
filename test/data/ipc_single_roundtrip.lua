@@ -15,8 +15,9 @@ end
 
 testmod:subscribe("core:manager.start", function(self)
   coroutine.wrap(function()
+    local receiver = IPC.Receiver.start("hello")
     while true do
-      local data, sender = IPC.receive("hello")
+      local data, sender = receiver:yield()
       assert(data[1]=="yeep")
       assert(data[2][1]==100)
       assert(data.ok=="okay")
@@ -27,10 +28,11 @@ end)
 
 testmod:subscribe("core:worker.workers_started", function(self)
   coroutine.wrap(function()
+    local receiver = IPC.Receiver.start("hello to you too")
     IPC.send("manager", "yekh", {})
     IPC.send("manager", "hello", {"yeep", {100}, ok="okay"})
     
-    local data, sender = IPC.receive("hello to you too")
+    local data, sender = receiver:yield()
     assert(sender == -1)
     assert(data[1]=="this message was for worker")
     assert(data[2]==Process.procnum())

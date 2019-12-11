@@ -18,8 +18,9 @@ testmod:subscribe("core:master.start", function(self)
 end)
 
 
-testmod:subscribe("core:manager.start", function(self)
+testmod:subscribe("core:manager.workers_started", function(self)
   coroutine.wrap(function()
+    
     assert(IPC.send("master", "to-manager-from-master", {
       str = "foobar",
       bool = false,

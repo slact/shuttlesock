@@ -514,6 +514,23 @@ describe(lua_bridge) {
   }
 }
 
+describe(lua_features) {
+  static lua_State *L;
+  before_each() {
+    L = luaL_newstate();
+    luaL_openlibs(L);
+  }
+  after_each() {
+    if(L) {
+      lua_close(L);
+    }
+    L = NULL;
+  }
+  test("__gc on tables") {
+    assert_luaL_dofile(L, "lua_feature___gc_on_tables.lua");
+  }
+}
+
 describe(lua_api) {
   static shuso_t          *S = NULL;
   static test_runcheck_t  *chk = NULL;
