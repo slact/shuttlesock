@@ -16,6 +16,7 @@ static int luaS_libloader(lua_State *L) {
 }
 
 bool luaS_register_lib(lua_State *L, const char *name, luaL_Reg *reg) {
+  luaL_checkstack(L, 3, NULL);
   lua_getglobal(L, "package");
   lua_getfield(L, -1, "preload");
   lua_getfield(L, -1, name);
@@ -25,6 +26,8 @@ bool luaS_register_lib(lua_State *L, const char *name, luaL_Reg *reg) {
   }
   lua_pop(L, 1);
   
+  
+  luaL_checkstack(L, 3, NULL);
   int n = 0;
   while(reg[n].name != NULL) n++;
   lua_createtable (L, 0, n);
@@ -88,6 +91,8 @@ bool luaS_call_noerror(lua_State *L, int nargs, int nrets) {
   int fn_index = lua_gettop(L) - nargs;
   int stacksize_before = fn_index - 1;
   
+  luaL_checkstack(L, 1, NULL);
+  
   lua_pushcfunction(L, luaS_traceback_error_handler);
   lua_insert(L, fn_index);
   int rc = lua_pcall(L, nargs, nrets, fn_index);
@@ -116,7 +121,7 @@ int luaS_traceback_error_handler(lua_State *L) {
   if (!lua_isstring(L, -1)) { /* 'message' not a string? */
     return 1;  /* keep it intact */
   }
-
+  luaL_checkstack(L, 3, NULL);
   lua_getglobal(L, "debug");
   lua_getfield(L, -1, "traceback");
   lua_remove(L, -2);
@@ -130,6 +135,7 @@ int luaS_traceback_error_handler(lua_State *L) {
 int luaS_passthru_error_handler(lua_State *L) {
   printf("ERRO: %s\n", lua_tostring(L, 1));
   if(lua_gettop(L) == 0) {
+    lua_checkstack(L, 1);
     lua_pushnil(L);
   }
   return 1;
@@ -141,7 +147,8 @@ bool luaS_pcall(lua_State *L, int nargs, int nresults) {
     shuso_log_error(shuso_state(L), "nargs: %i", nargs);
     assert(lua_isfunction(L, -(nargs+1)));
   }
-#endif  
+#endif
+  luaL_checkstack(L, 2, NULL);
   lua_pushcfunction(L, luaS_traceback_error_handler);
   lua_insert(L, 1);
   
@@ -194,6 +201,7 @@ char *luaS_dbgval(lua_State *L, int n) {
       sprintf(cur, "%s: \"%.50s%s\"", typename, str, strlen(str) > 50 ? "..." : "");
       break;
     case LUA_TTABLE:
+      luaL_checkstack(L, 8, NULL);
       lua_getglobal(L, "tostring");
       lua_pushvalue(L, n);
       lua_call(L, 1, 1);
@@ -238,6 +246,7 @@ char *luaS_dbgval(lua_State *L, int n) {
       lua_pop(L, 1);
       break;
     case LUA_TLIGHTUSERDATA:
+      luaL_checkstack(L, 2, NULL);
       lua_getglobal(L, "tostring");
       lua_pushvalue(L, n);
       lua_call(L, 1, 1);
@@ -245,6 +254,7 @@ char *luaS_dbgval(lua_State *L, int n) {
       lua_pop(L, 1);
       break;
     case LUA_TFUNCTION: {
+      luaL_checkstack(L, 3, NULL);
       lua_Debug dbg;
       lua_pushvalue(L, n);
       lua_getinfo(L, ">nSlu", &dbg);
@@ -280,6 +290,7 @@ void luaS_printstack_named(lua_State *L, const char *name) {
 void luaS_mm(lua_State *L, int stack_index) {
   assert(lua_gettop(L) >= abs(stack_index));
   int absindex = lua_absindex(L, stack_index);
+  luaL_checkstack(L, 2, NULL);
   lua_getglobal(L, "require");
   lua_pushliteral(L, "mm");
   lua_call(L, 1, 1);
@@ -290,6 +301,7 @@ void luaS_mm(lua_State *L, int stack_index) {
 void luaS_push_inspect_string(lua_State *L, int stack_index) {
   assert(lua_gettop(L) >= abs(stack_index));
   int absindex = lua_absindex(L, stack_index);
+  luaL_checkstack(L, 2, NULL);
   lua_getglobal(L, "require");
   lua_pushliteral(L, "inspect");
   lua_call(L, 1, 1);
@@ -299,7 +311,7 @@ void luaS_push_inspect_string(lua_State *L, int stack_index) {
 
 void luaS_inspect(lua_State *L, int stack_index) {
   luaS_push_inspect_string(L, stack_index);
-  
+  luaL_checkstack(L, 2, NULL);
   lua_getglobal(L, "print");
   lua_pushvalue(L, -2);
   lua_remove(L, -3);
@@ -387,6 +399,7 @@ bool shuso_lua_create(shuso_t *S) {
 }
 
 int luaS_table_concat(lua_State *L, const char *delimeter) {
+  luaL_checkstack(L, 3, NULL);
   luaL_checktype(L, -1, LUA_TTABLE);
   lua_getglobal(L, "table");
   lua_getfield(L, -1, "concat");
@@ -400,6 +413,7 @@ int luaS_table_concat(lua_State *L, const char *delimeter) {
 
 void luaS_do_embedded_script(lua_State *L, const char *name, int nargs) {
   shuso_lua_embedded_scripts_t *script;
+  luaL_checkstack(L, 1, NULL);
   for(script = &shuttlesock_lua_embedded_scripts[0]; script->name != NULL; script++) {
     if(strcmp(script->name, name) == 0) {
       int rc;
@@ -427,6 +441,7 @@ void luaS_do_embedded_script(lua_State *L, const char *name, int nargs) {
 }
 
 shuso_t *shuso_state_from_lua(lua_State *L) {
+  luaL_checkstack(L, 1, NULL);
   lua_getfield(L, LUA_REGISTRYINDEX, "shuttlesock.userdata");
   assert(lua_islightuserdata(L, -1));
   shuso_t *S = (shuso_t *)lua_topointer(L, -1);
@@ -435,6 +450,7 @@ shuso_t *shuso_state_from_lua(lua_State *L) {
 }
 
 bool luaS_set_shuttlesock_state_pointer(lua_State *L, shuso_t *S) {
+  luaL_checkstack(L, 1, NULL);
   lua_pushlightuserdata(L, S);
   lua_setfield(L, LUA_REGISTRYINDEX, "shuttlesock.userdata");
   return true;
@@ -450,10 +466,12 @@ bool shuso_lua_initialize(shuso_t *S) {
   lua_State *L = S->lua.state;
   luaS_set_shuttlesock_state_pointer(L, S);
   
+  luaL_checkstack(L, 1, NULL);
   lua_pushstring(L, SHUTTLESOCK_VERSION_STRING);
   lua_setglobal(L, "_SHUTTLESOCK_VERSION");
   
 #ifdef SHUTTLESOCK_DEBUG_LUACOV
+  luaL_checkstack(L, 6, NULL);
   lua_getglobal(L, "require");
   lua_pushliteral(L, "luacov");
   lua_call(L, 1, 1);
@@ -479,6 +497,7 @@ bool shuso_lua_initialize(shuso_t *S) {
   luaL_requiref(L, "shuttlesock.core.lazy_atomics", luaS_push_lazy_atomics_module, 0);
   lua_pop(L, 1);
   
+  luaL_checkstack(L, 3, NULL);
   for(shuso_lua_embedded_scripts_t *script = &shuttlesock_lua_embedded_scripts[0]; script->name != NULL; script++) {
     if(script->module) {
       lua_getglobal(L, "package");
@@ -515,6 +534,7 @@ int luaS_resume(lua_State *thread, lua_State *from, int nargs) {
       break;
     default:
       S = shuso_state(thread);
+      luaL_checkstack(thread, 1, NULL);
       errmsg = lua_tostring(thread, -1);
       luaL_traceback(thread, thread, errmsg, 1);
       shuso_log_error(S, "lua coroutine error: %s", lua_tostring(thread, -1));
@@ -534,6 +554,7 @@ int luaS_call_or_resume(lua_State *L, int nargs) {
       return 0;
     case LUA_TTHREAD:
       coro = lua_tothread(L, state_or_func_index);
+      luaL_checkstack(coro, nargs, NULL);
       lua_xmove(L, coro, nargs);
       lua_resume(coro, L, nargs);
       return 0;
@@ -549,6 +570,7 @@ int luaS_shuso_error(lua_State *L) {
 }
 
 bool luaS_push_lua_module_field(lua_State *L, const char *module_name, const char *key_name) {
+  luaL_checkstack(L, 2, NULL);
   lua_getglobal(L, "require");
   lua_pushstring(L, module_name);
   lua_call(L, 1, 1);
@@ -565,6 +587,7 @@ static int lua_function_dump_writer (lua_State *L, const void *b, size_t size, v
 int luaS_function_dump(lua_State *L) {
   luaL_Buffer b;
   luaL_checktype(L, -1, LUA_TFUNCTION);
+  luaL_checkstack(L, 1, NULL);
   luaL_buffinit(L,&b);
   if (lua_dump(L, lua_function_dump_writer, &b, 0) != 0)
     return luaL_error(L, "unable to dump given function");
@@ -1205,6 +1228,7 @@ bool luaS_gxcopy_package_preloaders(lua_State *Ls, lua_State *Ld) {
 }
 
 bool luaS_pointer_ref(lua_State *L, const char *pointer_table_name, const void *ptr) {
+  luaL_checkstack(L, 5, NULL);
   lua_getfield(L, LUA_REGISTRYINDEX, pointer_table_name);
   if(lua_isnil(L, -1)) {
     lua_pop(L, 1);
@@ -1220,6 +1244,7 @@ bool luaS_pointer_ref(lua_State *L, const char *pointer_table_name, const void *
 }
 
 bool luaS_pointer_unref(lua_State *L, const char *pointer_table_name, const void *ptr) {
+  luaL_checkstack(L, 3, NULL);
   lua_getfield(L, LUA_REGISTRYINDEX, pointer_table_name);
   if(!lua_isnil(L, -1)) {
     lua_pushlightuserdata(L, (void *)ptr);
@@ -1231,7 +1256,7 @@ bool luaS_pointer_unref(lua_State *L, const char *pointer_table_name, const void
 }
 
 bool luaS_get_pointer_ref(lua_State *L, const char *pointer_table_name, const void *ptr) {
-  lua_checkstack(L, 2);
+  luaL_checkstack(L, 3, NULL);
   lua_getfield(L, LUA_REGISTRYINDEX, pointer_table_name);
   if(!lua_istable(L, -1)) {
     lua_pop(L, 1);
@@ -1246,6 +1271,7 @@ bool luaS_get_pointer_ref(lua_State *L, const char *pointer_table_name, const vo
 }
 
 void luaS_push_runstate(lua_State *L, shuso_runstate_t state) {
+  luaL_checkstack(L, 1, NULL);
   switch(state) {
     case SHUSO_STATE_DEAD:
       lua_pushliteral(L, "dead");
