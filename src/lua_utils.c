@@ -268,11 +268,41 @@ char *luaS_dbgval(lua_State *L, int n) {
       
       break;
     }
+    case LUA_TTHREAD: {
+      lua_State *coro = lua_tothread(L, n);
+      luaL_checkstack(L, 4, NULL);
+      luaL_checkstack(coro, 1, NULL);
+      
+      lua_getglobal(L, "tostring");
+      lua_pushvalue(L, n);
+      lua_call(L, 1, 1);
+      
+      lua_getglobal(L, "coroutine");
+      lua_getfield(L, -1, "status");
+      lua_remove(L, -2);
+      lua_pushvalue(L, n);
+      lua_call(L, 1, 1);
+      
+      luaL_where(coro, 1);
+      if(L == coro) {
+        sprintf(cur, "%s (self) (%s) @ %s", lua_tostring(L, -3), lua_tostring(L, -2), lua_tostring(coro, -1));
+        lua_pop(L, 3);
+      }
+      else {
+        sprintf(cur, "%s (%s) @ %s", lua_tostring(L, -2), lua_tostring(L, -1), lua_tostring(coro, -1));
+        lua_pop(L, 2);
+        lua_pop(coro, 1);
+      }
+      break;
+    }
+      
     default:
+      luaL_checkstack(L, 2, NULL);
       lua_getglobal(L, "tostring");
       lua_pushvalue(L, n);
       lua_call(L, 1, 1);
       str = lua_tostring(L, -1);
+      
       sprintf(cur, "%s", str);
       lua_pop(L, 1);
   }
@@ -281,10 +311,23 @@ char *luaS_dbgval(lua_State *L, int n) {
 void luaS_printstack_named(lua_State *L, const char *name) {
   int        top = lua_gettop(L);
   shuso_t   *S = shuso_state(L);
-  shuso_log_warning(S, "lua stack %s:", name);
+  const char line[256];
+  luaL_Buffer buf;
+  luaL_buffinit(L, &buf);
+  
+  sprintf((char *)line, "lua stack %s:", name);
+  luaL_addstring(&buf, line);
+  
   for(int n=top; n>0; n--) {
-    shuso_log_warning(S, "  [%-2i  %i]: %s", -(top-n+1), n, luaS_dbgval(L, n));
+    snprintf((char *)line, 256, "\n                               [%-2i  %i]: %s", -(top-n+1), n, luaS_dbgval(L, n));
+    luaL_addstring(&buf, line);
   }
+  luaL_checkstack(L, 1, NULL);
+  luaL_pushresult(&buf);
+  const char *stack = lua_tostring(L, -1);
+  shuso_log_warning(S, "%s", stack);
+  lua_pop(L, 1);
+  assert(lua_gettop(L) == top);
 }
 
 void luaS_mm(lua_State *L, int stack_index) {
