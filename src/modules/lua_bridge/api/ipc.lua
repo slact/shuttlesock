@@ -58,7 +58,7 @@ local function validate_process_direction(process, direction)
   return process, many
 end
 
-local function ipc_broadcast(dst, name, data)
+local function ipc_broadcast(dst, name, data, handler, must_yield)
   local my_procnum = dst == "others" or dst == "other_workers" and Process.procnum()
   local min_procnum = dst == ("workers" or dst == "other_workers") and 0 or -math.huge
   local dstprocnums = {}
@@ -69,9 +69,8 @@ local function ipc_broadcast(dst, name, data)
   end
   local need_shmem = not Process.share_heap(Process.procnum(), dstprocnums)
   
-  local packed_data = assert(Core.ipc_pack_message(data, name, need_shmem))
+  local packed_data = assert(Core.ipc_pack_message_data(data, name, need_shmem))
   
-  local caller_coroutine = coroutine.isyieldable() and coroutine.running()
   local responses_pending, failed_count = #dstprocnums, 0
   local ipc_send_acknowledged_handler_coro = coroutine.wrap(function(success)
     while true do
@@ -85,26 +84,52 @@ local function ipc_broadcast(dst, name, data)
       success = coroutine.yield()
     end
     
-    if caller_coroutine then
-      return coroutine.resume(caller_coroutine, failed_count == 0)
+    assert(Core.ipc_gc_message_data(packed_data))
+    
+    if type(handler) == "function" then
+      return handler(failed_count == 0)
+    elseif type(handler) == "thread" then
+      return coroutine.resume(handler, failed_count == 0)
     end
   end)
-  
   for _, procnum in ipairs(dstprocnums) do
-    Core.ipc_send_message(procnum, packed_data, nil, ipc_send_acknowledged_handler_coro)
+    local ok = Core.ipc_send_message(procnum, nil, nil, packed_data, ipc_send_acknowledged_handler_coro)
+    assert(ok)
   end
   
+  if must_yield then
+    return coroutine.yield()
+  else
+    return true
+  end
 end
 
-function IPC.send(destination, name, data)
-  assert(coroutine.isyieldable(), "can't send IPC message from outisde a yieldable coroutine")
+function IPC.send(destination, name, data, how_to_handle_acknowledgement)
   local dst, many_dsts = validate_process_direction(destination, "send")
   assert(type(name)=="string", "invalid argument #2 to IPC.send")
-  assert(data ~= nil, "invalid argument #3 to IPC.send")
+  local handler, must_yield
+  
+  if how_to_handle_acknowledgement == nil then
+    how_to_handle_acknowledgement = coroutine.isyieldable() and "yield" or "noyield"
+  end
+  
+  if how_to_handle_acknowledgement == "yield" then
+    assert(coroutine.isyieldable(), "can't send IPC message with 'yield' option from outisde a yieldable coroutine")
+    handler = coroutine.running()
+    must_yield = true
+  elseif type(how_to_handle_acknowledgement) == "function" or type(how_to_handle_acknowledgement) == "thread" then
+    handler = how_to_handle_acknowledgement
+  end
+  
   if many_dsts then
-    return ipc_broadcast(destination, name, data)
+    return ipc_broadcast(destination, name, data, handler, must_yield)
   else
-    return Core.ipc_send_message(dst, name, data)
+    local ok = Core.ipc_send_message(dst, name, data, nil, handler)
+    if must_yield then
+      return coroutine.yield()
+    else
+      return ok
+    end
   end
 end
 
@@ -138,6 +163,66 @@ function IPC.receive(name, src, receiver, timeout)
   end
 end
 
+local receiver_mt
+IPC.Receiver = {}
+function IPC.Receiver.new(name, src)
+  local self = {buffer = {}, oldest=1, newest=0, name = name, src = src}
+  setmetatable(self, receiver_mt)
+  return self
+end
+
+function IPC.Receiver.start(name, src)
+  return IPC.Receiver.new(name, src):start()
+end
+
+receiver_mt = {
+  __index = {
+    yield = function(self)
+      local rcvd = self.buffer[self.oldest]
+      if rcvd then
+        self.buffer[self.oldest] = nil
+        self.oldest = self.oldest + 1
+        return rcvd.data, rcvd.src
+      end
+      
+      assert(not self.suspended_coroutine, "IPC receiver already yielded a coroutine")
+      self.suspended_coroutine = coroutine.running()
+      return coroutine.yield()
+    end,
+    
+    start = function(self)
+      assert(not self.receiver_function, "IPC receiver already started")
+      self.receiver_function = function(data, src)
+        self.newest = self.newest+1
+        self.buffer[self.newest] = {data=data, src=src}
+        local coro = self.suspended_coroutine
+        if coro then
+          self.suspended_coroutine = nil
+          local rcvd = self.buffer[self.oldest]
+          self.buffer[self.oldest] = nil
+          self.oldest = self.oldest+1
+          assert(rcvd)
+          coroutine.resume(coro, rcvd.data, rcvd.src)
+        end
+      end
+      IPC.receive(self.name, self.src, self.receiver_function)
+      return self
+    end,
+    
+    stop = function(self)
+      assert(self.receiver_function, "IPC receiver not running")
+      IPC.cancel_receive(self.name, self.src, self.receiver_function)
+      self.receiver_function = nil
+      return self
+    end
+  },
+  __gc = function(self)
+    if self.receiver_function then
+      self:stop()
+    end
+  end,
+}
+
 function IPC.cancel_receive(name, src_to_cancel, receiver_to_cancel)
   --flexargs. ugly but useful
   local srctype = type(src_to_cancel)
@@ -163,7 +248,7 @@ function IPC.cancel_receive(name, src_to_cancel, receiver_to_cancel)
 end
 
 function IPC.receive_from_shuttlesock_core(name, src, data)
-  --Log.info("received %s from %s data %s", name, tostring(src), tostring(data))
+  --print("received %s from %s data %s", name, tostring(src), tostring(data))
   local all_ok = true
   local ok, err
   local receivers_for_name = receivers[name]
@@ -178,7 +263,7 @@ function IPC.receive_from_shuttlesock_core(name, src, data)
         end
       else
         assert(type(receiver) == "function")
-        ok = Core.pcall(receiver, data, src)
+        ok, err = Core.pcall(receiver, data, src)
         if not ok then --it's already logged
           all_ok = false
         end

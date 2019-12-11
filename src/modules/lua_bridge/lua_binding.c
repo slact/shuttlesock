@@ -2221,6 +2221,18 @@ static int Lua_shuso_pcall(lua_State *L) {
   return lua_gettop(L);
 }
 
+static int Lua_shuso_coroutine_resume(lua_State *L) {
+  lua_State *coro = lua_tothread(L, 1);
+  lua_remove(L, 1);
+  int top = lua_gettop(L);
+  lua_pushboolean(L, 1);
+  int rc = luaS_resume(coro, L, lua_gettop(L));
+  if(rc != LUA_OK) {
+    lua_pushboolean(L, 0);
+    lua_replace(L, top+1);
+  }
+  return lua_gettop(L) - top;
+}
 
 static int Lua_shuso_master_has_root(lua_State *L) {
   shuso_t *S = shuso_state(L);
@@ -2245,6 +2257,42 @@ static int Lua_shuso_version(lua_State *L) {
   lua_pushstring(L, SHUTTLESOCK_VERSION_STRING);
   return 1;
 }
+
+static int Lua_shuso_ipc_pack_message_data(lua_State *L) {
+  assert(lua_gettop(L) == 3);
+  const char *name = luaL_checkstring(L, 2);
+  bool need_shmem = lua_toboolean(L, 3);
+  shuso_ipc_lua_data_t *data = luaS_lua_ipc_pack_data(L, 1, name, need_shmem);
+  if(data) {
+    lua_pushlightuserdata(L, data);
+    return 1;
+  }
+  else {
+    lua_pushnil(L);
+    lua_pushstring(L, "failed to pack message data");
+    return 2;
+  }
+}
+static int Lua_shuso_ipc_unpack_message_data(lua_State *L) {
+  luaL_checktype(L, 1, LUA_TLIGHTUSERDATA);
+  int top = lua_gettop(L);
+  shuso_ipc_lua_data_t *data = (void *)lua_topointer(L, 1);
+  if(!luaS_lua_ipc_unpack_data(L, data)) {
+    lua_pushnil(L);
+    lua_pushstring(L, "failed to unpack message data");
+  }
+  assert(lua_gettop(L) == top + 1);
+  return 1;
+}
+
+static int Lua_shuso_ipc_gc_message_data(lua_State *L) {
+  luaL_checktype(L, 1, LUA_TLIGHTUSERDATA);
+  shuso_ipc_lua_data_t *data = (void *)lua_topointer(L, 1);
+  bool ok = luaS_lua_ipc_gc_data(L, data);
+  lua_pushboolean(L, ok);
+  return 1;
+}
+
 
 luaL_Reg shuttlesock_core_module_methods[] = {
 // creation, destruction
@@ -2277,6 +2325,7 @@ luaL_Reg shuttlesock_core_module_methods[] = {
 //lua helpers
   {"is_light_userdata", Lua_shuso_is_light_userdata},
   {"pcall", Lua_shuso_pcall},
+  {"coroutine_resume", Lua_shuso_coroutine_resume},
 
 //config
   {"config_block_parent_setting_pointer", Lua_shuso_block_parent_setting_pointer},
@@ -2323,8 +2372,10 @@ luaL_Reg shuttlesock_core_module_methods[] = {
   {"send_file", Lua_shuso_ipc_send_fd},
   {"new_file_receiver", Lua_shuso_ipc_file_receiver_new},
   //{"open_listener_sockets", Lua_shuso_ipc_open_listener_sockets},
-  {"ipc_send_message", luaS_ipc_send_message_noyield},
-  {"ipc_send_message_yield", luaS_ipc_send_message_yield},
+  {"ipc_send_message", luaS_ipc_send_message},
+  {"ipc_pack_message_data", Lua_shuso_ipc_pack_message_data},
+  {"ipc_unpack_message_data", Lua_shuso_ipc_unpack_message_data},
+  {"ipc_gc_message_data", Lua_shuso_ipc_gc_message_data},
 
 //etc
   {"version", Lua_shuso_version},

@@ -322,15 +322,14 @@ static void lua_ipc_handler(shuso_t *S, const uint8_t code, void *ptr) {
   int response_code = lua_tonumber(L, -1);
   lua_pop(L, 1);
   
+  d->success = true;
+  shuso_ipc_send(S, shuso_procnum_to_process(S, d->sender), response_code, d);
+  
   luaS_push_lua_module_field(L, "shuttlesock.ipc", "receive_from_shuttlesock_core");
   lua_pushstring(L, d->name);
   lua_pushnumber(L, d->sender);
   luaS_lua_ipc_unpack_data(L, d);
-  luaS_pcall(L, 3, 1);
-  
-  d->success = lua_toboolean(L, -1);
-  lua_pop(L, 1);
-  shuso_ipc_send(S, shuso_procnum_to_process(S, d->sender), response_code, d);
+  luaS_pcall(L, 3, 0);
 }
 
 bool luaS_lua_ipc_gc_data(lua_State *L, shuso_ipc_lua_data_t *d) {
@@ -367,6 +366,7 @@ static void lua_ipc_response_handler(shuso_t *S, const uint8_t code, void *ptr) 
   shuso_ipc_lua_data_t  *d = ptr;
   lua_State       *L = S->lua.state;
   bool             success = d->success;
+  assert(success);
   lua_rawgeti(L, LUA_REGISTRYINDEX, d->reftable);
   lua_getfield(L, -1, "caller");
   
@@ -374,7 +374,6 @@ static void lua_ipc_response_handler(shuso_t *S, const uint8_t code, void *ptr) 
   lua_remove(L, -2);
   luaS_lua_ipc_gc_data(L, d);
   d = NULL; // don't use it anymore, it may be GCed anytime
-  
   lua_ipc_return_to_caller(S, L, success);
 }
 
@@ -383,23 +382,23 @@ static void lua_ipc_response_cancel_handler(shuso_t *S, const uint8_t code, void
 }
 
 
-static int lua_ipc_send_message(lua_State *L, bool yield) {
+int luaS_ipc_send_message(lua_State *L) {
+  //dst, msg_name, data, prepacked_data, handler
   int                    dst = luaL_checkinteger(L, 1);
   int                    top = lua_gettop(L);
   shuso_t               *S = shuso_state(L);
   shuso_process_t       *dst_proc = shuso_procnum_to_process(S, dst);
+  assert(top == 5);
   shuso_ipc_lua_data_t  *data;
-  if(top >= 3 && lua_isstring(L, 2) && !lua_isfunction(L, 3) && !lua_isthread(L, 3)) { //3 args means we got the dst, the message name, and the Lua unpacked data
+  if(lua_isnil(L, 2)) {
+    assert(lua_isnil(L, 3));
+    luaL_checktype(L, 4, LUA_TLIGHTUSERDATA);
+    data = (void *)lua_topointer(L, 4);
+  }
+  else {
     const char *name = luaL_checkstring(L, 2);
     data = luaS_lua_ipc_pack_data(L, 3, name, !shuso_processes_share_heap(S, S->procnum, dst));
     data->sender = S->procnum;
-  }
-  else if(top == 2 || (top >= 3 && lua_isnil(L, 3))) { //2 args means we got dst, pre-packed data (which includes the message name)
-    luaL_checktype(L, 2, LUA_TLIGHTUSERDATA);
-    data = (void *)lua_topointer(L, 2);
-  }
-  else if(top < 2) {
-    return luaL_error(L, "too few arguments");
   }
   
   const char *err;
@@ -413,17 +412,9 @@ static int lua_ipc_send_message(lua_State *L, bool yield) {
   assert(ipc_code > 0);
   lua_pop(L, 1);
   
-  
-  if(lua_isfunction(L, -1) || lua_isthread(L, -1)) {
+  if(lua_isfunction(L, 5) || lua_isthread(L, 5)) {
     lua_rawgeti(L, LUA_REGISTRYINDEX, data->reftable);
-    lua_pushvalue(L, -1);
-    lua_setfield(L, -2, "caller");
-    lua_pop(L, 1);
-  }
-  else if(yield) {
-    assert(lua_isyieldable(L));
-    lua_rawgeti(L, LUA_REGISTRYINDEX, data->reftable);
-    lua_pushthread(L);
+    lua_pushvalue(L, 5);
     lua_setfield(L, -2, "caller");
     lua_pop(L, 1);
   }
@@ -431,19 +422,7 @@ static int lua_ipc_send_message(lua_State *L, bool yield) {
   shuso_ipc_send(S, dst_proc, ipc_code, data);
   
   lua_pushboolean(L, 1);
-  if(yield) {
-    return lua_yield(L, 1);
-  }
-  else {
-    return 1;
-  }
-}
-
-int luaS_ipc_send_message_yield(lua_State *L) {
-  return lua_ipc_send_message(L, true);
-}
-int luaS_ipc_send_message_noyield(lua_State *L) {
-  return lua_ipc_send_message(L, false);
+  return 1;
 }
 
 bool shuso_register_lua_ipc_handler(shuso_t *S) {
@@ -458,11 +437,11 @@ bool shuso_register_lua_ipc_handler(shuso_t *S) {
   if((handler = shuso_ipc_add_handler(S, "lua_ipc_response", SHUTTLESOCK_IPC_CODE_AUTOMATIC, lua_ipc_response_handler, lua_ipc_response_cancel_handler)) == NULL) {
     return false;
   }  
-  int send_resposne_code = handler->code;
+  int send_response_code = handler->code;
   
   luaS_push_lua_module_field(L, "shuttlesock.ipc", "set_ipc_codes");
   lua_pushinteger(L, send_code);
-  lua_pushinteger(L, send_resposne_code);
+  lua_pushinteger(L, send_response_code);
   luaS_pcall(L, 2, 0);
   
   return true;
