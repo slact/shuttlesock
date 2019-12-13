@@ -607,7 +607,7 @@ bool shuso_spawn_worker(shuso_t *S, shuso_process_t *proc) {
   if(prev_proc_state == SHUSO_STATE_NIL) {
     assert(proc->ipc.buf == NULL);
     if(!(shared_ipc_created = shuso_ipc_channel_shared_create(S, proc))) {
-      err = "failed to create shared IPC buffer";
+      err = "failed to create shared IPC channel for worker";
       goto fail;
     }
   }

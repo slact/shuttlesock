@@ -24,7 +24,7 @@ function Process.share_heap(procnum1, procnum2)
     procnums = {}
     for _, pnum in ipairs{procnum1, procnum2} do
       if type(pnum) == "table" then
-        for _, p in pairs(procnum1) do
+        for _, p in pairs(pnum) do
           table.insert(procnums, p)
         end
       else
