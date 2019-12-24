@@ -16,6 +16,13 @@
 #define SHUTTLESOCK_IPC_CMD_ALL_WORKERS_STARTED 9
 #define SHUTTLESOCK_IPC_CMD_WORKER_STARTED 10
 #define SHUTTLESOCK_IPC_CMD_WORKER_STOPPED 11
+#define SHUTTLESOCK_IPC_CMD_MANAGER_PROXY_MESSAGE 12
+#define SHUTTLESOCK_IPC_CMD_RECEIVE_PROXIED_MESSAGE 13
+
+#define SHUTTLESOCK_IPC_CMD_LUA_MESSAGE 14
+#define SHUTTLESOCK_IPC_CMD_LUA_MESSAGE_RESPONSE 15
+#define SHUTTLESOCK_IPC_CMD_LUA_MANAGER_PROXY_MESSAGE 16
+#define SHUTTLESOCK_IPC_CMD_LUA_MANAGER_RECEIVE_PROXIED_MESSAGE 17
 
 #define SHUTTLESOCK_IPC_CODE_AUTOMATIC UINT16_MAX
 
@@ -23,12 +30,22 @@
 #define SHUTTLESOCK_IPC_CODE_AUTOMATIC_MAX UINT8_MAX
 
 typedef struct {
-  _Atomic uint8_t    next_read;
-  _Atomic uint8_t    next_reserve;
-  _Atomic uint8_t    next_release;
+  struct {
+    _Atomic int64_t    next_read;
+    _Atomic int64_t    next_write_reserve;
+    _Atomic int64_t    next_write_release;
+  } index;
+  atomic_bool        full;
   _Atomic uint8_t    code[256];
   _Atomic(void *)    ptr[256];
 } shuso_ipc_ringbuf_t;
+
+typedef struct {
+  uint8_t code;
+  int     src;
+  int     dst;
+  void   *pd;
+} shuso_ipc_manager_proxy_msg_t;
 
 typedef void shuso_ipc_fn(shuso_t *, const uint8_t code, void *ptr);
 
@@ -69,6 +86,7 @@ typedef struct {
 
 typedef struct {
   shuso_ev_timer        send_retry;
+  shuso_ev_timer        receive_check;
   struct {
     shuso_ipc_outbuf_t   *first;
     shuso_ipc_outbuf_t   *last;
@@ -99,7 +117,7 @@ bool shuso_ipc_channel_shared_start(shuso_t *, shuso_process_t *);
 bool shuso_ipc_channel_shared_stop(shuso_t *, shuso_process_t *);
 
 
-bool shuso_ipc_send(shuso_t *, shuso_process_t *, const uint8_t code, void *ptr);
+bool shuso_ipc_send(shuso_t *, shuso_process_t *dst, const uint8_t code, void *ptr);
 bool shuso_ipc_send_workers(shuso_t *, const uint8_t code, void *ptr);
 const shuso_ipc_handler_t *shuso_ipc_add_handler(shuso_t *S,  const char *name, uint32_t code, shuso_ipc_fn *receive, shuso_ipc_fn *cancel);
 
