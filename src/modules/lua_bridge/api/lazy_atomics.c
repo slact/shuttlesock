@@ -222,7 +222,7 @@ int Lua_lazy_atomics_value_increment(lua_State *L) {
     case SHUSO_LUA_SHATOMIC_INTEGER: {
       int old = atomic_fetch_add(&atomicval->integer, lua_tointeger(L, 2));
       lua_pushinteger(L, old);
-      return old;
+      return 1;
     }
     case SHUSO_LUA_SHATOMIC_NUMBER:
       lua_pushnil(L);
