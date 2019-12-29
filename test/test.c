@@ -17,7 +17,6 @@ bool set_test_options(int *argc, char **argv) {
     }
     if((strstr(arg, "--data-path=") - arg) == 0) {
       test_config.data_path=&arg[strlen("--data-path=")];
-      printf("yeeeh: %s\n\n", test_config.data_path);
     }
     i++;
   }
