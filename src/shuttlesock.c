@@ -813,8 +813,10 @@ shuso_process_t *shuso_procnum_to_process(shuso_t *S, int procnum) {
  }
  //negative master and manager procnums refer to their position relative 
  //to worker[] in shuso_common_t, that's why this is one line,
- //so fuck off, address sanitizer
+ //so fuck off, clang analyzer
+#ifndef __clang_analyzer__
  return &((shuso_process_t *)&S->common->process.worker)[procnum] ;
+#endif
 }
 
 int shuso_process_to_procnum(shuso_t *S, shuso_process_t *proc) {
