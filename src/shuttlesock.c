@@ -264,6 +264,7 @@ static bool test_features(shuso_t *S, const char **errmsg) {
 }
 
 bool shuso_destroy(shuso_t *S) {
+  shuso_lua_destroy(S);
   if(S->ev.loop) {
     ev_loop_destroy(S->ev.loop);
   }
@@ -281,7 +282,6 @@ bool shuso_destroy(shuso_t *S) {
   if(S->error.combined_errors) {
     free(S->error.combined_errors);
   }
-  shuso_lua_destroy(S);
   free(S);
   shuso_resolver_global_cleanup();
   return true;
