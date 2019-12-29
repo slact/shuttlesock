@@ -12,25 +12,25 @@ linux_task:
     - luarocks install luacheck
   test_basic_script:
     - ./rebuild.sh
-    - ./test.sh --color verbose
+    - ./test.sh --color
   codecov_script:
     - ./rebuild.sh gcc-coverage luacov no-display-coverage
     - bash <(curl -s https://codecov.io/bash)
   test_optimized_script:
     - ./rebuild.sh O3
-    - ./test.sh
+    - ./test.sh --color
   test_optimized_valgrind_script:
     - ./rebuild.sh O2 valgrind
-    - ./test.sh valgrind
+    - ./test.sh valgrind --color
   test_optimized_stalloc_stats_tracking_valgrind_script:
     - ./rebuild.sh stalloc_track_space O2 valgrind
-    - ./test.sh valgrind
+    - ./test.sh valgrind --color
   test_no_eventfd_valgrind_script:
     - ./rebuild.sh no-eventfd O2
-    - ./test.sh valgrind
+    - ./test.sh valgrind --color
   test_release_valgrind_script:
     - ./rebuild.sh release O2
-    - ./test.sh valgrind
+    - ./test.sh valgrind --color
 
 osx_task:
   osx_instance:
@@ -40,21 +40,21 @@ osx_task:
     - brew install ccache libev zsh ruby lua
   test_basic_script:
     - ./rebuild.sh
-    - ./test.sh
+    - ./test.sh --color
   test_optimized_script:
     - ./rebuild.sh O3
-    - ./test.sh
+    - ./test.sh --color
 #  test_sanitized_script:
 #    - brew install llvm
 #    - ./rebuild.sh O2 sanitize-address
-#    - ./test.sh
+#    - ./test.sh --color
 freebsd_task:
   freebsd_instance:
     image: freebsd-12-0-release-amd64
   setup_script: pkg install -y gmake cmake ccache libev valgrind zsh ruby lua53
   test_basic_script:
     - ruby ./rebuild.rb
-    - zsh ./test.sh
+    - zsh ./test.sh --color
   test_optimized_script:
     - ruby ./rebuild.rb O3
-    - zsh ./test.sh
+    - zsh ./test.sh --color
