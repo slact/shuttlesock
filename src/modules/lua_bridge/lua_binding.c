@@ -252,7 +252,7 @@ static int Lua_shuso_procnum(lua_State *L) {
 
 static int Lua_shuso_count_workers(lua_State *L) {
   shuso_t *S = shuso_state(L);
-  lua_pushinteger(L, S->common->process.workers_end - S->common->process.workers_start);
+  lua_pushinteger(L, *S->common->process.workers_end - *S->common->process.workers_start);
   return 1;
 }
 
@@ -320,8 +320,8 @@ static int Lua_shuso_spawn_worker(lua_State *L) {
 static int Lua_shuso_stop_worker(lua_State *L) {
   shuso_t     *S = shuso_state(L);
   int          workernum = luaL_checkinteger(L, 1);
-  if(workernum < S->common->process.workers_start || workernum > S->common->process.workers_end) {
-    return luaL_error(L, "invalid worker %d (valid range: %d-%d)", workernum, S->common->process.workers_start, S->common->process.workers_end);
+  if(workernum < *S->common->process.workers_start || workernum > S->common->process.workers_end) {
+    return luaL_error(L, "invalid worker %d (valid range: %d-%d)", workernum, *S->common->process.workers_start, S->common->process.workers_end);
   }
   shuso_process_t   *proc = &S->common->process.worker[workernum];
   shuso_stop_t       lvl = stop_level_string_arg_to_enum(L, "ask", 2);
