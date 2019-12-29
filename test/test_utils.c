@@ -313,6 +313,9 @@ bool ___shusoT_run_test(shuso_t *S, int procnum, void (*run)(shuso_t *, void *),
     snow_fail("shuso_run failed: %s", shuso_last_error(S));
     return false;
   }
+  if(chk->test.verify) {
+    chk->test.verify(S, chk->test.pd);
+  }
   return true;
 }
 

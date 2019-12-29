@@ -535,7 +535,7 @@ describe(lua_api) {
   static shuso_t          *S = NULL;
   static test_runcheck_t  *chk = NULL;
   before_each() {
-    S = shusoT_create(&chk, 25.0);
+    S = shusoT_create(&chk, 5555.0);
   }
   after_each() {
     if(S) shusoT_destroy(S, &chk);
@@ -723,20 +723,35 @@ describe(lua_api) {
       shuso_run(S);
       assert_shuso_ran_ok(S);
     }
+    test("master-worker communiation") {
+      assert_luaL_dofile(S->lua.state, "ipc_master_worker.lua");
+      assert_shuso(S, shuso_configure_finish(S));
+      shuso_run(S);
+      assert_shuso_ran_ok(S);
+    }
+    
+    
+    test("broadcasting") {
+      lua_pushstring(S->lua.state, "all");
+      assert_luaL_dofile_args(S->lua.state, "ipc_broadcast.lua", 1);
+      assert_shuso(S, shuso_configure_finish(S));
+      shuso_run(S);
+      assert_shuso_ran_ok(S);
+    }
   }
 }
 #define IPC_ECHO 130
 
 typedef struct {
-  int   active;
-  int   procnum;
-  int   barrage;
-  int   barrage_received;
-  int   seq;
-  int   seq_received;
+  int           active;
+  int           procnum;
+  int           barrage;
+  int           barrage_received;
+  _Atomic(int)  seq;
+  _Atomic(int)  seq_received;
   _Atomic(bool) init_sleep_flag;
-  float sleep;
-  float slept;
+  float         sleep;
+  float         slept;
   
 } ipc_check_oneway_t;
 
@@ -745,6 +760,7 @@ typedef struct {
   char                err[1024];
   _Atomic(int)        sent;
   _Atomic(int)        received;
+  _Atomic(int)        prev_received;
   int                 received_stop_at;
   float               sleep_step;
   
@@ -768,8 +784,11 @@ typedef struct {
 #define check_ipc(test, S, chk, ...) \
 do { \
   if(!(test)) { \
+    if(!chk->failure) { \
+      sprintf(chk->err, __VA_ARGS__); \
+    }\
     chk->failure = true;\
-    sprintf(chk->err, __VA_ARGS__); \
+    shuso_log_warning(S, __VA_ARGS__); \
     shuso_stop(S, SHUSO_STOP_INSIST); \
     return; \
   } \
@@ -805,6 +824,7 @@ void ipc_echo_send(shuso_t *S) {
   shuso_process_t *processes = S->common->process.worker;
   shuso_process_t *dst_process = &processes[dst->procnum];
   for(int i=0; i<dst->barrage; i++) {
+    shuso_log_debug(S, "chk->sent: %d, received_stop_at: %d", chk->sent, chk->received_stop_at);
     if(chk->sent >= chk->received_stop_at) {
       //we're done;
       return;
@@ -825,15 +845,18 @@ void ipc_echo_receive(shuso_t *S, const uint8_t code, void *ptr) {
   
   ipc_check_t   *chk = S->data;
   intptr_t       seq = (intptr_t )ptr;
-  chk->received++;
-  self->seq_received++;
-  //shuso_log(S, "received %d", self->seq_received);
-  check_ipc(chk->received <= chk->sent, S, chk, "sent - received mismatch for procnum %d: send %d > received %d", self->procnum, chk->sent, chk->received);
-  check_ipc(seq == self->seq_received, S, chk, "seq mismatch for procnum %d: expected %d, got %ld", self->procnum, self->seq, seq);
+  atomic_fetch_add(&chk->received, 1);
+  atomic_fetch_add(&self->seq_received, 1);
+  shuso_log(S, "received %d", self->seq_received);
+  
+  int sent = chk->sent, received = chk->received, self_seq_received = self->seq_received;
+  
+  check_ipc(received <= sent, S, chk, "sent - received mismatch for procnum %d: send %d > received %d", self->procnum, sent, received);
+  check_ipc(seq == self_seq_received, S, chk, "seq mismatch for procnum %d: expected %d, got %ld", self->procnum, self_seq_received, seq);
   
   if(chk->received >= chk->received_stop_at) {
     //we're done;
-    //shuso_log(S, "it's time to stop");
+    shuso_log(S, "it's time to stop");
     shuso_stop(S, SHUSO_STOP_INSIST); \
     return;
   }
@@ -873,7 +896,9 @@ static void ipc_load_test(shuso_t *S, void *pd) {
 
 static void ipc_load_test_verify(shuso_t *S, void *pd) {
   ipc_check_t   *chk = pd;
-  printf("chk->sent: %i\n", chk->sent);
+  if(chk->failure) {
+    snow_fail("%s", chk->err);
+  }
 }
 #undef check_ipc
 
@@ -887,7 +912,7 @@ describe(ipc) {
     static ipc_check_t *ipc_check = NULL;
     
     before_each() {
-      S = shusoT_create(&chk, 25.0);
+      S = shusoT_create(&chk, 100.0);
       ipc_check = shmalloc(ipc_check);
       S->data = ipc_check;
     }
@@ -895,7 +920,7 @@ describe(ipc) {
       shusoT_destroy(S, &chk);
       shmfree(ipc_check);
     }
-    test("simple round-trip") {
+    skip("simple round-trip") {
       ipc_check->received_stop_at = 1000;
       ipc_check->ping.procnum = SHUTTLESOCK_MANAGER;
       ipc_check->pong.procnum = SHUTTLESOCK_MASTER;
@@ -908,7 +933,7 @@ describe(ipc) {
       assert_shuso_ran_ok(S);
     }
     
-    test("one-sided round-trip (250:1)") {
+    skip("one-sided round-trip (250:1)") {
       ipc_check->received_stop_at = 1000;
       ipc_check->ping.procnum = SHUTTLESOCK_MANAGER;
       ipc_check->pong.procnum = SHUTTLESOCK_MASTER;
@@ -922,10 +947,10 @@ describe(ipc) {
     }
     
     test("buffer fill (500:1)") {
-      ipc_check->received_stop_at = 1000;
+      ipc_check->received_stop_at = 5000;
       ipc_check->ping.procnum = SHUTTLESOCK_MANAGER;
       ipc_check->pong.procnum = SHUTTLESOCK_MASTER;
-      ipc_check->ping.barrage = 400;
+      ipc_check->ping.barrage = 1000;
       ipc_check->pong.barrage = 1;
       ipc_check->ping.init_sleep_flag = 1;
 

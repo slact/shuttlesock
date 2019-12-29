@@ -18,6 +18,9 @@ testmod:subscribe("core:manager.start", function(self)
     local receiver = IPC.Receiver.start("hello")
     while true do
       local data, sender = receiver:yield()
+      if not data and sender == "canceled" then
+        return
+      end
       assert(data[1]=="yeep")
       assert(data[2][1]==100)
       assert(data.ok=="okay")
