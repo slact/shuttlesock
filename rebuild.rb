@@ -241,7 +241,7 @@ class Opts
       begin
         require 'etc'
         nprocs = Etc.nprocessors
-        build_opts << "--parallel #{nprocs}"
+        build_opts += ["--parallel", "#{nprocs}"]
       rescue Exception
       end
     end
