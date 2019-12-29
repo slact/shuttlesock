@@ -231,9 +231,9 @@ static int Lua_shuso_pointer(lua_State *L) {
 }
 
 static int Lua_shuso_procnum_valid(lua_State *L) {
-  luaL_checknumber(L, 1);
   const char *err = "invalid procnum";
-  if(shuso_procnum_valid(shuso_state(L), lua_tointeger(L, 1), &err)){
+  int procnum = luaL_checkinteger(L, 1);
+  if(shuso_procnum_valid(shuso_state(L), procnum, &err)){
     lua_pushboolean(L, 1);
     return 1;
   }
@@ -418,7 +418,7 @@ static void watcher_callback(struct ev_loop *loop, ev_watcher *watcher, int even
   else {
     coro = lua_tothread(L, -1);
     lua_rawgeti(coro, LUA_REGISTRYINDEX, w->ref.self);
-    rc = luaS_resume(coro, NULL, 1);
+    rc = luaS_resume(coro, L, 1);
   }
   if((handler_is_coroutine && rc == LUA_OK) /* coroutine is finished */
    ||(w->type == LUA_EV_WATCHER_TIMER && w->watcher.timer.ev.repeat == 0.0) /* timer is finished */
@@ -1569,7 +1569,6 @@ static void luaS_unwrap_event_data_cleanup(lua_State *L, const char *datatype, l
 static void lua_module_event_listener(shuso_t *S, shuso_event_state_t *evs, intptr_t code, void *data, void *pd) {
   lua_State *L = S->lua.state;
   int top = lua_gettop(L);
-  
   luaS_push_lua_module_field(L, "shuttlesock.module", "event_subscribers");
   intptr_t fn_index = (intptr_t )pd;
   lua_rawgeti(L, -1, fn_index);
@@ -2226,13 +2225,8 @@ static int Lua_shuso_coroutine_resume(lua_State *L) {
   lua_State *coro = lua_tothread(L, 1);
   lua_remove(L, 1);
   int top = lua_gettop(L);
-  lua_pushboolean(L, 1);
-  int rc = luaS_resume(coro, L, lua_gettop(L));
-  if(rc != LUA_OK) {
-    lua_pushboolean(L, 0);
-    lua_replace(L, top+1);
-  }
-  return lua_gettop(L) - top;
+  
+  return luaS_coroutine_resume(L, coro, top);
 }
 
 static int Lua_shuso_master_has_root(lua_State *L) {
