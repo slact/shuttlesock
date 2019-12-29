@@ -1,5 +1,5 @@
 local DESTINATION, REPEAT_TIMES = ... 
-REPEAT_TIMES = REPEAT_TIMES or 20000
+REPEAT_TIMES = REPEAT_TIMES or 2000
 
 local data_expected = "yes hello"
 
@@ -122,7 +122,7 @@ testmod:subscribe("core:manager.workers_started", function(self)
   coroutine.wrap(function()
     local receiver = IPC.Receiver.start("finished")
     while self.shared.repeated < REPEAT_TIMES do
-      Log.debug("TAKE " .. self.shared.repeated)
+      --Log.debug("TAKE " .. self.shared.repeated)
       self.shared:increment("repeated", 1)
       local n = assert(IPC.send(DESTINATION, message_name, data_expected))
       while n > 0 do

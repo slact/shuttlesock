@@ -920,7 +920,7 @@ describe(ipc) {
       shusoT_destroy(S, &chk);
       shmfree(ipc_check);
     }
-    skip("simple round-trip") {
+    test("simple round-trip") {
       ipc_check->received_stop_at = 1000;
       ipc_check->ping.procnum = SHUTTLESOCK_MANAGER;
       ipc_check->pong.procnum = SHUTTLESOCK_MASTER;
@@ -933,7 +933,7 @@ describe(ipc) {
       assert_shuso_ran_ok(S);
     }
     
-    skip("one-sided round-trip (250:1)") {
+    test("one-sided round-trip (250:1)") {
       ipc_check->received_stop_at = 1000;
       ipc_check->ping.procnum = SHUTTLESOCK_MANAGER;
       ipc_check->pong.procnum = SHUTTLESOCK_MASTER;
