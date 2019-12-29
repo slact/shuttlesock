@@ -52,6 +52,7 @@ class Opts
     @vars={}
     @exports={}
     @build_type = "Debug"
+    @have_ninja = File.exists? "/usr/bin/ninja"
     OptsDSL.new(self).instance_eval &block
     @opts.each do |optname, opt|
       if opt.cmake_define
@@ -198,6 +199,8 @@ class Opts
       @cmake_opts << "../"
     end
     
+    @cmake_opts << "-GNinja" if @have_ninja
+    
     in_dir(shitty_cmake ? :build : :base) do
       if @vars[:clang_analyze]
         @scan_build=["scan-build"] + @analyze_flags
@@ -224,17 +227,27 @@ class Opts
     return self if @vars[:no_build]
     
     build_opts=[]
+    cmake_build_output = `cmake --build 2>&1`
     if @vars[:verbose_build]
       if (`cmake --build 2>&1`).match("--verbose")
         build_opts << "--verbose"
       else
-        @makefile_build = true
+        @direct_build = true
         build_opts << "VERBOSE=1"
       end
     end
     
-    make_command = (@makefile_build ? ['make'] : ['cmake', '--build', BUILD_DIR]) + build_opts
-    in_dir(@makefile_build ? :build : :base) do
+    if !@direct_build && !@have_ninja && cmake_build_output.match("--parallel")
+      begin
+        require 'etc'
+        nprocs = Etc.nprocessors
+        build_opts << "--parallel #{nprocs}"
+      rescue Exception
+      end
+    end
+    
+    make_command = (@direct_build ? [(@have_ninja ? 'ninja' : 'make')] : ['cmake', '--build', BUILD_DIR]) + build_opts
+    in_dir(@direct_build ? :build : :base) do
       if @vars[:clang_analyze]
         puts yellow(">> ") + blue(@scan_build.join " ") + " " + yellow(make_command.join " ")
         begin
@@ -294,7 +307,7 @@ class Opts
       puts green "Tests passed"
     else
       $stderr.puts red "...tests faled"
-      return false
+      return false unless @build_type == "DebugCoverage"
     end
     if @build_type == "DebugCoverage"
       statsfiles = Dir.glob("#{BUILD_DIR}/luacov.stats.out.*")
@@ -343,7 +356,7 @@ class Opts
         system_echo 'xdg-open', 'coverage/c/index.html'
       end
     end
-    self
+    @run_ok && self
   end
 end
 
