@@ -58,7 +58,6 @@ bool shuso_ipc_channel_shared_create(shuso_t *S, shuso_process_t *proc) {
 #endif
   proc->ipc.fd[0] = fds[0];
   proc->ipc.fd[1] = fds[1];
-  //shuso_log_debug(S, "created shared IPC channel fds: %d %d", fds[0], fds[1]);
   
   //open socket-transfer sockets
   if((socketpair(PF_LOCAL, SOCK_STREAM, 0, proc->ipc.socket_transfer_fd)) == -1) {
@@ -66,18 +65,15 @@ bool shuso_ipc_channel_shared_create(shuso_t *S, shuso_process_t *proc) {
   }
   fcntl(proc->ipc.socket_transfer_fd[0], F_SETFL, O_NONBLOCK);
   fcntl(proc->ipc.socket_transfer_fd[1], F_SETFL, O_NONBLOCK);
-  //shuso_log_debug(S, "created socket_transfer_fd %p %d<=>%d", (void *)&proc->ipc.socket_transfer_fd, proc->ipc.socket_transfer_fd[0], proc->ipc.socket_transfer_fd[1]);
   return true;
 }
 
 bool shuso_ipc_channel_shared_destroy(shuso_t *S, shuso_process_t *proc) {
   int               procnum = shuso_process_to_procnum(S, proc);
   if(procnum == SHUTTLESOCK_MASTER || procnum == SHUTTLESOCK_MANAGER) {
-    //shuso_log_debug(S, "destroy shared IPC for %s", procnum == SHUTTLESOCK_MASTER ? "master" : "manager");
     munmap(proc->ipc.buf, sizeof(shuso_ipc_ringbuf_t));
   }
   else {
-    //shuso_log_debug(S, "destroy shared IPC for worker %i", procnum);
     free(proc->ipc.buf);
   }
   proc->ipc.buf = NULL;
@@ -164,7 +160,6 @@ bool shuso_ipc_channel_local_stop(shuso_t *S) {
 }
 
 bool shuso_ipc_channel_shared_start(shuso_t *S, shuso_process_t *proc) {
-  //shuso_log_debug(S, "started shared channel, fds %d %d", proc->ipc.fd[0], proc->ipc.fd[1]);
   return true;
 }
 
@@ -178,7 +173,6 @@ static bool ipc_reserve_write_index(shuso_t *S, shuso_ipc_ringbuf_t *dstbuf, int
   int64_t   next = dstbuf->index.next_write_reserve++; //atomic because next_write_reserve is atomic. Thanks, C11.
   int64_t   next_read = dstbuf->index.next_read;
   if(next - next_read > 255) {
-    //shuso_log_debug(S, "buffer filled up");
     atomic_compare_exchange_strong(&dstbuf->full, &falseval, true);
     dstbuf->index.next_write_reserve--; // also atomic
     return false;
@@ -193,7 +187,6 @@ static void ipc_release_write_index(shuso_t *S, shuso_ipc_ringbuf_t *dstbuf) {
 }
 
 static bool ipc_send_direct(shuso_t *S, shuso_process_t *src, shuso_process_t *dst, const uint8_t code, void *ptr) {
-  //shuso_log_debug(S, "direct send to dst %p", (void *)dst);
   shuso_ipc_ringbuf_t   *buf = dst->ipc.buf;
   
   int64_t next_write_reserved_index;
@@ -206,20 +199,15 @@ static bool ipc_send_direct(shuso_t *S, shuso_process_t *src, shuso_process_t *d
   uint8_t next = (uint8_t )next_write_reserved_index;
   
   buf->ptr[next] = ptr;
-  //shuso_log_debug(S, "write [%u] ipc code %d intptr %d next_read: %d next_reserve: %d next_release: %d", (int )next, (int )code, (intptr_t)ptr, (int)buf->index.next_read, (int)buf->index.next_write_reserve, (int)buf->index.next_write_release);
   buf->code[next] = code;
-  //shuso_log_debug(S, "wrote [%u]", (int)next);
   ipc_release_write_index(S, buf);
-  //shuso_log_debug(S, "write-released [%u]", (int)next);
 
   ssize_t written;
 #ifdef SHUTTLESOCK_HAVE_EVENTFD
-  //shuso_log_debug(S, "write to eventfd %d %d", dst->ipc.fd[0], dst->ipc.fd[1]);
   static const uint64_t incr = 1;
   written = write(dst->ipc.fd[1], &incr, sizeof(incr));
   assert(written != -1);
 #else
-  //shuso_log_debug(S, "write to pipe %d %d", dst->ipc.fd[0], dst->ipc.fd[1]);
   //just write to the pipe
   written = write(dst->ipc.fd[1], &code, 1);
   assert(written == 1);
@@ -228,7 +216,6 @@ static bool ipc_send_direct(shuso_t *S, shuso_process_t *src, shuso_process_t *d
 }
 
 static bool ipc_send_outbuf_append(shuso_t *S, shuso_process_t *src, shuso_process_t *dst, const uint8_t code, void *ptr) {
-  //shuso_log_debug(S, "ipc send append outbuf %d ptr %p", (int )code, ptr);
   shuso_ipc_channel_local_t  *ch = &S->ipc;
   shuso_ipc_outbuf_t   *buffered = malloc(sizeof(*buffered));
   if(!buffered) {
@@ -270,7 +257,6 @@ static bool shuso_ipc_send_proxy_via_manager(shuso_t *S, shuso_process_t *dst, c
 bool shuso_ipc_send(shuso_t *S, shuso_process_t *dst, const uint8_t code, void *ptr) {
   shuso_process_t         *src =  S->process;
   shuso_runstate_t         dst_state = *dst->state;
-  shuso_log_debug(S, "ipc send code %d ptr %p dst %d", (int )code, ptr, dst->procnum);
   if(dst_state < SHUSO_STATE_STARTING) {
     if(dst->procnum >= SHUTTLESOCK_WORKER) {
       return shuso_set_error(S, "tried sending IPC message to worker %i with state %s", dst->procnum, shuso_runstate_as_string(dst_state));
@@ -288,11 +274,9 @@ bool shuso_ipc_send(shuso_t *S, shuso_process_t *dst, const uint8_t code, void *
   }
   
   if(S->ipc.buf.first || dst_state == SHUSO_STATE_STARTING) {
-    //shuso_log_debug(S, "inbuf appears full from the start or process isn't running");
     return ipc_send_outbuf_append(S, src, dst, code, ptr);
   }
   if(!ipc_send_direct(S, src, dst, code, ptr)) {
-    //shuso_log_debug(S, "ipc failed to send %d via inbuf to %d", code, dst->procnum);
     return ipc_send_outbuf_append(S, src, dst, code, ptr);
   }
   return true;
@@ -351,9 +335,7 @@ static void ipc_send_retry_cb(shuso_loop *loop, shuso_ev_timer *w, int revents) 
   shuso_process_t    *proc = shuso_ev_data(w);
   shuso_ipc_outbuf_t *cur;
   while((cur = S->ipc.buf.first) != NULL) {
-    //shuso_log_debug(S, "ipc retry send %d %p", (int)cur->code, cur->ptr);
     if(!ipc_send_direct(S, proc, cur->dst, cur->code, cur->ptr)) {
-      //shuso_log_debug(S, "retry send still fails");
       //send still fails. retry again later
       shuso_ev_timer_again(S, w);
       return;
@@ -369,21 +351,16 @@ static void ipc_receive(shuso_t *S, shuso_process_t *proc) {
   uint_fast8_t          code;
   void                 *ptr;
   int64_t               read_index;
-  shuso_log_debug(S, "ipc_receive at dst %p", (void *)proc);
-  //shuso_log_debug(S, "first: %d next_reserve %d next_release %d", (int )in->reader_next, (int )in->writer_next_reserve, (int )in->writer_next_release);
   read_index = in->index.next_read;
   assert(read_index >= 0);
   while(read_index < in->index.next_write_release) {
-    //shuso_log_debug(S, "writer_next_release while reading: %d", (int )in->writer_next_release);
     uint8_t i = (uint8_t )read_index;
     code = in->code[i];
     ptr = in->ptr[i];
-    //shuso_log_debug(S, "read! ipc read_idx:%d [%d] code %d intptr %d weite_release: %d", read_index, i, (int )code, (int )(intptr_t )ptr, (int)in->index.next_write_release);
     if(code == SHUTTLESOCK_IPC_CMD_NIL) {
       shuso_log_error(S, "ipc: [%d] has nil code -- retry it.", (int )read_index);
     }
     else {
-      shuso_log_debug(S, "ipc receive [%d] code %d intptr %d", (int)read_index, code, (int)(intptr_t)ptr);
       in->code[i]=SHUTTLESOCK_IPC_CMD_NIL;
       read_index++;
       atomic_fetch_add(&in->index.next_read, 1);
@@ -396,7 +373,6 @@ static void ipc_receive(shuso_t *S, shuso_process_t *proc) {
   if(in->full) {
     bool truey = true;
     atomic_compare_exchange_strong(&in->full, &truey, false);
-    //shuso_log_debug(S, "was full. now it's not.");
   }
 }
 
