@@ -53,6 +53,15 @@ class Opts
     @exports={}
     @build_type = "Debug"
     OptsDSL.new(self).instance_eval &block
+    @opts.each do |optname, opt|
+      if opt.cmake_define
+        opt.cmake_define.each do |k, v|
+          if not @cmake_defines[k] then
+            @cmake_defines[k]=nil
+          end
+        end
+      end
+    end
     
     @ok = process && generate_configure_script && configure && make && run
     if @vars[:clean_after]
@@ -97,6 +106,7 @@ class Opts
         end
       end
     end
+    @cmake_defines = Hash[@cmake_defines.sort_by {|k,v| k.to_s}]
     if not found
       return false
     end
@@ -123,12 +133,6 @@ class Opts
     
     @cmake_defines = {
       CMAKE_BUILD_TYPE: @build_type,
-      SHUTTLESOCK_DEBUG_NO_WORKER_THREADS: false,
-      SHUTTLESOCK_DEBUG_MODULE_SYSTEM: false,
-      SHUTTLESOCK_STALLOC_TRACK_SPACE: false,
-      SHUTTLESOCK_DEBUG_VALGRIND: false,
-      SHUTTLESOCK_DEBUG_SANITIZE: false,
-      DISABLE_CCACHE: false
     }.merge(@cmake_defines)
     
     exp={}
@@ -166,7 +170,17 @@ class Opts
     end
     File.write(@last_used_compiler_file, @vars[:compiler])
     
-    @def_opts = @cmake_defines.collect {|k,v| "-D#{k}=#{v == true ? "YES" : (v == false ? "NO" : v.to_s)}"}
+    @def_opts = @cmake_defines.collect do |k,v|
+      if v == true  then
+        "-D#{k}=YES"
+      elsif v == false then
+        "-D#{k}=NO"
+      elsif v == nil then
+        "-D#{k}="
+      else
+        "-D#{k}=#{v.to_s}"
+      end
+    end
     
     puts ""
     if `cmake --help`.match(/ -B /)
