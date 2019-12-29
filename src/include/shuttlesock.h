@@ -136,8 +136,8 @@ struct shuso_common_s {
     shuso_process_t     master;
     shuso_process_t     manager;
     shuso_process_t     worker[SHUTTLESOCK_MAX_WORKERS];
-    uint16_t            workers_start;
-    uint16_t            workers_end;
+    _Atomic(uint16_t)  *workers_start;
+    _Atomic(uint16_t)  *workers_end;
     bool                all_workers_running; //only relevant on manager
     struct {
       shuso_sigchild_info_t manager;
@@ -240,7 +240,7 @@ const char *shuso_runstate_as_string(shuso_runstate_t state);
 
 
 #define SHUSO_EACH_WORKER(S, cur) \
-  for(shuso_process_t *cur = &S->common->process.worker[S->common->process.workers_start], *___worker_end = &S->common->process.worker[S->common->process.workers_end]; cur < ___worker_end; cur++)
+  for(shuso_process_t *cur = &S->common->process.worker[*S->common->process.workers_start], *___worker_end = &S->common->process.worker[*S->common->process.workers_end]; cur < ___worker_end; cur++)
 #define shuso_set_nonblocking(fd) fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_NONBLOCK)
 
 /*

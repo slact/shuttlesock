@@ -267,8 +267,9 @@ static int Lua_shuso_procnums_active(lua_State *L) {
     lua_pushinteger(L, SHUTTLESOCK_MANAGER);
     lua_rawseti(L, -2, i++);
   }
+  unsigned start = *S->common->process.workers_start, end = *S->common->process.workers_end;
   
-  for(int w = S->common->process.workers_start; w<S->common->process.workers_end; w++) {
+  for(unsigned w = start; w < end; w++) {
     lua_pushinteger(L, w);
     lua_rawseti(L, -2, i++);
   }
