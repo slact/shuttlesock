@@ -53,8 +53,9 @@ function(shuttlesock_test_features)
 
   #endianness
   if(NOT DEFINED ${RESULT_BIG_ENDIAN})
-    include(TestBigEndian)
-    test_big_endian(${RESULT_BIG_ENDIAN})
+    include(TestEndianness)
+    test_machine_is_big_endian(is_big_endian)
+    set(${RESULT_BIG_ENDIAN} ${is_big_endian} CACHE INTERNAL "Is this machine big endian?")
   endif()
   
   #eventfd
