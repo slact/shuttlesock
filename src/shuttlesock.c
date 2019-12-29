@@ -666,7 +666,7 @@ bool shuso_spawn_worker(shuso_t *S, shuso_process_t *proc) {
 #endif
   
   luaS_gxcopy_start(S->lua.state, wS->lua.state);
-  luaS_gxcopy_package_preloaders(S->lua.state, wS->lua.state);
+  luaS_gxcopy_package_preloaders(S->lua.state, wS->lua.state);;
   shuso_core_module_event_publish(wS, "worker.start.before.lua_gxcopy", SHUSO_OK, S);
   luaS_gxcopy_finish(S->lua.state, wS->lua.state);
   
@@ -687,8 +687,8 @@ fail:
 #ifndef SHUTTLESOCK_DEBUG_NO_WORKER_THREADS
   if(pthreadattr_initialized) pthread_attr_destroy(&pthread_attr);
 #endif
-  if(resolver_initialized) shuso_resolver_cleanup(&S->resolver);
-  if(stalloc_initialized) shuso_stalloc_empty(&S->stalloc);
+  if(resolver_initialized) shuso_resolver_cleanup(&wS->resolver);
+  if(stalloc_initialized) shuso_stalloc_empty(&wS->stalloc);
   if(wS) free(wS);
   return shuso_set_error(S, "failed to start worker %d: %s", (int)procnum, err);
 }
