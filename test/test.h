@@ -17,8 +17,9 @@
 #include <sys/wait.h>
 
 typedef struct {
-  bool    verbose;
+  bool        verbose;
   const char *data_path;
+  double      multiplier;
 } test_config_t;
 
 test_config_t test_config;

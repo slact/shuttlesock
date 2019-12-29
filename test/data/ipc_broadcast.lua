@@ -1,5 +1,5 @@
 local DESTINATION, REPEAT_TIMES = ... 
-REPEAT_TIMES = REPEAT_TIMES or 300
+REPEAT_TIMES = REPEAT_TIMES or 5000
 
 local data_expected = "yes hello"
 

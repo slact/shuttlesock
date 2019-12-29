@@ -4,10 +4,12 @@
 #include <lualib.h>
 #include <shuttlesock/modules/lua_bridge/api/lua_ipc.h>
 #ifndef __clang_analyzer__
+
 bool set_test_options(int *argc, char **argv) {
   snow_set_extra_help(""
-    "    --verbose:          Verbose test output.\n"
-    "    --data-path=[path]: Vath to test data directory.\n"
+    "    --verbose:             Verbose test output.\n"
+    "    --data-path=[path]:    Path to test data directory.\n"
+    "    --multiplier=[number]: Scale looping tests by this number.\n"
   );
   int i = 1;
   while(i < *argc) {
@@ -17,6 +19,9 @@ bool set_test_options(int *argc, char **argv) {
     }
     if((strstr(arg, "--data-path=") - arg) == 0) {
       test_config.data_path=&arg[strlen("--data-path=")];
+    }
+    if((strstr(arg, "--multiplier=") - arg) == 0) {
+      test_config.multiplier=atof(&arg[strlen("--multiplier=")]);
     }
     i++;
   }
@@ -732,7 +737,8 @@ describe(lua_api) {
     
     test("broadcasting") {
       lua_pushstring(S->lua.state, "all");
-      assert_luaL_dofile_args(S->lua.state, "ipc_broadcast.lua", 1);
+      lua_pushinteger(S->lua.state, 5000 * test_config.multiplier);
+      assert_luaL_dofile_args(S->lua.state, "ipc_broadcast.lua", 2);
       assert_shuso(S, shuso_configure_finish(S));
       shuso_run(S);
       assert_shuso_ran_ok(S);
@@ -945,7 +951,7 @@ describe(ipc) {
       assert_shuso_ran_ok(S);
     }
     
-    test("buffer fill (500:1)") {
+    test("buffer fill (1000:1)") {
       ipc_check->received_stop_at = 5000;
       ipc_check->ping.procnum = SHUTTLESOCK_MANAGER;
       ipc_check->pong.procnum = SHUTTLESOCK_MASTER;
@@ -1118,7 +1124,7 @@ describe(shared_memory_allocator) {
   }
   test("single-threaded alloc/free") {
     size_t shm_sz = 10*1024*1024;
-    unsigned total_allocs = 5000;
+    unsigned total_allocs = 5000 * test_config.multiplier;
     unsigned max_size = 1000;
     unsigned allocs_before_free = total_allocs/3;
     uint64_t i;
@@ -1246,8 +1252,11 @@ describe(listener_sockets) {
 snow_main_decls;
 int main(int argc, char **argv) {
   _snow.ignore_unknown_options = 1;
-  memset(&test_config, 0x0, sizeof(test_config));
-  test_config.data_path="test/data";
+  test_config = (test_config_t) {
+    .verbose = false,
+    .data_path="test/data",
+    .multiplier = 1.0
+  };
   dev_null = open("/dev/null", O_WRONLY);
   if(!set_test_options(&argc, argv)) {
     return 1;

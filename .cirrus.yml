@@ -21,16 +21,16 @@ linux_task:
     - ./test.sh --color
   test_optimized_valgrind_script:
     - ./rebuild.sh O2 valgrind
-    - ./test.sh valgrind --color
+    - ./test.sh valgrind --color --multiplier=0.1
   test_optimized_stalloc_stats_tracking_valgrind_script:
     - ./rebuild.sh stalloc_track_space O2 valgrind
-    - ./test.sh valgrind --color
+    - ./test.sh valgrind --color --multiplier=0.1
   test_no_eventfd_valgrind_script:
     - ./rebuild.sh no-eventfd O2
-    - ./test.sh valgrind --color
+    - ./test.sh valgrind --color --multiplier=0.1
   test_release_valgrind_script:
     - ./rebuild.sh release O2
-    - ./test.sh valgrind --color
+    - ./test.sh valgrind --color --multiplier=0.2
 
 osx_task:
   osx_instance:
