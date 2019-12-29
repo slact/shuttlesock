@@ -57,6 +57,8 @@ static void open_listener_sockets_response_handle(shuso_t *S, const uint8_t code
 static void worker_started_handle(shuso_t *S, const uint8_t code, void *ptr);
 static void worker_stopped_handle(shuso_t *S, const uint8_t code, void *ptr);
 static void all_worker_started_handle(shuso_t *S, const uint8_t code, void *ptr);
+static void manager_proxy_message_handle(shuso_t *S, const uint8_t code, void *ptr);
+static void received_proxied_message_handle(shuso_t *S, const uint8_t code, void *ptr);
 
 bool shuso_ipc_commands_init(shuso_t *S) {
   if(!shuso_ipc_add_handler(S, "signal", SHUTTLESOCK_IPC_CMD_SIGNAL, signal_handle, NULL)) {
@@ -69,6 +71,12 @@ bool shuso_ipc_commands_init(shuso_t *S) {
     return false;
   }
   if(!shuso_ipc_add_handler(S, "set_log_fd", SHUTTLESOCK_IPC_CMD_SET_LOG_FD, set_log_fd_handle, NULL)) {
+    return false;
+  }
+  if(!shuso_ipc_add_handler(S, "manager_proxy_message", SHUTTLESOCK_IPC_CMD_MANAGER_PROXY_MESSAGE, manager_proxy_message_handle, NULL)) {
+    return false;
+  }
+  if(!shuso_ipc_add_handler(S, "receive_proxied_message", SHUTTLESOCK_IPC_CMD_RECEIVE_PROXIED_MESSAGE, received_proxied_message_handle, NULL)) {
     return false;
   }
   if(!shuso_ipc_add_handler(S, "open_listener_sockets", SHUTTLESOCK_IPC_CMD_OPEN_LISTENER_SOCKETS, open_listener_sockets_handle, NULL)) {
@@ -90,6 +98,19 @@ bool shuso_ipc_commands_init(shuso_t *S) {
   return true;
 }
 
+static void manager_proxy_message_handle(shuso_t *S, const uint8_t code, void *ptr) {
+  assert(S->procnum == SHUTTLESOCK_MANAGER);
+  shuso_ipc_manager_proxy_msg_t *d = ptr;
+  if(!shuso_ipc_send(S, shuso_procnum_to_process(S, d->dst), SHUTTLESOCK_IPC_CMD_RECEIVE_PROXIED_MESSAGE, d)) {
+    shuso_set_error(S, "failed to proxy IPC message");
+    shuso_shared_slab_free(&S->common->shm, d);
+  }
+}
+
+static void received_proxied_message_handle(shuso_t *S, const uint8_t code, void *ptr) {
+  shuso_ipc_manager_proxy_msg_t *d = ptr;
+  S->common->ipc_handlers[d->code].receive(S, d->code, d->pd);
+}
 
 static bool command_open_listener_sockets_from_manager(shuso_t *S, shuso_hostinfo_t *hostinfo, int count, shuso_sockopts_t *sockopts, shuso_ipc_open_sockets_fn callback, void *pd);
 static bool command_open_listener_sockets_from_worker(shuso_t *S, shuso_hostinfo_t *hostinfo, int count, shuso_sockopts_t *sockopts, shuso_ipc_open_sockets_fn callback, void *pd);
