@@ -24,7 +24,9 @@
 
 static void ipc_send_retry_cb(shuso_loop *loop, shuso_ev_timer *w, int revents);
 static void ipc_receive_cb(shuso_loop *loop, shuso_ev_io *w, int revents);
+#ifdef SHUTTLESOCK_DEBUG_IPC_RECEIVE_CHECK_TIMER
 static void ipc_receive_check_cb(shuso_loop *loop, shuso_ev_timer *w, int revents);
+#endif
 static void ipc_socket_transfer_receive_cb(shuso_loop *loop, shuso_ev_io *w, int revents);
 
 bool shuso_ipc_channel_shared_create(shuso_t *S, shuso_process_t *proc) {
@@ -99,8 +101,9 @@ bool shuso_ipc_channel_shared_destroy(shuso_t *S, shuso_process_t *proc) {
 bool shuso_ipc_channel_local_init(shuso_t *S) {
   shuso_process_t  *proc = S->process;
   shuso_ev_timer_init(S, &S->ipc.send_retry, 0.0, S->common->config.ipc.send_retry_delay, ipc_send_retry_cb, S->process);
-  
+#ifdef SHUTTLESOCK_DEBUG_IPC_RECEIVE_CHECK_TIMER
   shuso_ev_timer_init(S, &S->ipc.receive_check, 1.0, 1.0, ipc_receive_check_cb, S->process);
+#endif
   
   S->ipc.fd_receiver.count = 0;
   S->ipc.fd_receiver.array = NULL;
@@ -118,12 +121,17 @@ bool shuso_ipc_channel_local_init(shuso_t *S) {
 bool shuso_ipc_channel_local_start(shuso_t *S) {
   shuso_ev_io_start(S, &S->ipc.receive);
   shuso_ev_io_start(S, &S->ipc.socket_transfer_receive);
+#ifdef SHUTTLESOCK_DEBUG_IPC_RECEIVE_CHECK_TIMER
+  shuso_ev_timer_start(S, &S->ipc.receive_check);
+#endif
   return true;
 }
 bool shuso_ipc_channel_local_stop(shuso_t *S) {
   shuso_ev_io_stop(S, &S->ipc.receive);
   shuso_ev_io_stop(S, &S->ipc.socket_transfer_receive);
-  
+#ifdef SHUTTLESOCK_DEBUG_IPC_RECEIVE_CHECK_TIMER
+  shuso_ev_timer_stop(S, &S->ipc.receive_check);
+#endif
   shuso_ipc_handler_t *handler = S->common->ipc_handlers;
   for(shuso_ipc_outbuf_t *cur = S->ipc.buf.first, *next; cur != NULL; cur = next) {
     next = cur->next;
@@ -376,6 +384,17 @@ static void ipc_receive(shuso_t *S, shuso_process_t *proc) {
   }
 }
 
+#ifdef SHUTTLESOCK_DEBUG_IPC_RECEIVE_CHECK_TIMER
+static void ipc_receive_check_cb(shuso_loop *loop, shuso_ev_timer *w, int revents) {
+  shuso_t                   *S = shuso_state(loop, w);
+  shuso_ipc_ringbuf_t  *in = S->process->ipc.buf;
+  //shuso_log_debug(S, "CHECKPLZ %p full: %d next_read: %d next_write_release: %d", (void *)S->process, (int)in->full, (int )in->index.next_read, (int )in->index.next_write_release);
+  if(in->index.next_read < in->index.next_write_release) {
+    shuso_log_warning(S, "periodic check revealed %d unread IPC messages", (int )(in->index.next_write_release - in->index.next_read));
+    ipc_receive(S, S->process);
+  }
+}
+#endif
 
 static void ipc_receive_timeout_cb(shuso_loop *loop, shuso_ev_timer *w, int revents) {
   shuso_t                   *S = shuso_state(loop, w);

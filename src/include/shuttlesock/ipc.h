@@ -29,6 +29,11 @@
 #define SHUTTLESOCK_IPC_CODE_AUTOMATIC_MIN 20
 #define SHUTTLESOCK_IPC_CODE_AUTOMATIC_MAX UINT8_MAX
 
+
+// adds a 1-second IPC check for unread left-behind messages.
+// only useful for debugging IPC internals
+//#define SHUTTLESOCK_DEBUG_IPC_RECEIVE_CHECK_TIMER
+
 typedef struct {
   struct {
     _Atomic int64_t    next_read;
@@ -86,7 +91,9 @@ typedef struct {
 
 typedef struct {
   shuso_ev_timer        send_retry;
+#ifdef SHUTTLESOCK_DEBUG_IPC_RECEIVE_CHECK_TIMER
   shuso_ev_timer        receive_check;
+#endif
   struct {
     shuso_ipc_outbuf_t   *first;
     shuso_ipc_outbuf_t   *last;
