@@ -16,12 +16,13 @@ function(test_typeof_keyword typeof_keyword_var)
       __typeof__(*foo) bar;
       return 0;
     }
-  " "${typeof_keyword_var}")
+  " have_typeof_keyword)
   cmake_reset_check_state()
-  
-  if(${typeof_keyword_var})
+  if(have_typeof_keyword)
     message(STATUS "Check if __typeof__() exist - yes")
   else()
     message(STATUS "Check if __typeof__() exist - no")
   endif()
+  set(${typeof_keyword_var} ${have_typeof_keyword} PARENT_SCOPE)
+  unset(have_typeof_keyword CACHE)
 endfunction()

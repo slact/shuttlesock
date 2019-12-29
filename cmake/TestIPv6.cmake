@@ -2,10 +2,6 @@ include(CheckCSourceRuns)
 include(CMakePushCheckState)
 
 function(test_ipv6 result_var)
-  if(DEFINED ${result_var})
-    #I'd rather use DEFINED CACHE{$var}, but that only got added in 3.14
-    return()
-  endif()
   message(STATUS "Check if system supports IPv6")
   cmake_push_check_state(RESET)
   set(CMAKE_REQUIRED_QUIET 1)
@@ -19,12 +15,14 @@ function(test_ipv6 result_var)
       struct in6_addr *sa = NULL;
       return 0;
     }
-  " "${result_var}")
+  " have_ipv6)
   cmake_reset_check_state()
   
-  if(${result_var})
+  if(have_ipv6)
     message(STATUS "Check if system supports IPv6 - yes")
   else()
     message(STATUS "Check if system supports IPv6 - no")
   endif()
+  set(${result_var} ${have_ipv6} PARENT_SCOPE)
+  unset(have_ipv6 CACHE)
 endfunction()

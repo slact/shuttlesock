@@ -2,10 +2,6 @@ include(CheckCSourceRuns)
 include(CMakePushCheckState)
 
 function(test_strsignal result_var)
-  if(DEFINED ${result_var})
-    #I'd rather use DEFINED CACHE{$var}, but that only got added in 3.14
-    return()
-  endif()
   message(STATUS "Check if system has strsignal()")
   cmake_push_check_state(RESET)
   set(CMAKE_REQUIRED_QUIET 1)
@@ -23,12 +19,14 @@ function(test_strsignal result_var)
       const char *sigstr = strsignal(9);
       return sigstr != NULL;
     }
-  " "${result_var}")
+  " have_strsignal)
   cmake_reset_check_state()
   
-  if(${result_var})
+  if(have_strsignal)
     message(STATUS "Check if system has strsignal() - yes")
   else()
     message(STATUS "Check if system has strsignal() - no")
   endif()
+  set(${result_var} ${have_strsignal} PARENT_SCOPE)
+  unset(have_strsignal CACHE)
 endfunction()

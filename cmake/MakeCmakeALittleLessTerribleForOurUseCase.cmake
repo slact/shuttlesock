@@ -21,8 +21,14 @@ macro(add_linker_flags)
   set (GLOBAL_LINK_FLAGS "${GLOBAL_LINK_FLAGS} ${_FLAGS}")
 endmacro()
 
-function(get_linker_flags flags_var)
-  set(${flags_var} ${GLOBAL_LINK_FLAGS} PARENT_SCOPE)
+function(get_shared_ldlags flags_var)
+  string(TOUPPER ${CMAKE_BUILD_TYPE} MODE)
+  set(${flags_var} ${CMAKE_SHARED_LINKER_FLAGS_${MODE}} PARENT_SCOPE)
+endfunction()
+
+function(get_shared_cflags cflags_var)
+  string(TOUPPER ${CMAKE_BUILD_TYPE} MODE)
+  set(${cflags_var} ${CMAKE_C_FLAGS_${MODE}} PARENT_SCOPE)
 endfunction()
 
 function(add_build_mode mode cflags linker_flags)
@@ -54,11 +60,11 @@ endif()
 set(msan_blacklist ${CMAKE_CURRENT_SOURCE_DIR}/memory-sanitizer-blacklist.txt)
 
 add_build_mode(DebugMSan 
-  "-fsanitize=memory -fsanitize=undefined -fsanitize-memory-track-origins=2 -fsanitize-blacklist=${msan_blacklist}"
+  "-fno-omit-frame-pointer -fsanitize=memory -fsanitize=undefined -fsanitize-memory-track-origins=2 -fsanitize-blacklist=${msan_blacklist}"
   "-fsanitize=memory -fsanitize=undefined -fsanitize-blacklist=${msan_blacklist} -fsanitize-memory-track-origins=2 ${link_ubsan}"
 )
 add_build_mode(DebugASan 
-  "-fsanitize-address-use-after-scope -fsanitize=address -fsanitize=undefined ${leak_sanitizer} -fsanitize-blacklist=${msan_blacklist}"
+  "-fno-omit-frame-pointer -fsanitize-address-use-after-scope -fsanitize=address -fsanitize=undefined ${leak_sanitizer} -fsanitize-blacklist=${msan_blacklist}"
   "-fsanitize=address -fsanitize=undefined -fsanitize-blacklist=${msan_blacklist} ${link_ubsan}"
 )
 add_build_mode(DebugTSan
@@ -83,12 +89,18 @@ if(CMAKE_BUILD_TYPE MATCHES "^Debug")
     set(OPTIMIZE_LEVEL 0)
   endif()
   
-  add_compiler_flags(-Wall -Wextra -Wpedantic -Wno-unused-parameter -Wpointer-sign -Wpointer-arith -Wshadow -Wsign-compare -ggdb -O${OPTIMIZE_LEVEL} -fno-omit-frame-pointer)
+  add_compiler_flags(-Wall -Wextra -Wpedantic -Wno-unused-parameter -Wpointer-sign -Wpointer-arith -Wshadow -Wsign-compare -ggdb -O${OPTIMIZE_LEVEL} -fno-omit-frame-pointer -fstack-protector-strong)
   if ("${CMAKE_C_COMPILER_ID}" STREQUAL "GNU")
-    add_compiler_flags(-fdiagnostics-color=always -Wmaybe-uninitialized -fvar-tracking-assignments)
+    add_compiler_flags(-Wmaybe-uninitialized -fvar-tracking-assignments)
   elseif("${CMAKE_C_COMPILER_ID}" MATCHES "^(Apple)?Clang$")
     add_compiler_flags()
   endif()
+endif()
+
+if ("${CMAKE_C_COMPILER_ID}" STREQUAL "GNU")
+  add_compiler_flags(-fdiagnostics-color=always)
+elseif("${CMAKE_C_COMPILER_ID}" MATCHES "^(Apple)?Clang$")
+  add_compiler_flags(-fcolor-diagnostics)
 endif()
 
 
@@ -100,9 +112,14 @@ set( CMAKE_BUILD_TYPE "${CMAKE_BUILD_TYPE}" CACHE
 
 find_program(CCACHE_PROGRAM ccache)
 if(CCACHE_PROGRAM AND NOT DISABLE_CCACHE)
-  set(CMAKE_C_COMPILER_LAUNCHER  ${CCACHE_PROGRAM})
+  set(CMAKE_C_COMPILER_LAUNCHER ${CCACHE_PROGRAM})
   set(CMAKE_CXX_COMPILER_LAUNCHER ${CCACHE_PROGRAM})
+  set(SHUTTLESOCK_SHARED_CC "${CMAKE_C_COMPILER_LAUNCHER} ${CMAKE_C_COMPILER}" CACHE INTERNAL "common C compiler")
+else()
+  set(SHUTTLESOCK_SHARED_CC "${CMAKE_C_COMPILER_LAUNCHER} ${CMAKE_C_COMPILER}" CACHE INTERNAL "common C compiler")
 endif()
+
+
 
 if(NOT DEFINED C_COMPILER_WARNS_ON_OVERLENGTH_STRINGS)
   test_overlength_strings(C_COMPILER_WARNS_ON_OVERLENGTH_STRINGS)
@@ -111,3 +128,9 @@ endif()
 if(C_COMPILER_WARNS_ON_OVERLENGTH_STRINGS)
   add_compiler_flags(-Wno-overlength-strings)
 endif()
+
+
+get_shared_cflags(SHUTTLESOCK_SHARED_CFLAGS)
+get_shared_ldlags(SHUTTLESOCK_SHARED_LDFLAGS)
+set(SHUTTLESOCK_SHARED_CFLAGS ${SHUTTLESOCK_SHARED_CFLAGS} CACHE INTERNAL "common C flags")
+set(SHUTTLESOCK_SHARED_LDFLAGS ${SHUTTLESOCK_SHARED_LDFLAGS} CACHE INTERNAL "common ld flags")

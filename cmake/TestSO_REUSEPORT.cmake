@@ -2,10 +2,6 @@ include(CheckCSourceCompiles)
 include(CMakePushCheckState)
 
 function(test_SO_REUSEPORT reuseport_var)
-  if(DEFINED ${reuseport_var})
-    #I'd rather use DEFINED CACHE{$var}, but that only got added in 3.14
-    return()
-  endif()
   message(STATUS "Check if system supports SO_REUSEPORT")
   cmake_push_check_state(RESET)
   set(CMAKE_REQUIRED_QUIET 1)
@@ -18,12 +14,14 @@ function(test_SO_REUSEPORT reuseport_var)
     int main(void) {
       return 0;
     }
-  " "${reuseport_var}")
+  " have_so_reuseport)
   cmake_reset_check_state()
   
-  if(${reuseport_var})
+  if(have_so_reuseport)
     message(STATUS "Check if system supports SO_REUSEPORT - yes")
   else()
     message(STATUS "Check if system supports SO_REUSEPORT - no")
   endif()
+  set(${reuseport_var} ${have_so_reuseport} PARENT_SCOPE)
+  unset(have_so_reuseport CACHE)
 endfunction()

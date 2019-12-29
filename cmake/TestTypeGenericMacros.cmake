@@ -2,10 +2,6 @@ include(CheckCSourceRuns)
 include(CMakePushCheckState)
 
 function(test_type_generic_macros result_var)
-  if(DEFINED ${result_var})
-    #I'd rather use DEFINED CACHE{$var}, but that only got added in 3.14
-    return()
-  endif()
   message(STATUS "Check if compiler supports _Generic macros from C11")
   cmake_push_check_state(RESET)
   set(CMAKE_REQUIRED_QUIET 1)
@@ -34,9 +30,10 @@ function(test_type_generic_macros result_var)
       if(foo(charx) != 3) return 1;
       return 0;
     }
-  " "${result_var}")
+  " type_generic_macros)
   cmake_reset_check_state()
-  
+  set(${result_var} ${type_generic_macros} PARENT_SCOPE)
+  unset(${type_generic_macros} CACHE)
   if(${result_var})
     message(STATUS "Check if compiler supports _Generic macros from C11 - yes")
   else()

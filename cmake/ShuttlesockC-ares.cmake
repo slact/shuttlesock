@@ -1,0 +1,50 @@
+include(CheckCSourceRuns)
+include(CMakePushCheckState)
+
+function(test_c_ares_version_min c_ares_version_check_result_var ver_major ver_minor ver_patch)
+  set(c_ares_var "C_ARES_VERSION_MIN_${ver_major}_${ver_minor}_${ver_patch}")
+  if(DEFINED ${c_ares_var})
+    #I'd rather use DEFINED CACHE{$var}, but that only got added in 3.14
+    set(${c_ares_version_check_result_var} ${${c_ares_var}} PARENT_SCOPE)
+    return()
+  endif()
+  message(STATUS "Check if c-ares version >= ${ver_major}.${ver_minor}.${ver_patch}")
+  cmake_push_check_state(RESET)
+  set(CMAKE_REQUIRED_QUIET 1)
+  check_c_source_runs("
+    #include <ares_version.h>
+    int main(void) {
+      return !(ARES_VERSION_MAJOR >= ${ver_major} && ARES_VERSION_MINOR >= ${ver_minor} && ARES_VERSION_PATCH >= ${ver_patch});
+    }
+  " "${c_ares_var}")
+  cmake_reset_check_state()
+  if("${${c_ares_var}}")
+    message(STATUS "Check if c-ares version >= ${ver_major}.${ver_minor}.${ver_patch} - yes")
+    set(${c_ares_version_check_result_var} "YES" PARENT_SCOPE)
+  else()
+    message(STATUS "Check if c-ares version >= ${ver_major}.${ver_minor}.${ver_patch} - no")
+    set(${c_ares_version_check_result_var} "NO" PARENT_SCOPE)
+  endif()
+endfunction()
+
+function(shuttlesock_link_c_ares STATIC_BUILD)
+  #version 1.13.0 is where ares_set_socket_functions got added, which we need
+  if(NOT STATIC_BUILD)
+    target_require_package(shuttlesock PUBLIC cares HEADER_NAME ares.h OPTIONAL C_ARES_FOUND)
+    if(C_ARES_FOUND)
+      test_c_ares_version_min(C_ARES_VERSION_OK 1 13 0)
+    endif()
+  endif()
+  if(C_ARES_FOUND AND C_ARES_VERSION_OK)
+    target_require_package(shuttlesock PUBLIC cares ares.h)
+    target_link_libraries(shuttlesock PUBLIC cares)
+  else()
+    set(CARES_STATIC ON CACHE INTERNAL "build c-ares as static lib" FORCE)
+    set(CARES_SHARED OFF CACHE INTERNAL "build c-ares as shared lib" FORCE)
+    set(CMAKE_POSITION_INDEPENDENT_CODE ON CACHE INTERNAL "-fPIC" FORCE)
+    message(STATUS "Build bundled version of c-ares")
+    add_subdirectory(lib/c-ares EXCLUDE_FROM_ALL)
+    target_include_directories(shuttlesock PUBLIC lib/c-ares)
+    target_link_libraries(shuttlesock PUBLIC c-ares)
+  endif()
+endfunction()
