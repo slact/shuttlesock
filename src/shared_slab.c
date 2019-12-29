@@ -857,7 +857,6 @@ ngx_slab_error(shuso_slab_pool_t *pool, ngx_uint_t level, char *text)
 
 
 bool shuso_shared_slab_create(shuso_t *S, shuso_shared_slab_t *slab, size_t sz, const char *name) {
-  int                 rc;
   shuso_slab_pool_t  *sp;
   if(sz == 0) {
     sz = SHUTTLESOCK_SHARED_SLAB_DEFAULT_SIZE;
@@ -877,14 +876,29 @@ bool shuso_shared_slab_create(shuso_t *S, shuso_shared_slab_t *slab, size_t sz, 
   
   slab->pool = sp;
   
-  if((rc = pthread_mutex_init(&sp->mutex, NULL)) != 0) {
-    munmap(slab->ptr, sz);
-    return shuso_set_error(S, "failed to create mutex for shared memory slab");
+  bool have_mutexattr = false;
+  pthread_mutexattr_t attr;
+  if(pthread_mutexattr_init(&attr) != 0) {
+    goto fail;
   }
-  
+  have_mutexattr = true;
+  if(pthread_mutexattr_setpshared(&attr, PTHREAD_PROCESS_SHARED) != 0) {
+    goto fail;
+  }
+  if(pthread_mutex_init(&sp->mutex, &attr) != 0) {
+    goto fail;
+  }
+  pthread_mutexattr_destroy(&attr);
   ngx_slab_init(sp);
   
   return true;
+  
+fail:
+  if(have_mutexattr) {
+    pthread_mutexattr_destroy(&attr);
+  }
+  munmap(slab->ptr, sz);
+  return shuso_set_error(S, "failed to create mutex for shared memory slab");
 }
 
 bool shuso_shared_slab_destroy(struct shuso_s *S, shuso_shared_slab_t *shm) {
