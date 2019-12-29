@@ -382,7 +382,7 @@ rebuild = Opts.new do
   
   gcc :debug_flag,
     display_as: "gcc gcc5 gcc6 ...",
-    match: (/^gcc-?(\d?)/),
+    match: (/^gcc-?(\d?)$/),
     run: (Proc.new do |opt, arg|
       num = opt.matches[1]
       if num && num.length > 0
