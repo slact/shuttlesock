@@ -36,8 +36,8 @@ testmod:subscribe("core:worker.workers_started", function(self)
     assert(sender == -1)
     assert(data[1]=="this message was for worker")
     assert(data[2]==Process.procnum())
-    self.atomic.received_reply:increment(1)
-    if self.atomic.received_reply:value() == Process.count_workers() then
+    self.atomic:increment("received_reply", 1)
+    if self.atomic.received_reply == Process.count_workers() then
       Shuso.stop()
     end
   end)()

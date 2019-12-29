@@ -39,7 +39,7 @@ local atomics_mt = {
     if not atomic then
       return nil
     end
-    return atomic
+    return atomic:value()
   end,
   __newindex = function(t, k, v)
     local atomic = atomics_tables[t][k]
