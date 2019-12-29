@@ -1076,6 +1076,7 @@ static bool gxcopy_thread(lua_gxcopy_state_t *gxs) {
 static bool gxcopy_any(lua_gxcopy_state_t *gxs) {
   lua_State *Ls = gxs->src.state, *Ld = gxs->dst.state;
   luaL_checkstack(Ld, 1, NULL);
+  int dst_top = lua_gettop(Ld);
   int type = lua_type(Ls, -1);
   switch(type) {
     case LUA_TNIL:
@@ -1093,7 +1094,7 @@ static bool gxcopy_any(lua_gxcopy_state_t *gxs) {
       lua_pushboolean(Ld, lua_toboolean(Ls, -1));
       break;
     case LUA_TSTRING: {
-      size_t sz;
+      size_t sz = 0;
       const char *str = lua_tolstring(Ls, -1, &sz);
       lua_pushlstring(Ld, str, sz);
     } break;
@@ -1121,6 +1122,7 @@ static bool gxcopy_any(lua_gxcopy_state_t *gxs) {
       lua_pushlightuserdata(Ld, (void *)lua_topointer(Ls, -1));
       break;
   }
+  assert(dst_top + 1 == lua_gettop(Ld));
   return true;
 }
 
@@ -1259,10 +1261,12 @@ bool luaS_gxcopy_module_state(lua_State *Ls, lua_State *Ld, const char *module_n
     return shuso_set_error(shuso_state(Ls), "gxcopy_module_state error: Lua module '%s' has no __gxcopy_load_module_state metatable field in destination Lua state", module_name);
   }
   
+  lua_remove(Ld, -2);
+  lua_remove(Ld, -2);
+  
   //__gxcopy_save_module_state() -> table
   if(!luaS_function_pcall_result_ok(Ls, 0, true)) {
     return shuso_set_error(shuso_state(Ls), "gxcopy_module_state error: %s", module_name, shuso_last_error(shuso_state(Ls)));
-    return false;
   }
   
   luaS_gxcopy(Ls, Ld);
