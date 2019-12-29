@@ -35,9 +35,10 @@ typedef struct {
   shuso_ipc_lua_field_t field;
   lua_reference_t       reftable;
   const char           *name;
-  int                   sender;
+  int                   origin_procnum;
   bool                  success;
   bool                  in_shared_memory;
+  bool                  automatic_gc;
 } shuso_ipc_lua_data_t;
 
 shuso_ipc_lua_data_t *luaS_lua_ipc_pack_data(lua_State *L, int index, const char *name, bool use_shared_memory);

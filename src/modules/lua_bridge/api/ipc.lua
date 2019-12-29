@@ -1,12 +1,26 @@
 local Core = require "shuttlesock.core"
-local Shuso = require "shuttlesock"
+--local Shuso = require "shuttlesock"
 local Process = require "shuttlesock.process"
-local IPC = {}
---local Log = require "shuttlesock.log"
+local Log = require "shuttlesock.log"
 
+local coroutine = require "shuttlesock.coroutine"
+local IPC = {}
+local debug = require "debug"
 
 IPC.code = 0
 IPC.reply_code = 0
+
+local all_waiting_handlers = {}
+IPC.waiting_handlers = all_waiting_handlers
+
+local function ipc_coroutine_yield(kind)
+  local coro = coroutine.running()
+  rawset(all_waiting_handlers, coro, kind or true)
+  local data, src = coroutine.yield()
+  rawset(all_waiting_handlers, coro, nil)
+  return data, src
+end
+
 
 --[[ receivers are not copied from manager to workers, and must be re-initialized
 at the start of each worker. this is to permit the use of coroutine-based
@@ -58,6 +72,21 @@ local function validate_process_direction(process, direction)
   return process, many
 end
 
+local function run_handler(for_what, name, handler, ...)
+  local ok, err
+  local handler_type = type(handler)
+  if handler_type == "function" then
+    ok, err = xpcall(handler, debug.traceback, ...)
+  else
+    assert(handler_type == "thread")
+    ok, err = coroutine.resume(handler, ...)
+  end
+  if not ok then
+    Log.error("Error while running Lua IPC message '%s' %s %s: %s", name, for_what, handler_type, err)
+    return false
+  end
+end
+
 local function ipc_broadcast(dst, name, data, handler, must_yield)
   local my_procnum = dst == "others" or dst == "other_workers" and Process.procnum()
   local min_procnum = dst == ("workers" or dst == "other_workers") and 0 or -math.huge
@@ -72,7 +101,8 @@ local function ipc_broadcast(dst, name, data, handler, must_yield)
   local packed_data = assert(Core.ipc_pack_message_data(data, name, need_shmem))
   
   local responses_pending, failed_count = #dstprocnums, 0
-  local ipc_send_acknowledged_handler_coro = coroutine.wrap(function(success)
+  local ipc_send_acknowledged_handler_coro
+  ipc_send_acknowledged_handler_coro = coroutine.create(function(success)
     while true do
       responses_pending = responses_pending - 1
       if not success then
@@ -81,26 +111,23 @@ local function ipc_broadcast(dst, name, data, handler, must_yield)
       if responses_pending == 0 then
         break
       end
-      success = coroutine.yield()
+      success = ipc_coroutine_yield("broadcast")
     end
-    
     assert(Core.ipc_gc_message_data(packed_data))
-    
-    if type(handler) == "function" then
-      return handler(failed_count == 0)
-    elseif type(handler) == "thread" then
-      return coroutine.resume(handler, failed_count == 0)
-    end
+    rawset(all_waiting_handlers, ipc_send_acknowledged_handler_coro, nil)
+    return run_handler("broadcast", name, handler, #dstprocnums)
   end)
+  rawset(all_waiting_handlers, ipc_send_acknowledged_handler_coro, "broadcast_handler")
   for _, procnum in ipairs(dstprocnums) do
     local ok = Core.ipc_send_message(procnum, nil, nil, packed_data, ipc_send_acknowledged_handler_coro)
     assert(ok)
   end
   
   if must_yield then
-    return coroutine.yield()
+    assert(handler == coroutine.running())
+    return ipc_coroutine_yield("broadcast")
   else
-    return true
+    return #dstprocnums
   end
 end
 
@@ -126,9 +153,9 @@ function IPC.send(destination, name, data, how_to_handle_acknowledgement)
   else
     local ok = Core.ipc_send_message(dst, name, data, nil, handler)
     if must_yield then
-      return coroutine.yield()
+      return ipc_coroutine_yield("send")
     else
-      return ok
+      return ok and 1
     end
   end
 end
@@ -157,9 +184,9 @@ function IPC.receive(name, src, receiver, timeout)
       assert(coroutine.isyieldable(), "can't receive IPC message from outisde a yieldable coroutine")
       receiver = coroutine.running()
     end
-    
+    assert(type(receiver) == "thread")
     receivers[name][receiver]=src
-    return coroutine.yield()
+    return ipc_coroutine_yield("receive")
   end
 end
 
@@ -187,7 +214,9 @@ receiver_mt = {
       
       assert(not self.suspended_coroutine, "IPC receiver already yielded a coroutine")
       self.suspended_coroutine = coroutine.running()
-      return coroutine.yield()
+      local data, src = ipc_coroutine_yield("buffered receiver")
+      self.suspended_coroutine = nil
+      return data, src
     end,
     
     start = function(self)
@@ -197,12 +226,12 @@ receiver_mt = {
         self.buffer[self.newest] = {data=data, src=src}
         local coro = self.suspended_coroutine
         if coro then
-          self.suspended_coroutine = nil
           local rcvd = self.buffer[self.oldest]
           self.buffer[self.oldest] = nil
           self.oldest = self.oldest+1
           assert(rcvd)
-          coroutine.resume(coro, rcvd.data, rcvd.src)
+          assert(type(coro) == "thread")
+          run_handler("buffered receiver", self.name, coro, rcvd.data, rcvd.src)
         end
       end
       IPC.receive(self.name, self.src, self.receiver_function)
@@ -213,6 +242,7 @@ receiver_mt = {
       assert(self.receiver_function, "IPC receiver not running")
       IPC.cancel_receive(self.name, self.src, self.receiver_function)
       self.receiver_function = nil
+      assert(self.suspended_coroutine == nil)
       return self
     end
   },
@@ -237,70 +267,24 @@ function IPC.cancel_receive(name, src_to_cancel, receiver_to_cancel)
     if (not src_to_cancel or src_to_cancel == "any" or src_to_cancel == src) and
        (not receiver_to_cancel or receiver == receiver_to_cancel) then
       num_canceled = num_canceled + 1
-      if type(receiver) == "thread" then
-        coroutine.resume(receiver, nil, "canceled")
-      else
-        Core.pcall(receiver, nil, "canceled")
-      end
+      run_handler("cancel-receive", name, receiver, nil, "canceled")
     end
   end
   return num_canceled
 end
 
 function IPC.receive_from_shuttlesock_core(name, src, data)
-  --print("received %s from %s data %s", name, tostring(src), tostring(data))
   local all_ok = true
-  local ok, err
+  local ok
   local receivers_for_name = receivers[name]
   for receiver, srcmatch in pairs(receivers_for_name) do
     if srcmatch == "any" or srcmatch == src then
-      if type(receiver) == "thread" then
-        receivers_for_name[receiver]=nil
-        ok, err = coroutine.resume(receiver, data, src)
-        if not ok then
-          Shuso.set_error(debug.traceback(receiver, ("error receiving IPC message %s from %s: %s"):format(name or "(?)", tostring(src) or "(?)", err)))
-          all_ok = false
-        end
-      else
-        assert(type(receiver) == "function")
-        ok, err = Core.pcall(receiver, data, src)
-        if not ok then --it's already logged
-          all_ok = false
-        end
-      end
+      ok = run_handler("receive", name, receiver, data, src)
+      all_ok = all_ok and ok
     end
   end
   
   return all_ok
 end
-
-function IPC.set_ipc_codes(send, reply)
-  local registry = debug.getregistry()
-  
-  local regs = {
-    ["shuttlesock.lua_ipc.code"] = send,
-    ["shuttlesock.lua_ipc.response_code"] = reply
-  }
-  for key, val in pairs(regs) do
-    assert(registry[key] == nil, ("IPC code %s is already set to %s"):format(key, registry[key]))
-    registry[key] = val
-  end
-  return true
-end
-
-setmetatable(IPC, {
-  __gxcopy_save_module_state = function()
-    local registry = debug.getregistry()
-    return {
-      code = registry["shuttlesock.lua_ipc.code"],
-      reply_code = registry["shuttlesock.lua_ipc.response_code"]
-    }
-  end,
-  __gxcopy_load_module_state = function(data)
-    local registry = debug.getregistry()
-    registry["shuttlesock.lua_ipc.code"] = data.code
-    registry["shuttlesock.lua_ipc.response_code"] = data.reply_code
-  end
-})
 
 return IPC

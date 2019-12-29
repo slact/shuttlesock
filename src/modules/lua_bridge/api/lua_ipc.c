@@ -276,6 +276,10 @@ shuso_ipc_lua_data_t *luaS_lua_ipc_pack_data(lua_State *L, int index, const char
     lua_settop(L, top);
     return NULL;
   }
+
+  data->origin_procnum = S->procnum;
+  data->automatic_gc = false;
+  
   lua_settop(L, top);
   return data;
 }
@@ -290,6 +294,7 @@ static void lua_ipc_return_to_caller(shuso_t *S, lua_State *L, bool success) {
   }
   else if(lua_isthread(L, -1)) {
     lua_State *thread = lua_tothread(L, -1);
+    lua_pop(L, 1);
     int threadtop = lua_gettop(thread);
     lua_pushboolean(thread, success);
     if(!success) {
@@ -314,27 +319,29 @@ bool luaS_lua_ipc_unpack_data(lua_State *L, shuso_ipc_lua_data_t *d) {
   return ok;
 }
 
-static void lua_ipc_handler(shuso_t *S, const uint8_t code, void *ptr) {
-  shuso_ipc_lua_data_t  *d = ptr;
+static bool handle_lua_ipc_message(shuso_t *S, shuso_ipc_lua_data_t *d) {
   lua_State       *L = S->lua.state;
-  
-  lua_getfield(L, LUA_REGISTRYINDEX, "shuttlesock.lua_ipc.response_code");
-  int response_code = lua_tonumber(L, -1);
-  lua_pop(L, 1);
-  
-  d->success = true;
-  shuso_ipc_send(S, shuso_procnum_to_process(S, d->sender), response_code, d);
-  
+  luaL_checkstack(L, 4, NULL);
   luaS_push_lua_module_field(L, "shuttlesock.ipc", "receive_from_shuttlesock_core");
   lua_pushstring(L, d->name);
-  lua_pushnumber(L, d->sender);
+  lua_pushnumber(L, d->origin_procnum);
   luaS_lua_ipc_unpack_data(L, d);
   luaS_pcall(L, 3, 0);
+  return true;
+}
+
+static void lua_ipc_handler(shuso_t *S, const uint8_t code, void *ptr) {
+  shuso_ipc_lua_data_t  *d = ptr;
+  d->success = true;
+  shuso_process_t *sender = shuso_procnum_to_process(S, d->origin_procnum);
+  shuso_ipc_send(S, sender, SHUTTLESOCK_IPC_CMD_LUA_MESSAGE_RESPONSE, d);
+  handle_lua_ipc_message(S, d);
 }
 
 bool luaS_lua_ipc_gc_data(lua_State *L, shuso_ipc_lua_data_t *d) {
+  shuso_t *S = shuso_state(L);
+  assert(d->origin_procnum == S->procnum);
   if(d->in_shared_memory) {
-    shuso_t *S = shuso_state(L);
     luaL_checkstack(L, 4, NULL);
     lua_rawgeti(L, LUA_REGISTRYINDEX, d->reftable);
     lua_pushnil(L);
@@ -357,24 +364,40 @@ static void lua_ipc_cancel_handler(shuso_t *S, const uint8_t code, void *ptr) {
   lua_rawgeti(L, LUA_REGISTRYINDEX, d->reftable);
   lua_getfield(L, -1, "caller");
   lua_remove(L, -2);  //clean up the reftable
-  luaS_lua_ipc_gc_data(L, d);
+  if(d->automatic_gc) {
+    luaS_lua_ipc_gc_data(L, d);
+  }
   shuso_log_warning(S, "cancel!");
   lua_ipc_return_to_caller(S, L, false);
 }
 
+static bool handle_lua_ipc_response(shuso_t *S, shuso_ipc_lua_data_t *d) {
+  lua_State       *L = S->lua.state;
+  int top = lua_gettop(L);
+  assert(d->success);
+  assert(d->origin_procnum == S->procnum);
+  luaL_checkstack(L, 2, NULL);
+  lua_rawgeti(L, LUA_REGISTRYINDEX, d->reftable);
+  
+  lua_getfield(L, -1, "caller");
+  //pop the reftable from the stack
+  lua_remove(L, -2);
+  
+  lua_ipc_return_to_caller(S, L, true);
+  if(d->automatic_gc) {
+    luaS_lua_ipc_gc_data(L, d);
+    d = NULL; // don't use it anymore, it may be GCed anytime
+  }
+  if(top != lua_gettop(L)) {
+    luaS_printstack(L, "yeh");
+  }
+  assert(top == lua_gettop(L));
+  return true;
+}
+
 static void lua_ipc_response_handler(shuso_t *S, const uint8_t code, void *ptr) {
   shuso_ipc_lua_data_t  *d = ptr;
-  lua_State       *L = S->lua.state;
-  bool             success = d->success;
-  assert(success);
-  lua_rawgeti(L, LUA_REGISTRYINDEX, d->reftable);
-  lua_getfield(L, -1, "caller");
-  
-  //clean up the reftable
-  lua_remove(L, -2);
-  luaS_lua_ipc_gc_data(L, d);
-  d = NULL; // don't use it anymore, it may be GCed anytime
-  lua_ipc_return_to_caller(S, L, success);
+  handle_lua_ipc_response(S, d);
 }
 
 static void lua_ipc_response_cancel_handler(shuso_t *S, const uint8_t code, void *ptr) {
@@ -382,10 +405,19 @@ static void lua_ipc_response_cancel_handler(shuso_t *S, const uint8_t code, void
 }
 
 
+typedef struct {
+  shuso_ipc_lua_data_t *data;
+  int                   src;
+  int                   dst;
+  int                   code;
+} shuso_lua_ipc_proxy_msg_t;
+
 int luaS_ipc_send_message(lua_State *L) {
   //dst, msg_name, data, prepacked_data, handler
   int                    dst = luaL_checkinteger(L, 1);
   int                    top = lua_gettop(L);
+  bool                   data_packed_here = false;
+  bool                   processes_share_heap = true;
   shuso_t               *S = shuso_state(L);
   shuso_process_t       *dst_proc = shuso_procnum_to_process(S, dst);
   assert(top == 5);
@@ -397,20 +429,19 @@ int luaS_ipc_send_message(lua_State *L) {
   }
   else {
     const char *name = luaL_checkstring(L, 2);
-    data = luaS_lua_ipc_pack_data(L, 3, name, !shuso_processes_share_heap(S, S->procnum, dst));
-    data->sender = S->procnum;
+    processes_share_heap = shuso_processes_share_heap(S, S->procnum, dst);
+    data = luaS_lua_ipc_pack_data(L, 3, name, !processes_share_heap);
+    data->automatic_gc = true;
+    data_packed_here = true;
   }
   
   const char *err;
   if(!shuso_procnum_valid(S, dst, &err)) {
+    if(data_packed_here) {
+      luaS_lua_ipc_gc_data(L, data);
+    }
     return luaL_error(L, "%s", err);
   }
-  
-  lua_getfield(L, LUA_REGISTRYINDEX, "shuttlesock.lua_ipc.code");
-  
-  int ipc_code = lua_tointeger(L, -1);
-  assert(ipc_code > 0);
-  lua_pop(L, 1);
   
   if(lua_isfunction(L, 5) || lua_isthread(L, 5)) {
     lua_rawgeti(L, LUA_REGISTRYINDEX, data->reftable);
@@ -419,30 +450,97 @@ int luaS_ipc_send_message(lua_State *L) {
     lua_pop(L, 1);
   }
   
-  shuso_ipc_send(S, dst_proc, ipc_code, data);
   
-  lua_pushboolean(L, 1);
+  bool ok;
+  if((dst_proc->procnum == SHUTTLESOCK_MASTER && S->procnum >= SHUTTLESOCK_WORKER)
+   ||(dst_proc->procnum >= SHUTTLESOCK_WORKER && S->procnum == SHUTTLESOCK_MASTER)) {
+    assert(data->in_shared_memory);
+    
+    shuso_lua_ipc_proxy_msg_t *proxydata = shuso_shared_slab_calloc(&S->common->shm, sizeof(*proxydata));
+    if(!proxydata) {
+      if(data_packed_here) {
+        luaS_lua_ipc_gc_data(L, data);
+      }
+      lua_pushnil(L);
+      lua_pushliteral(L, "failed to allocate shared data to proxy IPC message");
+      return 2;
+    }
+    *proxydata = (shuso_lua_ipc_proxy_msg_t ){
+      .data = data,
+      .src = S->procnum,
+      .dst = dst,
+      .code = SHUTTLESOCK_IPC_CMD_LUA_MESSAGE
+    };
+    ok = shuso_ipc_send(S, &S->common->process.manager, SHUTTLESOCK_IPC_CMD_LUA_MANAGER_PROXY_MESSAGE, proxydata);
+    if(!ok) {
+      shuso_shared_slab_free(&S->common->shm, proxydata);
+      if(data_packed_here) {
+        luaS_lua_ipc_gc_data(L, data);
+      }
+    }
+  }
+  else {
+    ok = shuso_ipc_send(S, dst_proc, SHUTTLESOCK_IPC_CMD_LUA_MESSAGE, data);
+  }
+  if(ok) {
+    lua_pushinteger(L, 1);
+  }
+  else {
+    lua_pushboolean(L, false);
+  }
   return 1;
 }
 
+static void lua_ipc_manager_proxy_handler(shuso_t *S, const uint8_t code, void *ptr) {
+  assert(S->procnum == SHUTTLESOCK_MANAGER);
+  shuso_lua_ipc_proxy_msg_t *d = ptr;
+  shuso_process_t *dst_proc;
+  if(d->code == SHUTTLESOCK_IPC_CMD_LUA_MESSAGE) {
+    dst_proc = shuso_procnum_to_process(S, d->dst);
+  }
+  else {
+    assert(d->code == SHUTTLESOCK_IPC_CMD_LUA_MESSAGE_RESPONSE);
+    assert(d->data->success);
+    dst_proc = shuso_procnum_to_process(S, d->src);
+  }
+    
+  if(!shuso_ipc_send(S, dst_proc, SHUTTLESOCK_IPC_CMD_LUA_MANAGER_RECEIVE_PROXIED_MESSAGE, d)) {
+    shuso_log_error(S, "failed to proxy Lua IPC message");
+  }
+}
+
+static void lua_ipc_proxy_receive_handler(shuso_t *S, const uint8_t code, void *ptr) {
+  shuso_lua_ipc_proxy_msg_t *d = ptr;
+  shuso_ipc_lua_data_t      *data = d->data;
+  if(d->code == SHUTTLESOCK_IPC_CMD_LUA_MESSAGE) {
+    d->code = SHUTTLESOCK_IPC_CMD_LUA_MESSAGE_RESPONSE;
+    d->data->success = true;
+    shuso_ipc_send(S, &S->common->process.manager, SHUTTLESOCK_IPC_CMD_LUA_MANAGER_PROXY_MESSAGE, d);
+    handle_lua_ipc_message(S, data);
+  }
+  else {
+    assert(d->code == SHUTTLESOCK_IPC_CMD_LUA_MESSAGE_RESPONSE);
+    assert(d->data->success);
+    handle_lua_ipc_response(S, data);
+    shuso_shared_slab_free(&S->common->shm, d);
+  }
+}
+
 bool shuso_register_lua_ipc_handler(shuso_t *S) {
-  lua_State                 *L= S->lua.state;
-  const shuso_ipc_handler_t *handler;
-  
-  if((handler = shuso_ipc_add_handler(S, "lua_ipc", SHUTTLESOCK_IPC_CODE_AUTOMATIC, lua_ipc_handler, lua_ipc_cancel_handler)) == NULL) {
+  if(shuso_ipc_add_handler(S, "lua_ipc", SHUTTLESOCK_IPC_CMD_LUA_MESSAGE, lua_ipc_handler, lua_ipc_cancel_handler) == NULL) {
     return false;
   }
-  int send_code = handler->code;
   
-  if((handler = shuso_ipc_add_handler(S, "lua_ipc_response", SHUTTLESOCK_IPC_CODE_AUTOMATIC, lua_ipc_response_handler, lua_ipc_response_cancel_handler)) == NULL) {
+  if(shuso_ipc_add_handler(S, "lua_ipc_response", SHUTTLESOCK_IPC_CMD_LUA_MESSAGE_RESPONSE, lua_ipc_response_handler, lua_ipc_response_cancel_handler) == NULL) {
     return false;
-  }  
-  int send_response_code = handler->code;
+  }
   
-  luaS_push_lua_module_field(L, "shuttlesock.ipc", "set_ipc_codes");
-  lua_pushinteger(L, send_code);
-  lua_pushinteger(L, send_response_code);
-  luaS_pcall(L, 2, 0);
+  if(shuso_ipc_add_handler(S, "lua_ipc_proxy_by_manager", SHUTTLESOCK_IPC_CMD_LUA_MANAGER_PROXY_MESSAGE, lua_ipc_manager_proxy_handler, lua_ipc_cancel_handler) == NULL) {
+    return false;
+  }
+  if(shuso_ipc_add_handler(S, "lua_ipc_proxy_by_manager_receive", SHUTTLESOCK_IPC_CMD_LUA_MANAGER_RECEIVE_PROXIED_MESSAGE, lua_ipc_proxy_receive_handler, lua_ipc_cancel_handler) == NULL) {
+    return false;
+  }
   
   return true;
 }

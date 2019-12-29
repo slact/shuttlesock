@@ -68,4 +68,20 @@ function Process.count_workers()
   return Core.count_workers()
 end
 
+function Process.procnum_to_string(num)
+  if num == Process.PROCNUM_UNKNOWN_PROCESS then
+    return "unknown process"
+  elseif num == Process.PROCNUM_NOPROCESS then
+    return "no process"
+  elseif num == Process.PROCNUM_MASTER then
+    return "master"
+  elseif num == Process.PROCNUM_MANAGER then
+    return "manager"
+  elseif num >= Process.PROCNUM_WORKER then
+    return "worker #"..math.tointeger(num)
+  else
+    return "invalid process number "..num
+  end
+end
+
 return Process
