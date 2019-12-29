@@ -91,7 +91,13 @@ class Opts
     @arg_processed[arg.to_sym] = true
     found= nil
     @opts.each do |k, opt|
-      opt.matches= arg.match(opt.match || opt.name.to_s) || (opt.alt.member?(arg) && arg)
+      if opt.match then
+        opt.matches= arg.match(opt.match)
+      elsif opt.name.to_s == arg || (opt.alt.member?(arg) && arg)
+        opt.matches=[arg]
+      else
+        opt.matches=false
+      end
       if opt.matches then
         found = opt
         opt.run.call(opt, arg) if opt.run
@@ -104,6 +110,7 @@ class Opts
         (opt.imply || []).each do |implied_opt|
           process_arg implied_opt
         end
+        break
       end
     end
     @cmake_defines = Hash[@cmake_defines.sort_by {|k,v| k.to_s}]
