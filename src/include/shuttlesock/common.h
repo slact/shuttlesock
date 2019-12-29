@@ -106,8 +106,11 @@ typedef bool shuso_module_config_init_fn(shuso_t *S, shuso_module_t *, shuso_set
 
 typedef void shuso_module_event_fn(shuso_t *S, shuso_event_state_t *, intptr_t code, void *data, void *pd);
 
-/*
+
 #if defined(__has_feature)
+  #if __has_feature(memory_sanitizer)
+    #define SHUSO_MEMORY_SANITIZER_ENABLED
+  #endif
   #if __has_feature(memory_sanitizer)
     #define SHUSO_NO_SANITIZE_MEMORY __attribute__((no_sanitize("memory")))
   #else
@@ -119,11 +122,9 @@ typedef void shuso_module_event_fn(shuso_t *S, shuso_event_state_t *, intptr_t c
   #else
     #define SHUSO_NO_SANITIZE_ADDRESS
   #endif
-  
 #else
   #define SHUSO_NO_SANITIZE_MEMORY
   #define SHUSO_NO_SANITIZE_ADDRESS
 #endif
-*/
 
 #endif /*SHUTTLESOCK_COMMON_H*/
