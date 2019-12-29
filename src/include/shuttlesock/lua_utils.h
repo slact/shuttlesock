@@ -6,6 +6,8 @@
 #include <lauxlib.h>
 #include <lualib.h>
 
+#define SHUSO_LUA_DEBUG_ERRORS 1
+
 extern shuso_module_t shuso_lua_bridge_module;
 
 typedef struct shuso_lua_ev_watcher_s shuso_lua_ev_watcher_t;
@@ -50,6 +52,7 @@ bool luaS_call_noerror(lua_State *L, int nargs, int nrets);
 
 bool luaS_pcall(lua_State *L, int nargs, int nresults);
 int luaS_resume(lua_State *thread, lua_State *from, int nargs);
+int luaS_coroutine_resume(lua_State *L, lua_State *coro, int nargs); //auto-xmoving lua_resume
 int luaS_call_or_resume(lua_State *L, int nargs);
 bool luaS_function_call_result_ok(lua_State *L, int nargs, bool preserve_result);
 bool luaS_function_pcall_result_ok(lua_State *L, int nargs, bool preserve_result);

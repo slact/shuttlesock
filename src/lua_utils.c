@@ -7,7 +7,7 @@
 #include <glob.h>
 
 #if defined(SHUTTLESOCK_DEBUG_SANITIZE) || defined(SHUTTLESOCK_DEBUG_VALGRIND) || defined(__clang_analyzer__)
-#define INIT_LUA_ALLOCS 1
+//#define INIT_LUA_ALLOCS 1 //don't need this since we started building Lua statically when sanitizing
 #endif
 
 static int luaS_libloader(lua_State *L) {
@@ -569,23 +569,73 @@ bool shuso_lua_destroy(shuso_t *S) {
 int luaS_resume(lua_State *thread, lua_State *from, int nargs) {
   int          rc;
   const char  *errmsg;
-  shuso_t     *S;
+  //shuso_log_debug(shuso_state(thread), "resume coroutine %p from %p (main %p)", (void *)thread, (void *)from, (void *)S->lua.state);
   rc = lua_resume(thread, from, nargs);
+  //shuso_log_debug(shuso_state(thread), "done with coroutine %p from %p (main %p)", (void *)thread, (void *)from, (void *)S->lua.state);
   switch(rc) {
     case LUA_OK:
     case LUA_YIELD:
       break;
     default:
-      S = shuso_state(thread);
       luaL_checkstack(thread, 1, NULL);
       errmsg = lua_tostring(thread, -1);
       luaL_traceback(thread, thread, errmsg, 1);
-      shuso_log_error(S, "lua coroutine error: %s", lua_tostring(thread, -1));
-      lua_pop(thread, 1);
       break;
   }
   return rc;
 }
+
+static int auxresume(lua_State *L, lua_State *co, int narg) {
+  int status;
+  if (!lua_checkstack(co, narg)) {
+    lua_pushliteral(L, "too many arguments to resume");
+    return -1;  /* error flag */
+  }
+  if (lua_status(co) == LUA_OK && lua_gettop(co) == 0) {
+    lua_pushliteral(L, "cannot resume dead coroutine");
+    return -1;  /* error flag */
+  }
+  assert(co != L);
+  lua_xmove(L, co, narg);
+#ifdef SHUSO_LUA_DEBUG_ERRORS
+    status = lua_resume(co, NULL, narg);
+#else
+    status = lua_resume(co, NULL, narg);
+#endif
+  if (status == LUA_OK || status == LUA_YIELD) {
+    int nres = lua_gettop(co);
+    //shuso_log_debug(shuso_state(L), "stacksize: %d, checkstack: %d", lua_gettop(L), nres+1);
+    if (!lua_checkstack(L, nres + 1)) {
+      lua_pop(co, nres);  /* remove results anyway */
+      lua_pushliteral(L, "too many results to resume");
+      return -1;  /* error flag */
+    }
+    lua_xmove(co, L, nres);  /* move yielded values */
+    return nres;
+  }
+  else {
+    lua_xmove(co, L, 1);  /* move error message */
+    return -1;  /* error flag */
+  }
+}
+
+int luaS_coroutine_resume(lua_State *L, lua_State *coro, int nargs) { //like coroutine.resume, but handles errors and lua_xmoves between threads
+  //shuso_log_debug(shuso_state(L), "luaS_coroutine_resume coroutine %p from %p", (void *)coro, (void *)L);
+  assert(lua_gettop(L) >= nargs);
+  int r = auxresume(L, coro, nargs);
+  //shuso_log_debug(shuso_state(L), "finished luaS_coroutine_resume coroutine %p from %p", (void *)coro, (void *)L);
+  if (r < 0) {
+    lua_pushboolean(L, 0);
+    lua_insert(L, -2);
+    return 2;  /* return false + error message */
+  }
+  else {
+    lua_pushboolean(L, 1);
+    lua_insert(L, -(r + 1));
+    return r + 1;  /* return true + 'resume' returns */
+  }
+}
+
 
 int luaS_call_or_resume(lua_State *L, int nargs) {
   int         state_or_func_index = -1 - nargs;
@@ -593,13 +643,21 @@ int luaS_call_or_resume(lua_State *L, int nargs) {
   lua_State  *coro;
   switch(type) {
     case LUA_TFUNCTION:
+#ifdef SHUSO_LUA_DEBUG_ERRORS
+      luaS_call(L, nargs, 0);
+#else
       lua_call(L, nargs, 0);
+#endif
       return 0;
     case LUA_TTHREAD:
       coro = lua_tothread(L, state_or_func_index);
       luaL_checkstack(coro, nargs, NULL);
       lua_xmove(L, coro, nargs);
+#ifdef SHUSO_LUA_DEBUG_ERRORS
+      luaS_resume(coro, L, nargs);
+#else
       lua_resume(coro, L, nargs);
+#endif
       return 0;
     default:
       return luaL_error(L, "attempted to call-or-resume something that's not a function or coroutine");
@@ -918,6 +976,9 @@ static bool gxcopy_function(lua_gxcopy_state_t *gxs, bool copy_upvalues) {
   }
   
   lua_Debug dbg;
+#ifdef SHUSO_MEMORY_SANITIZER_ENABLED
+  memset(&dbg, 0, sizeof(dbg));
+#endif
   lua_pushvalue(Ls, -1);
   lua_getinfo(Ls, ">Snlu", &dbg);
   if(!dbg.name) dbg.name = "";
@@ -939,7 +1000,7 @@ static bool gxcopy_function(lua_gxcopy_state_t *gxs, bool copy_upvalues) {
   }
   
   luaS_function_dump(Ls);
-  size_t sz;
+  size_t sz = 0;
   const char *buf = lua_tolstring(Ls, -1, &sz);
   
   
