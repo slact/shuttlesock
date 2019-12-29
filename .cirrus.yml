@@ -12,7 +12,7 @@ linux_task:
     - luarocks install luacheck
   test_basic_script:
     - ./rebuild.sh
-    - ./test.sh
+    - ./test.sh --color verbose
   codecov_script:
     - ./rebuild.sh gcc-coverage luacov no-display-coverage
     - bash <(curl -s https://codecov.io/bash)

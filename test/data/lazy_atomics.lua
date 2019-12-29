@@ -29,6 +29,7 @@ testmod:subscribe("core:worker.stop", function(self)
 end)
 
 testmod:subscribe("core:master.stop", function(self)
+                  
   assert(self.shared.workers_started==self.shared.workers_count, "workers_started = "..self.shared.workers_started.." workers_count = " .. self.shared.workers_count)
   assert(self.shared.workers_stopped==self.shared.workers_count)
   assert(self.shared.foo==Shuso.pointer())
