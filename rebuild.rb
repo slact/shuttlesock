@@ -350,14 +350,6 @@ rebuild = Opts.new do
   clang :debug_flag,
     export: { CC:"clang"},
     set: {compiler: "clang"}
-
-  sanitize :debug_flag, alt: ["clang-sanitize", "sanitize-memory"],
-    build: "DebugMSan",
-    imply: [:clang]
-  
-  sanitize_threads :debug_flag, alt: ["sanitize-thread"],
-    build: "DebugTSan",
-    imply: [:clang]
   
   no_ccache :debug_flag,
     cmake_define: {DISABLE_CCACHE: true}
@@ -369,14 +361,14 @@ rebuild = Opts.new do
     set: {clean: true}
   
   libev_static :debug_flag,
-    cmake_define: {LIBEV_STATIC: 1}
+    cmake_define: {LIBEV_BUILD_STATIC: 1}
   
   c_ares_static :debug_flag,
     cmake_define: {C_ARES_BUILD_STATIC: 1}
   
   gcc :debug_flag,
     display_as: "gcc gcc5 gcc6 ...",
-    match: (/gcc-?(\d?)/),
+    match: (/^gcc-?(\d?)/),
     run: (Proc.new do |opt, arg|
       num = opt.matches[1]
       if num && num.length > 0
@@ -391,7 +383,7 @@ rebuild = Opts.new do
   O :debug_flag, 
     display_as: "O0 O1 O2 O3",
     info: "compiler optimization flag",
-    match: /O([0123sg])/,
+    match: /^O([0123sg])/,
     run: (Proc.new do |opt, arg|
       opt.cmake_define= {OPTIMIZE_LEVEL: opt.matches[1]}
     end)
@@ -410,8 +402,12 @@ rebuild = Opts.new do
     alt: ['clang-sanitize', 'sanitize-memory'],
     info: 'build with the clang memory sanitizer',
     build: 'DebugMSan',
-    imply: [:clang],
+    imply: [:clang, :lua_static, :c_ares_static, :libev_static],
     cmake_define: {SHUTTLESOCK_DEBUG_SANITIZE: true}
+  
+  sanitize_threads :debug_flag, alt: ["sanitize-thread"],
+    build: "DebugTSan",
+    imply: [:clang]
   
   sanitize_address :debug_flag,
     info: 'build with the clang address sanitizer',
@@ -442,6 +438,17 @@ rebuild = Opts.new do
   
   self.test :debug_flag,
     set: {run_test: true}
+  
+  test_selector :debug_flag, 
+    display_as: "test_selector=<selector>",
+    info: "if running tests, run ones that match this selector",
+    match: /^test-selector=(.+)/,
+    run: (Proc.new do |opt, arg|
+      opt.set= {test_selector: opt.matches[1]}
+    end)
+  
+  test_verbose :debug_flag,
+    set: {verbose_test: true}
   
   no_luac :debug_flag,
     cmake_define: {SHUTTLESOCK_NO_LUAC: true}
@@ -484,7 +491,11 @@ rebuild = Opts.new do
     end)
   
   lua_apicheck :debug_flag,
-    cmake_define: {LUA_BUILD_STATIC_APICHECK: true}
+    imply: [:lua_static],
+    cmake_define: {LUA_BUILD_STATIC_EXTRAFLAGS: "-DLUA_USE_APICHECK"}
+  
+  lua_static :debug_flag,
+    cmake_define: {LUA_BUILD_STATIC: true}
   
   help :flag,
     set: {help: true}
