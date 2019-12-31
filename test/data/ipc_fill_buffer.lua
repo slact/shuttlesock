@@ -43,6 +43,7 @@ testmod:subscribe("core:manager.workers_started", function(self)
     end
     assert(received == MESSAGES_NUM)
     self.spin:unlock()
+    self.spin:destroy()
     Shuso.stop()
   end)()
 end)
