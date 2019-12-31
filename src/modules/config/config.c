@@ -301,6 +301,7 @@ bool shuso_config_system_generate(shuso_t *S) {
     lua_getfield(L, -1, "name");
     setting->name = lua_tostring(L, -1);
     lua_pop(L, 1);
+    shuso_log_debug(S, "Setting named %s", setting->name);
     
     lua_getfield(L, -1, "raw_name");
     setting->raw_name = lua_tostring(L, -1);
@@ -487,58 +488,67 @@ shuso_setting_t *shuso_setting(shuso_t *S, const shuso_setting_block_t *block, c
   return setting;
 }
 
-const shuso_setting_value_t *shuso_setting_check_value(shuso_t *S, const shuso_setting_block_t *block, const char *name, int nval) {
-  const shuso_setting_t   *setting = shuso_setting(S, block, name);
-  if(!setting) {
-    shuso_set_error(S, "setting %s not found", name);
-    return NULL;
-  };
-  if(!setting->values.merged) {
-    shuso_set_error(S, "setting %s value not available", name);
-    return NULL;
-  }
-  if(setting->values.merged->count <= nval) {
-    shuso_set_error(S, "setting %s has %d but needed value #%s", name, (int )setting->values.merged->count, (int )nval);
+static const shuso_setting_value_t *shuso_setting_value(shuso_t *S, const shuso_setting_t *setting, int nval) {
+  if(!setting || !setting->values.merged || setting->values.merged->count <= nval) {
     return NULL;
   }
   return &setting->values.merged->array[nval];
 }
-
-bool shuso_setting_check_boolean(shuso_t *S, const shuso_setting_block_t *block,  const char *name, int n, bool *ret) {
-  const shuso_setting_value_t *val = shuso_setting_check_value(S, block, name, n);
-  if(!val) return false;
-  if(!val->valid.boolean) {
-    return shuso_set_error(S, "setting %s value #%d is not a boolean", name, n);
+bool shuso_setting_boolean(shuso_t *S, const shuso_setting_t *setting, int n, bool *ret) {
+  const shuso_setting_value_t *val = shuso_setting_value(S, setting, n);
+  if(!val || !val->valid.boolean) {
+    return false;
   }
   if(ret) *ret = val->boolean;
   return true;
 }
-bool shuso_setting_check_integer(shuso_t *S, const shuso_setting_block_t *block,  const char *name, int n, int *ret) {
-  const shuso_setting_value_t *val = shuso_setting_check_value(S, block, name, n);
-  if(!val) return false;
-  if(!val->valid.integer) {
-    return shuso_set_error(S, "setting %s value #%d is not an integer", name, n);
+bool shuso_setting_integer(shuso_t *S, const shuso_setting_t *setting, int n, int *ret) {
+  const shuso_setting_value_t *val = shuso_setting_value(S, setting, n);
+  if(!val || !val->valid.integer) {
+    return false;
   }
   if(ret) *ret = val->integer;
   return true;
 }
-bool shuso_setting_check_number(shuso_t *S, const shuso_setting_block_t *block,  const char *name, int n, double *ret) {
-  const shuso_setting_value_t *val = shuso_setting_check_value(S, block, name, n);
-  if(!val) return false;
-  if(!val->valid.number) {
-    return shuso_set_error(S, "setting %s value #%d is not a number", name, n);
+bool shuso_setting_number(shuso_t *S, const shuso_setting_t *setting, int n, double *ret) {
+  const shuso_setting_value_t *val = shuso_setting_value(S, setting, n);
+  if(!val || !val->valid.number) {
+    return false;
   }
   if(ret) *ret = val->number;
   return true;
 }
-bool shuso_setting_check_string(shuso_t *S, const shuso_setting_block_t *block,  const char *name, int n, const char **ret) {
-  const shuso_setting_value_t *val = shuso_setting_check_value(S, block, name, n);
-  if(!val) return false;
-  if(!val->valid.string) {
-    return shuso_set_error(S, "setting %s value #%d is not a string", name, n);
+bool shuso_setting_string(shuso_t *S, const shuso_setting_t *setting, int n, const char **ret) {
+  const shuso_setting_value_t *val = shuso_setting_value(S, setting, n);
+  if(!val || !val->valid.string) {
+    return false;
   }
   if(ret) *ret = val->string;
   return true;
+}
+
+bool shuso_setting_string_matches(shuso_t *S, const shuso_setting_t *setting, int n, const char *lua_matchstring) {
+  const char *val = NULL;
+  if(!shuso_setting_string(S, setting, n, &val)) {
+    return false;
+  }
+  assert(lua_matchstring);
+  lua_State *L = S->lua.state;
+  int top = lua_gettop(L);
+  lua_checkstack(L, 3);
+  luaS_push_lua_module_field(L, "string", "match");
+  lua_pushstring(L, val);
+  lua_pushstring(L, lua_matchstring);
+  if(!luaS_pcall(L, 2, 1)) {
+    return false;
+  }
+  bool matched = lua_toboolean(L, -1);
+  lua_pop(L, 1);
+  assert(lua_gettop(L) == top);
+  if(!matched) {
+    //TODO: nice, informative error
+  }
+  return matched;
 }
 
 
@@ -591,10 +601,10 @@ static bool shuso_config_match_thing_path(shuso_t *S, const void *thing, const c
   lua_State *L = S->lua.state;
   luaS_get_config_pointer_ref(L, thing);
   assert(!lua_isnil(L, -1));
-  luaS_push_lua_module_field(L, "shuttlesock.config", "match_path");
+  luaS_push_lua_module_field(L, "shuttlesock.core.config", "match_path");
   lua_insert(L, -2);
   lua_pushstring(L, path);
-  lua_call(L, 2, 1);
+  luaS_call(L, 2, 1);
   bool matched = lua_toboolean(L, -1);
   lua_pop(L, 1);
   return matched;

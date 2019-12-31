@@ -62,11 +62,12 @@ struct shuso_setting_s {
 
 //For module developers
 shuso_setting_t *shuso_setting(shuso_t *S, const shuso_setting_block_t *block, const char *name);
-const shuso_setting_value_t *shuso_setting_check_value(shuso_t *S, const shuso_setting_block_t *block, const char *name, int nval);
-bool shuso_setting_check_boolean(shuso_t *S, const shuso_setting_block_t *block,  const char *name, int n, bool *ret);
-bool shuso_setting_check_integer(shuso_t *S, const shuso_setting_block_t *block,  const char *name, int n, int *ret);
-bool shuso_setting_check_number(shuso_t *S, const shuso_setting_block_t *block,  const char *name, int n, double *ret);
-bool shuso_setting_check_string(shuso_t *S, const shuso_setting_block_t *block,  const char *name, int n, const char **ret);
+
+bool shuso_setting_boolean(shuso_t *S, const shuso_setting_t *setting, int n, bool *ret);
+bool shuso_setting_integer(shuso_t *S, const shuso_setting_t *setting, int n, int *ret);
+bool shuso_setting_number(shuso_t *S, const shuso_setting_t *setting, int n, double *ret);
+bool shuso_setting_string(shuso_t *S, const shuso_setting_t *setting, int n, const char **ret);
+bool shuso_setting_string_matches(shuso_t *S, const shuso_setting_t *setting, int n, const char *lua_matchstring);
 
 
 bool shuso_config_match_setting_path(shuso_t *S, const shuso_setting_t *setting, const char *path);
@@ -74,16 +75,16 @@ bool shuso_config_match_block_path(shuso_t *S, const shuso_setting_block_t *bloc
 #define shuso_config_match_path(S, thing, path) \
   _Generic((thing), \
     shuso_setting_t *       : shuso_config_match_setting_path, \
-    shuso_setting_block_t * : shuso_config_match_block_path, \
+    shuso_setting_block_t * : shuso_config_match_block_path \
   )(S, thing, path)
 
 
 bool shuso_config_setting_error(shuso_t *S, shuso_setting_t *s, const char *fmt, ...);
 bool shuso_config_block_error(shuso_t *S, shuso_setting_block_t *b, const char *fmt, ...);
 #define shuso_config_error(S, thing, ...) \
-  _Generic((src), \
+  _Generic((thing), \
     shuso_setting_t *       : shuso_config_setting_error, \
-    shuso_setting_block_t * : shuso_config_block_error, \
+    shuso_setting_block_t * : shuso_config_block_error \
   )(S, thing, __VA_ARGS__)
 
 #endif //SHUTTLESOCK_CONFIG_MODULE_H
