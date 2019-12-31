@@ -65,6 +65,36 @@ static bool core_module_initialize(shuso_t *S, shuso_module_t *self) {
   return true;
 }
 
+static bool core_module_initialize_config(shuso_t *S, shuso_module_t *module, shuso_setting_block_t *block) {
+  if(!shuso_config_match_path(S, block, "/")) {
+    return true;
+  }
+  shuso_setting_t *workers = shuso_setting(S, block, "workers");
+  int              nworkers;
+  if(!workers) {
+    return true;
+  }
+  if(shuso_setting_string(S, workers, 1, NULL)) {
+    if(!shuso_setting_string_matches(S, workers, 1, "^auto$")) {
+      return shuso_config_error(S, workers, "invalid value");
+    }
+    S->common->config.workers = 0;
+  }
+  else if(shuso_setting_integer(S, workers, 1, &nworkers)) {
+    if(nworkers < 0) {
+      return shuso_config_error(S, workers, "invalid value");
+    }
+    else if(nworkers > SHUTTLESOCK_MAX_WORKERS) {
+      return shuso_config_error(S, workers, "value cannot exceed %d", SHUTTLESOCK_MAX_WORKERS);
+    }
+    S->common->config.workers = nworkers;
+  }
+  else {
+    return shuso_config_error(S, workers, "invalid value");
+  }
+  return true;
+}
+
 shuso_module_t shuso_core_module = {
   .name = "core",
   .version = SHUTTLESOCK_VERSION_STRING,
@@ -90,9 +120,21 @@ shuso_module_t shuso_core_module = {
    
    " error"
   ,
+  .settings = (shuso_module_setting_t []) {
+    {
+      .name = "workers",
+      .aliases = "worker_processes",
+      .path = "/",
+      .description = "number of workers Shuttlesock spawns. The optimal value depends things like the number of CPU cores.",
+      .default_value = "auto",
+      .nargs = "1"
+    },
+    {0}
+  },
   .subscribe = 
    " core:worker.start.before.lua_gxcopy"
   ,
-  .initialize = core_module_initialize
+  .initialize = core_module_initialize,
+  .initialize_config = core_module_initialize_config
 };
 
