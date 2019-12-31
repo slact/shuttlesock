@@ -257,6 +257,10 @@ bool shuso_config_system_generate(shuso_t *S) {
   lua_pushlightuserdata(L, root_block);
   lua_setfield(L, -2, "ptr");
   
+  lua_pushvalue(L, -1);
+  luaS_pcall_config_method(L, "get_path", 1, true);
+  lua_pop(L, 1);
+  
   luaS_config_pointer_ref(L, root_block); //also pops the block table
   
   shuso_setting_t *root_setting = shuso_stalloc(&S->stalloc, sizeof(*root_setting));
@@ -278,6 +282,11 @@ bool shuso_config_system_generate(shuso_t *S) {
   
   lua_pushlightuserdata(L, root_setting);
   lua_setfield(L, -2, "ptr");
+  
+  lua_pushvalue(L, -1);
+  luaS_pcall_config_method(L, "get_path", 1, true);
+  root_setting->path = lua_tostring(L, -1);
+  lua_pop(L, 1);
   
   root_block->setting = root_setting;
   luaS_config_pointer_ref(L, root_setting); //pops the root setting table too
