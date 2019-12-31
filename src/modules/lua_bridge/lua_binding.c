@@ -9,6 +9,7 @@
 #include <errno.h>
 #include "api/lua_ipc.h"
 #include <shuttlesock/modules/config/private.h>
+#include <pthread.h>
 
 typedef enum {
   LUA_EV_WATCHER_IO =       0,
@@ -2289,6 +2290,59 @@ static int Lua_shuso_ipc_gc_message_data(lua_State *L) {
 }
 
 
+static int Lua_shuso_pthread_spinlock_create(lua_State *L) {
+  shuso_t *S = shuso_state(L);
+  pthread_spinlock_t *spinlock = shuso_shared_slab_alloc(&S->common->shm, sizeof(*spinlock));
+  if(!spinlock) {
+    lua_pushnil(L);
+    lua_pushliteral(L, "failed to allocate shared memory for spinlock");
+    return 2;
+  }
+  if(pthread_spin_init(spinlock, PTHREAD_PROCESS_SHARED) != 0) {
+    shuso_shared_slab_free(&S->common->shm, (void *)spinlock);
+    lua_pushnil(L);
+    lua_pushliteral(L, "failed to initialize spinlock");
+    return 2;
+  }
+  lua_pushlightuserdata(L, (void *)spinlock);
+  return 1;
+}
+
+static int Lua_shuso_pthread_spinlock_lock(lua_State *L) {
+  pthread_spinlock_t *lock = (void *)lua_topointer(L, 1);
+  int ret = pthread_spin_lock(lock);
+  if(ret == EDEADLOCK) {
+    lua_pushnil(L);
+    lua_pushliteral(L, "deadlock");
+    return 2;
+  }
+  lua_pushboolean(L, 1);
+  return 1;
+}
+
+static int Lua_shuso_pthread_spinlock_trylock(lua_State *L) {
+  pthread_spinlock_t *lock = (void *)lua_topointer(L, 1);
+  int ret = pthread_spin_trylock(lock);
+  lua_pushboolean(L, ret != EBUSY);
+  return 1;
+}
+
+static int Lua_shuso_pthread_spinlock_unlock(lua_State *L) {
+  pthread_spinlock_t *lock = (void *)lua_topointer(L, 1);
+  pthread_spin_unlock(lock);
+  lua_pushboolean(L, 1);
+  return 1;
+}
+
+static int Lua_shuso_pthread_spinlock_destroy(lua_State *L) {
+  shuso_t *S = shuso_state(L);
+  pthread_spinlock_t *lock = (void *)lua_topointer(L, 1);
+  pthread_spin_destroy(lock);
+  shuso_shared_slab_free(&S->common->shm, (void *)lock);
+  lua_pushboolean(L, 1);
+  return 1;
+}
+
 luaL_Reg shuttlesock_core_module_methods[] = {
 // creation, destruction
   {"create", Lua_shuso_create},
@@ -2379,6 +2433,19 @@ luaL_Reg shuttlesock_core_module_methods[] = {
 //for debugging
   {"raise_signal", Lua_shuso_raise_signal},
   {"raise_SIGABRT", Lua_shuso_raise_sigabrt},
+/*
+  {"pthread_mutex_create", Lua_shuso_pthread_mutex_create},
+  {"pthread_mutex_lock", Lua_shuso_pthread_mutex_lock},
+  {"pthread_mutex_trylock", Lua_shuso_pthread_mutex_trylock},
+  {"pthread_mutex_unlock", Lua_shuso_pthread_mutex_unlock},
+  {"pthread_mutex_destroy", Lua_shuso_pthread_mutex_destroy},
+*/
+  {"pthread_spinlock_create", Lua_shuso_pthread_spinlock_create},
+  {"pthread_spinlock_lock", Lua_shuso_pthread_spinlock_lock},
+  {"pthread_spinlock_trylock", Lua_shuso_pthread_spinlock_trylock},
+  {"pthread_spinlock_unlock", Lua_shuso_pthread_spinlock_unlock},
+  {"pthread_spinlock_destroy", Lua_shuso_pthread_spinlock_destroy},
+  
   
   {NULL, NULL}
 };

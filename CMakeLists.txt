@@ -133,16 +133,17 @@ add_core_module("lua_bridge"
     PRIVATE api/lua_ipc.h
   LUA_MODULES
     #API for Lua modules
-    "shuttlesock"              api/shuttlesock.lua
-    "shuttlesock.log"          api/log.lua
-    "shuttlesock.module"       api/module.lua
-    "shuttlesock.atomics"      api/atomics.lua
-    "shuttlesock.watcher"      api/watcher.lua
-    "shuttlesock.process"      api/process.lua
-    "shuttlesock.config"       api/config.lua
-    "shuttlesock.coroutine"    api/coroutine.lua
-    "shuttlesock.ipc"          api/ipc.lua
-    "shuttlesock.utils"        api/utils.lua
+    "shuttlesock"                 api/shuttlesock.lua
+    "shuttlesock.log"             api/log.lua
+    "shuttlesock.module"          api/module.lua
+    "shuttlesock.atomics"         api/atomics.lua
+    "shuttlesock.watcher"         api/watcher.lua
+    "shuttlesock.process"         api/process.lua
+    "shuttlesock.config"          api/config.lua
+    "shuttlesock.coroutine"       api/coroutine.lua
+    "shuttlesock.ipc"             api/ipc.lua
+    "shuttlesock.utils"           api/utils.lua
+    "shuttlesock.debug.spinlock"  api/debug/spinlock.lua
   LUA_SOURCES
     #utils used inside "shuttlesock.core" lua_binding
     "lua_binding" lua_binding.lua

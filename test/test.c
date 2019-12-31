@@ -734,6 +734,12 @@ describe(lua_api) {
       assert_shuso_ran_ok(S);
     }
     
+    test("buffer fill") {
+      assert_luaL_dofile(S->lua.state, "ipc_fill_buffer.lua");
+      assert_shuso(S, shuso_configure_finish(S));
+      shuso_run(S);
+      assert_shuso_ran_ok(S);
+    }
     
     test("broadcasting") {
       lua_pushstring(S->lua.state, "all");
