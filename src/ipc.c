@@ -176,13 +176,20 @@ bool shuso_ipc_channel_shared_stop(shuso_t *S, shuso_process_t *proc) {
 }
 
 static bool ipc_reserve_write_index(shuso_t *S, shuso_ipc_ringbuf_t *dstbuf, int64_t *index) {
-  assert(!dstbuf->full);
+  if(dstbuf->full) {
+    return false;
+  }
   bool      falseval = false;
   int64_t   next = dstbuf->index.next_write_reserve++; //atomic because next_write_reserve is atomic. Thanks, C11.
+  
   int64_t   next_read = dstbuf->index.next_read;
-  if(next - next_read > 255) {
+  if(dstbuf->full) {
+    //don't decrement next_write_reserve, the reader resets it when it clears the 'full' flag
+    return false;
+  }
+  else if(next - next_read > 255) {
     atomic_compare_exchange_strong(&dstbuf->full, &falseval, true);
-    dstbuf->index.next_write_reserve--; // also atomic
+    //don't decrement next_write_reserve, the reader resets it when it clears the 'full' flag
     return false;
   }
   
@@ -379,8 +386,9 @@ static void ipc_receive(shuso_t *S, shuso_process_t *proc) {
     }
   }
   if(in->full) {
-    bool truey = true;
-    atomic_compare_exchange_strong(&in->full, &truey, false);
+    in->index.next_write_reserve = in->index.next_read;
+    assert(in->index.next_write_reserve == in->index.next_write_release);
+    in->full = false;
   }
 }
 
