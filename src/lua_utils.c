@@ -507,11 +507,27 @@ static int luaS_require_embedded_script(lua_State *L) {
 
 bool shuso_lua_initialize(shuso_t *S) {
   lua_State *L = S->lua.state;
+  
+#ifdef SHUTTLESOCK_LUA_PACKAGE_PATH
+  lua_getglobal(L, "package");
+  lua_pushstring(L, SHUTTLESOCK_LUA_PACKAGE_PATH);
+  lua_setfield(L, -2, "path");
+  lua_pop(L, 1);
+#endif
+#ifdef SHUTTLESOCK_LUA_PACKAGE_CPATH
+  lua_getglobal(L, "package");
+  lua_pushstring(L, SHUTTLESOCK_LUA_PACKAGE_CPATH);
+  lua_setfield(L, -2, "cpath");
+  lua_pop(L, 1);
+#endif
+  
   luaS_set_shuttlesock_state_pointer(L, S);
   
   luaL_checkstack(L, 1, NULL);
   lua_pushstring(L, SHUTTLESOCK_VERSION_STRING);
   lua_setglobal(L, "_SHUTTLESOCK_VERSION");
+  
+  
   
 #ifdef SHUTTLESOCK_DEBUG_LUACOV
   luaL_checkstack(L, 6, NULL);
