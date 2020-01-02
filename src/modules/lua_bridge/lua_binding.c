@@ -7,9 +7,9 @@
 #include <arpa/inet.h>
 #include <ares.h>
 #include <errno.h>
+#include <pthread.h>
 #include "api/lua_ipc.h"
 #include <shuttlesock/modules/config/private.h>
-#include <pthread.h>
 
 typedef enum {
   LUA_EV_WATCHER_IO =       0,
@@ -2290,54 +2290,146 @@ static int Lua_shuso_ipc_gc_message_data(lua_State *L) {
 }
 
 
-static int Lua_shuso_pthread_spinlock_create(lua_State *L) {
+static int pthread_mutex_lua_return(lua_State *L, int rc) {
+  if(rc == 0) {
+    lua_pushboolean(L, 1);
+    return 1;
+  }
+  
+  lua_pushnil(L);
+  const char *err = "unknown error";
+  if(rc == EINVAL) {
+    err = "the calling thread's priority is higher than the mutex's current priority ceiling";
+  }
+  else if(rc == EBUSY) {
+    err = "already locked";
+  }
+  else if(rc == EAGAIN) {
+    err = "the maximum number of recursive locks for mutex has been exceeded";
+  }
+  else if(rc == EDEADLK) {
+    err = "the current thread already owns the mutex";
+  }
+  else if(rc == EPERM) {
+    err = "the current thread does not own the mutex";
+  }
+  lua_pushstring(L, err);
+  return 2;
+}
+
+static int Lua_shuso_mutex_create(lua_State *L) {
+  shuso_t             *S = shuso_state(L);
+  bool                 have_mutexattr = false;
+  pthread_mutexattr_t  attr;
+  pthread_mutex_t     *mutex = shuso_shared_slab_alloc(&S->common->shm, sizeof(*mutex));
+  if(!mutex) {
+    goto fail;
+  }
+  if(pthread_mutexattr_init(&attr) != 0) {
+    goto fail;
+  }
+  have_mutexattr = true;
+  
+  if(pthread_mutexattr_setpshared(&attr, PTHREAD_PROCESS_SHARED) != 0) {
+    goto fail;
+  }
+  if(pthread_mutex_init(mutex, &attr) != 0) {
+    goto fail;
+  }
+  pthread_mutexattr_destroy(&attr);
+  
+  lua_pushlightuserdata(L, (void *)mutex);
+  return 1;
+  
+fail:
+  if(have_mutexattr) {
+    pthread_mutexattr_destroy(&attr);
+  }
+  if(mutex) {
+    shuso_shared_slab_free(&S->common->shm, (void *)mutex);
+  }
+  
+  lua_pushnil(L);
+  lua_pushliteral(L, "failed to create mutex");
+  return 2;
+}
+
+static int Lua_shuso_mutex_lock(lua_State *L) {
+  pthread_mutex_t     *mutex = (void *)lua_topointer(L, 1);
+  int rc = pthread_mutex_lock(mutex);
+  return pthread_mutex_lua_return(L, rc);
+}
+
+static int Lua_shuso_mutex_trylock(lua_State *L) {
+  pthread_mutex_t     *mutex = (void *)lua_topointer(L, 1);
+  int rc = pthread_mutex_trylock(mutex);
+  return pthread_mutex_lua_return(L, rc);
+}
+
+static int Lua_shuso_mutex_unlock(lua_State *L) {
+  pthread_mutex_t     *mutex = (void *)lua_topointer(L, 1);
+  int rc = pthread_mutex_unlock(mutex);
+  return pthread_mutex_lua_return(L, rc);
+}
+
+static int Lua_shuso_mutex_destroy(lua_State *L) {
+  pthread_mutex_t     *mutex = (void *)lua_topointer(L, 1);
+  shuso_t             *S = shuso_state(L);
+  int rc = pthread_mutex_destroy(mutex);
+  if(rc != 0) {
+    lua_pushnil(L);
+    lua_pushstring(L, "failed to destroy mutex");
+    return 2;
+  }
+  
+  shuso_shared_slab_free(&S->common->shm, (void *)mutex);
+  lua_pushboolean(L, 1);
+  return 1;
+}
+
+
+static int Lua_shuso_spinlock_create(lua_State *L) {
   shuso_t *S = shuso_state(L);
-  pthread_spinlock_t *spinlock = shuso_shared_slab_alloc(&S->common->shm, sizeof(*spinlock));
+  atomic_flag *spinlock = shuso_shared_slab_alloc(&S->common->shm, sizeof(*spinlock));
+  
   if(!spinlock) {
     lua_pushnil(L);
     lua_pushliteral(L, "failed to allocate shared memory for spinlock");
     return 2;
   }
-  if(pthread_spin_init(spinlock, PTHREAD_PROCESS_SHARED) != 0) {
-    shuso_shared_slab_free(&S->common->shm, (void *)spinlock);
-    lua_pushnil(L);
-    lua_pushliteral(L, "failed to initialize spinlock");
-    return 2;
-  }
+  atomic_flag_clear(spinlock);
+  
   lua_pushlightuserdata(L, (void *)spinlock);
   return 1;
 }
 
-static int Lua_shuso_pthread_spinlock_lock(lua_State *L) {
-  pthread_spinlock_t *lock = (void *)lua_topointer(L, 1);
-  int ret = pthread_spin_lock(lock);
-  if(ret == EDEADLOCK) {
-    lua_pushnil(L);
-    lua_pushliteral(L, "deadlock");
-    return 2;
+static int Lua_shuso_spinlock_lock(lua_State *L) {
+  atomic_flag *lock = (void *)lua_topointer(L, 1);
+  volatile int ctr = 0;
+  while(atomic_flag_test_and_set(lock)) {
+    ctr++;
   }
   lua_pushboolean(L, 1);
   return 1;
 }
 
-static int Lua_shuso_pthread_spinlock_trylock(lua_State *L) {
-  pthread_spinlock_t *lock = (void *)lua_topointer(L, 1);
-  int ret = pthread_spin_trylock(lock);
-  lua_pushboolean(L, ret != EBUSY);
+static int Lua_shuso_spinlock_trylock(lua_State *L) {
+  atomic_flag *lock = (void *)lua_topointer(L, 1);
+  bool already_locked = atomic_flag_test_and_set(lock);
+  lua_pushboolean(L, !already_locked);
   return 1;
 }
 
-static int Lua_shuso_pthread_spinlock_unlock(lua_State *L) {
-  pthread_spinlock_t *lock = (void *)lua_topointer(L, 1);
-  pthread_spin_unlock(lock);
+static int Lua_shuso_spinlock_unlock(lua_State *L) {
+  atomic_flag *lock = (void *)lua_topointer(L, 1);
+  atomic_flag_clear(lock);
   lua_pushboolean(L, 1);
   return 1;
 }
 
-static int Lua_shuso_pthread_spinlock_destroy(lua_State *L) {
+static int Lua_shuso_spinlock_destroy(lua_State *L) {
   shuso_t *S = shuso_state(L);
-  pthread_spinlock_t *lock = (void *)lua_topointer(L, 1);
-  pthread_spin_destroy(lock);
+  atomic_flag *lock = (void *)lua_topointer(L, 1);
   shuso_shared_slab_free(&S->common->shm, (void *)lock);
   lua_pushboolean(L, 1);
   return 1;
@@ -2433,18 +2525,18 @@ luaL_Reg shuttlesock_core_module_methods[] = {
 //for debugging
   {"raise_signal", Lua_shuso_raise_signal},
   {"raise_SIGABRT", Lua_shuso_raise_sigabrt},
-/*
-  {"pthread_mutex_create", Lua_shuso_pthread_mutex_create},
-  {"pthread_mutex_lock", Lua_shuso_pthread_mutex_lock},
-  {"pthread_mutex_trylock", Lua_shuso_pthread_mutex_trylock},
-  {"pthread_mutex_unlock", Lua_shuso_pthread_mutex_unlock},
-  {"pthread_mutex_destroy", Lua_shuso_pthread_mutex_destroy},
-*/
-  {"pthread_spinlock_create", Lua_shuso_pthread_spinlock_create},
-  {"pthread_spinlock_lock", Lua_shuso_pthread_spinlock_lock},
-  {"pthread_spinlock_trylock", Lua_shuso_pthread_spinlock_trylock},
-  {"pthread_spinlock_unlock", Lua_shuso_pthread_spinlock_unlock},
-  {"pthread_spinlock_destroy", Lua_shuso_pthread_spinlock_destroy},
+
+  {"mutex_create", Lua_shuso_mutex_create},
+  {"mutex_lock", Lua_shuso_mutex_lock},
+  {"mutex_trylock", Lua_shuso_mutex_trylock},
+  {"mutex_unlock", Lua_shuso_mutex_unlock},
+  {"mutex_destroy", Lua_shuso_mutex_destroy},
+
+  {"spinlock_create", Lua_shuso_spinlock_create},
+  {"spinlock_lock", Lua_shuso_spinlock_lock},
+  {"spinlock_trylock", Lua_shuso_spinlock_trylock},
+  {"spinlock_unlock", Lua_shuso_spinlock_unlock},
+  {"spinlock_destroy", Lua_shuso_spinlock_destroy},
   
   
   {NULL, NULL}

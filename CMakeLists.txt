@@ -144,6 +144,7 @@ add_core_module("lua_bridge"
     "shuttlesock.ipc"             api/ipc.lua
     "shuttlesock.utils"           api/utils.lua
     "shuttlesock.debug.spinlock"  api/debug/spinlock.lua
+    "shuttlesock.debug.mutex"     api/debug/mutex.lua
   LUA_SOURCES
     #utils used inside "shuttlesock.core" lua_binding
     "lua_binding" lua_binding.lua
