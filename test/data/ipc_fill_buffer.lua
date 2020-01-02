@@ -2,7 +2,7 @@ local Module = require "shuttlesock.module"
 local IPC = require "shuttlesock.ipc"
 local Shuso = require "shuttlesock"
 local Log = require "shuttlesock.log"
-local Spinlock = require "shuttlesock.debug.spinlock"
+local Mutex = require "shuttlesock.debug.mutex"
 
 local MESSAGES_NUM = 1000
 
@@ -12,13 +12,13 @@ local testmod = Module.new {
 }
 
 function testmod:initialize()
-  self.spin = assert(Spinlock.new())
+  self.mutex = assert(Mutex.new())
 end
 
 testmod:subscribe("core:master.start", function(self)
-  Log.debug("spinlock...")
-  self.spin:lock()
-  Log.debug("spinlock acquired")
+  Log.debug("mutex lock...")
+  assert(self.mutex:trylock())
+  Log.debug("mutex lock acquired")
 end)
 
 testmod:subscribe("core:master.workers_started", function(self)
@@ -26,15 +26,15 @@ testmod:subscribe("core:master.workers_started", function(self)
     IPC.send("manager", "hello", i)
   end
   Log.debug("sent messages")
-  self.spin:unlock()
-  Log.debug("spin unlocked")
+  self.mutex:unlock()
+  Log.debug("mutex unlocked")
 end)
 
 testmod:subscribe("core:manager.workers_started", function(self)
   coroutine.wrap(function()
-  Log.debug("spinlock...")
-    self.spin:lock()
-    Log.debug("spinlock acquired")
+  Log.debug("mutex lock...")
+    self.mutex:lock()
+    Log.debug("mutex lock acquired")
     local received = 0
     local receiver = IPC.Receiver.start("hello")
     while receiver:yield() do
@@ -42,8 +42,8 @@ testmod:subscribe("core:manager.workers_started", function(self)
       if received == MESSAGES_NUM then break end
     end
     assert(received == MESSAGES_NUM)
-    self.spin:unlock()
-    self.spin:destroy()
+    self.mutex:unlock()
+    self.mutex:destroy()
     Shuso.stop()
   end)()
 end)
