@@ -381,12 +381,6 @@ rebuild = Opts.new do
   clean :debug_flag,
     set: {clean: true}
   
-  libev_static :debug_flag,
-    cmake_define: {LIBEV_BUILD_STATIC: 1}
-  
-  c_ares_static :debug_flag,
-    cmake_define: {C_ARES_BUILD_STATIC: 1}
-  
   gcc :debug_flag,
     display_as: "gcc gcc5 gcc6 ...",
     match: (/^gcc-?(\d?)$/),
@@ -418,9 +412,6 @@ rebuild = Opts.new do
   
   stalloc_track_space :debug_flag,
     cmake_define: {SHUTTLESOCK_STALLOC_TRACK_SPACE: true}
-  
-  libs_static :debug_flag,
-    imply: [:lua_static, :c_ares_static, :libev_static, :liburing_static, :openssl_static]
   
   sanitize :debug_flag,
     alt: ['clang-sanitize', 'sanitize-memory'],
@@ -519,6 +510,9 @@ rebuild = Opts.new do
     imply: [:lua_static],
     cmake_define: {LUA_BUILD_STATIC_EXTRAFLAGS: "-DLUA_USE_APICHECK"}
   
+  libs_static :debug_flag,
+    imply: [:lua_static, :openssl_static, :liburing_static, :libev_static, :c_ares_static]
+  
   lua_static :debug_flag,
     cmake_define: {LUA_BUILD_STATIC: true}
   
@@ -527,6 +521,12 @@ rebuild = Opts.new do
   
   liburing_static :debug_flag,
     cmake_define: {LIBURING_BUILD_STATIC: true}
+  
+  libev_static :debug_flag,
+    cmake_define: {LIBEV_BUILD_STATIC: 1}
+  
+  c_ares_static :debug_flag,
+    cmake_define: {C_ARES_BUILD_STATIC: 1}
   
   makefile :debug_flag,
     set: {generator: "Unix Makefiles"}
