@@ -419,11 +419,14 @@ rebuild = Opts.new do
   stalloc_track_space :debug_flag,
     cmake_define: {SHUTTLESOCK_STALLOC_TRACK_SPACE: true}
   
+  libs_static :debug_flag,
+    imply: [:lua_static, :c_ares_static, :libev_static, :liburing_static, :openssl_static]
+  
   sanitize :debug_flag,
     alt: ['clang-sanitize', 'sanitize-memory'],
     info: 'build with the clang memory sanitizer',
     build: 'DebugMSan',
-    imply: [:clang, :lua_static, :c_ares_static, :libev_static],
+    imply: [:clang, :libs_static],
     cmake_define: {SHUTTLESOCK_DEBUG_SANITIZE: true}
   
   sanitize_threads :debug_flag, alt: ["sanitize-thread"],
@@ -433,11 +436,12 @@ rebuild = Opts.new do
   sanitize_address :debug_flag,
     info: 'build with the clang address sanitizer',
     build: 'DebugASan',
-    imply: [:clang],
+    imply: [:clang, :libs_static],
     cmake_define: {SHUTTLESOCK_DEBUG_SANITIZE: true}
   
   verbose :flag, alt: [:v],
-    set: {verbose_build: true}
+    set: {verbose_build: true},
+    cmake_define: {CMAKE_VERBOSE_MAKEFILE: true}
   
   coverage :debug_flag,
     alt: ["clang_coverage"],
@@ -517,6 +521,12 @@ rebuild = Opts.new do
   
   lua_static :debug_flag,
     cmake_define: {LUA_BUILD_STATIC: true}
+  
+  openssl_static :debug_flag,
+    cmake_define: {OPENSSL_BUILD_STATIC: true}
+  
+  liburing_static :debug_flag,
+    cmake_define: {LIBURING_BUILD_STATIC: true}
   
   makefile :debug_flag,
     set: {generator: "Unix Makefiles"}
