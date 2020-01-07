@@ -1,2 +1,0 @@
-Compiling test case __kernel_rwf_t
-gcc -D_GNU_SOURCE -include config-host.h -o /tmp/fio-conf-28388-24320-28753.exe /tmp/fio-conf-26931-24320-5220.c

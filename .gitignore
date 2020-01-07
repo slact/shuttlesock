@@ -5,3 +5,4 @@ CMakeFiles/
 cachegrind.*
 callgrind-*
 coverage/
+.cmake_downloads/

@@ -1,7 +1,13 @@
+set(LUA_RELEASE_VERSION "5.3.5")
+set(LUA_RELEASE_MD5 4f4b4f323fd3514a68e0ab3da8ce3455)
+
+set(LUA_MIN_VERSION "5.3")
+
 function(shuttlesock_link_lua STATIC_BUILD LUA_EXTRA_CFLAGS)
   #lua (we want 5.3)
+  
   if(NOT STATIC_BUILD)
-    set(Lua_FIND_VERSION 5.3)
+    set(Lua_FIND_VERSION "${LUA_MIN_VERSION}")
     include(FindLua)
     if(LUA_INCLUDE_DIR)
       target_include_directories(shuttlesock PUBLIC ${LUA_INCLUDE_DIR})
@@ -28,7 +34,6 @@ function(shuttlesock_link_lua STATIC_BUILD LUA_EXTRA_CFLAGS)
     #we want to see if Lua is installed locally to copy its package.path and package.cpath
     find_program(LUA_BINARY NAMES lua53 lua5.3 lua)
     if(LUA_BINARY)
-      message("here's the lua binary")
       execute_process(
         COMMAND "${LUA_BINARY}" -v
         OUTPUT_VARIABLE lua_output
@@ -36,7 +41,6 @@ function(shuttlesock_link_lua STATIC_BUILD LUA_EXTRA_CFLAGS)
       message("version output: ${lua_output}")
       string(FIND "${lua_output}" "Lua 5.3" lua_version_match)
       if(NOT "${lua_version_match}" EQUAL "-1")
-        message("version matched")
         execute_process(
           COMMAND "${LUA_BINARY}" -e "io.stdout:write(package.path)"
           OUTPUT_VARIABLE lua_package_path
@@ -47,8 +51,6 @@ function(shuttlesock_link_lua STATIC_BUILD LUA_EXTRA_CFLAGS)
         )
         set(SHUTTLESOCK_LUA_PACKAGE_PATH "${lua_package_path}" CACHE INTERNAL "Lua package path")
         set(SHUTTLESOCK_LUA_PACKAGE_CPATH "${lua_package_cpath}" CACHE INTERNAL "Lua package cpath")
-        message("SHUTTLESOCK_LUA_PACKAGE_PATH ${SHUTTLESOCK_LUA_PACKAGE_PATH}")
-        message("SHUTTLESOCK_LUA_PACKAGE_CPATH ${SHUTTLESOCK_LUA_PACKAGE_CPATH}")
       endif()
     endif()
     
@@ -62,7 +64,10 @@ function(shuttlesock_link_lua STATIC_BUILD LUA_EXTRA_CFLAGS)
     endif()
     
     ExternalProject_Add(lua_static
-      URL "https://www.lua.org/ftp/lua-5.3.5.tar.gz"
+      URL "https://www.lua.org/ftp/lua-${LUA_RELEASE_VERSION}.tar.gz"
+      URL_MD5 "${LUA_RELEASE_MD5}"
+      DOWNLOAD_NO_PROGRESS 1
+      DOWNLOAD_DIR ${CMAKE_CURRENT_LIST_DIR}/.cmake_downloads
       CONFIGURE_COMMAND ""
       PREFIX ${CMAKE_CURRENT_BINARY_DIR}
       BUILD_COMMAND make "CC=${SHUTTLESOCK_SHARED_CC}" "MYCFLAGS=${SHUTTLESOCK_SHARED_CFLAGS} -O${OPTIMIZE_LEVEL} ${LUA_EXTRA_CFLAGS} -fPIC -g -DLUA_COMPAT_5_2 -DLUA_COMPAT_5_1" "MYLDFLAGS=${SHUTTLESOCK_SHARED_LDFLAGS}" ${LUA_MAKE_PARALLEL_FLAG} ${LUA_BUILD_TARGET}

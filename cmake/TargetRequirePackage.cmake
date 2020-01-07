@@ -1,13 +1,14 @@
+include(FindPackageHandleStandardArgs)
+include(GNUInstallDirs)
+
 function(target_require_package target scope name)
-  set(oneValueArgs HEADER_NAME OPTIONAL)
-  cmake_parse_arguments(REQUIRE_PACKAGE "" "${oneValueArgs}" "" "${ARGN}")
-  
-  include(GNUInstallDirs)
+  set(oneValueArgs HEADER_NAME OPTIONAL INCLUDE_PATH_VAR LINK_LIB_VAR)
+  cmake_parse_arguments(REQUIRE_PACKAGE "DRY_RUN" "${oneValueArgs}" "" "${ARGN}")
+    
   string(TOUPPER ${name} NAME)
   set(libname lib${name})
   string(TOUPPER ${libname} LIBNAME)
   string(TOUPPER ${scope} scope)
-  
   
   set(possible_scopes PUBLIC PRIVATE)
   if(NOT scope IN_LIST possible_scopes)
@@ -37,7 +38,6 @@ function(target_require_package target scope name)
     )
   endif()
   
-  include(FindPackageHandleStandardArgs)
   find_package_handle_standard_args(${libname} 
     FOUND_VAR
       "${LIBNAME}_FOUND"
@@ -46,8 +46,17 @@ function(target_require_package target scope name)
   )
   mark_as_advanced("${LIBNAME}_INCLUDE_DIR" "${LIBNAME}_LIBRARY" "${LIBNAME}_FOUND")
   if(${LIBNAME}_FOUND)
-    target_include_directories(${target} ${scope} "${${LIBNAME}_INCLUDE_DIR}")
-    target_link_libraries(${target} ${scope} "${${LIBNAME}_LIBRARY}")
+    if(NOT REQUIRE_PACKAGE_DRY_RUN)
+      target_include_directories(${target} ${scope} "${${LIBNAME}_INCLUDE_DIR}")
+      target_link_libraries(${target} ${scope} "${${LIBNAME}_LIBRARY}")
+    endif()
+    if(REQUIRE_PACKAGE_INCLUDE_PATH_VAR)
+      set(${REQUIRE_PACKAGE_INCLUDE_PATH_VAR} "${${LIBNAME}_INCLUDE_DIR}" PARENT_SCOPE)
+    endif()
+    if(REQUIRE_PACKAGE_LINK_LIB_VAR)
+      set(${REQUIRE_PACKAGE_LINK_LIB_VAR} "${${LIBNAME}_LIBRARY}" PARENT_SCOPE)
+    endif()
+    
   elseif(NOT REQUIRE_PACKAGE_OPTIONAL)
     message(SEND_ERROR "Failed to find library ${name}")
   endif()
