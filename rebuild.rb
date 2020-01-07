@@ -52,7 +52,6 @@ class Opts
     @vars={}
     @exports={}
     @build_type = "Debug"
-    @have_ninja = File.exists? "/usr/bin/ninja"
     OptsDSL.new(self).instance_eval &block
     @opts.each do |optname, opt|
       if opt.cmake_define
@@ -199,7 +198,15 @@ class Opts
       @cmake_opts << "../"
     end
     
-    @cmake_opts << "-GNinja" if @have_ninja
+    if @vars[:generator] == "Ninja" || !@vars[:generator]
+      if File.exists? "/usr/bin/ninja"
+        @cmake_opts << "-GNinja"
+        @ninja = true
+      elsif @vars[:generator] == "Ninja"
+        $stderr.puts  red "Ninja build system not found"
+        return false
+      end
+    end
     
     in_dir(shitty_cmake ? :build : :base) do
       if @vars[:clang_analyze]
@@ -237,7 +244,7 @@ class Opts
       end
     end
     
-    if !@direct_build && !@have_ninja && cmake_build_output.match("--parallel")
+    if !@direct_build && !@ninja && cmake_build_output.match("--parallel")
       begin
         require 'etc'
         nprocs = Etc.nprocessors
@@ -510,6 +517,12 @@ rebuild = Opts.new do
   
   lua_static :debug_flag,
     cmake_define: {LUA_BUILD_STATIC: true}
+  
+  makefile :debug_flag,
+    set: {generator: "Unix Makefiles"}
+  
+  ninja :debug_flag,
+    set: {generator: "Ninja"}
   
   help :flag,
     set: {help: true}
