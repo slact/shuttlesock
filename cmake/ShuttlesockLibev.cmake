@@ -7,7 +7,6 @@ include(TargetRequirePackage)
 
 function(shuttlesock_link_libev STATIC_BUILD)
 
-  
   if(NOT STATIC_BUILD)
     target_require_package(shuttlesock PUBLIC ev
       OPTIONAL LIBEV_FOUND
@@ -63,7 +62,7 @@ function(shuttlesock_link_libev STATIC_BUILD)
       DOWNLOAD_NO_PROGRESS 1
       DOWNLOAD_DIR ${CMAKE_CURRENT_LIST_DIR}/.cmake_downloads
     #  SOURCE_DIR ${LIBEV_DIR}
-      CONFIGURE_COMMAND /bin/sh -c "CFLAGS=\"${SHUTTLESOCK_SHARED_CFLAGS} -O${OPTIMIZE_LEVEL} -w\" LDFLAGS=\"${SHUTTLESOCK_SHARED_LDFLAGS}\" CC=\"${SHUTTLESOCK_SHARED_CC}\" ./configure --prefix=\"${LIBEV_PREFIX_DIR}\" --enable-shared=no --with-pic=yes"
+      CONFIGURE_COMMAND sh -c "CFLAGS=\"${SHUTTLESOCK_SHARED_CFLAGS} -O${OPTIMIZE_LEVEL} -w\" LDFLAGS=\"${SHUTTLESOCK_SHARED_LDFLAGS}\" CC=\"${SHUTTLESOCK_SHARED_CC}\" ./configure --prefix=\"${LIBEV_PREFIX_DIR}\" --enable-shared=no --with-pic=yes"
       PREFIX ${LIBEV_PREFIX_DIR}
       BUILD_COMMAND make ${LIBEV_MAKE_PARALLEL_FLAG}
       INSTALL_COMMAND make install

@@ -75,7 +75,7 @@ shuttlesock_link_c_ares("${C_ARES_BUILD_STATIC}")
 #Linux kernel's io_uring
 if(SHUTTLESOCK_HAVE_IO_URING)
   include(ShuttlesockLiburing)
-  shuttlesock_link_liburing()
+  shuttlesock_link_liburing("${LIBURING_BUILD_STATIC}")
 endif()
 
 

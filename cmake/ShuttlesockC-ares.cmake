@@ -47,8 +47,8 @@ function(shuttlesock_link_c_ares STATIC_BUILD)
   #version 1.13.0 is where ares_set_socket_functions got added, which we need
   if(NOT STATIC_BUILD)
     target_require_package(shuttlesock PUBLIC cares HEADER_NAME ares.h
-      OPTIONAL C_ARES_FOUND
       DRY_RUN
+      OPTIONAL C_ARES_FOUND
       INCLUDE_PATH_VAR cares_include_path
       LINK_LIB_VAR cares_lib_path
     )
@@ -57,34 +57,34 @@ function(shuttlesock_link_c_ares STATIC_BUILD)
     endif()
   endif()
   if(C_ARES_FOUND AND C_ARES_VERSION_OK)
-    target_require_package(shuttlesock PUBLIC cares ares.h)
+    target_require_package(shuttlesock PUBLIC cares HEADER_NAME ares.h)
     target_link_libraries(shuttlesock PUBLIC cares)
   else()
     include(ExternalProject)
     
-    set(c_ares_PREFIX ${CMAKE_CURRENT_BINARY_DIR}/c_ares)
+    set(C_ARES_PREFIX ${CMAKE_CURRENT_BINARY_DIR}/c_ares)
     ExternalProject_Add(c_ares
       URL "https://c-ares.haxx.se/download/c-ares-${C_ARES_RELEASE_VERSION}.tar.gz"
       URL_MD5 "${C_ARES_RELEASE_MD5}"
-      PREFIX "${c_ares_PREFIX}"
+      PREFIX "${C_ARES_PREFIX}"
       DOWNLOAD_DIR ${CMAKE_CURRENT_LIST_DIR}/.cmake_downloads
       CMAKE_ARGS
         -DCARES_STATIC=ON
         -DCARES_SHARED=OFF
         -DCMAKE_POSITION_INDEPENDENT_CODE=ON
         -DCARES_BUILD_TOOLS=OFF
-        -DCMAKE_INSTALL_BINDIR=${c_ares_PREFIX}/bin
-        -DCMAKE_INSTALL_LIBDIR=${c_ares_PREFIX}/lib
-        -DCMAKE_INSTALL_INCLUDEDIR=${c_ares_PREFIX}/include
-      BUILD_BYPRODUCTS ${c_ares_PREFIX}/lib/libcares.a
+        -DCMAKE_INSTALL_BINDIR=${C_ARES_PREFIX}/bin
+        -DCMAKE_INSTALL_LIBDIR=${C_ARES_PREFIX}/lib
+        -DCMAKE_INSTALL_INCLUDEDIR=${C_ARES_PREFIX}/include
+      BUILD_BYPRODUCTS ${C_ARES_PREFIX}/lib/libcares.a
     )
     ExternalProject_Add_Step(c_ares symlink_includes
-      COMMAND ${CMAKE_COMMAND} -E create_symlink  "${c_ares_PREFIX}/include" "${CMAKE_CURRENT_BINARY_DIR}/src/include/shuttlesock/c_ares"
+      COMMAND ${CMAKE_COMMAND} -E create_symlink  "${C_ARES_PREFIX}/include" "${CMAKE_CURRENT_BINARY_DIR}/src/include/shuttlesock/c_ares"
     )
     target_include_directories(shuttlesock PUBLIC "${CMAKE_CURRENT_BINARY_DIR}/src/include/shuttlesock/c_ares")
     
     add_dependencies(shuttlesock c_ares)
     
-    target_link_libraries(shuttlesock PUBLIC ${c_ares_PREFIX}/lib/libcares.a)
+    target_link_libraries(shuttlesock PUBLIC ${C_ARES_PREFIX}/lib/libcares.a)
   endif()
 endfunction()

@@ -15,7 +15,6 @@ function(target_require_package target scope name)
     message(FATAL_ERROR "target_require_package scope (2nd argument) must be PRIVATE or PUBLIC, was ${scope}")
   endif()
   find_package(${name} MODULE QUIET)
-  
   if(${LIBNAME}_FOUND)
     #message("found ${name} with find_package()")
   else()
@@ -38,15 +37,16 @@ function(target_require_package target scope name)
     )
   endif()
   
-  find_package_handle_standard_args(${libname} 
-    FOUND_VAR
-      "${LIBNAME}_FOUND"
-    REQUIRED_VARS
-      "${LIBNAME}_LIBRARY" "${LIBNAME}_INCLUDE_DIR"
-  )
+  if(${LIBNAME}_LIBRARY AND ${LIBNAME}_INCLUDE_DIR)
+    set(${LIBNAME}_FOUND YES)
+  else()
+    set(${LIBNAME}_FOUND "")
+  endif()
+  
   mark_as_advanced("${LIBNAME}_INCLUDE_DIR" "${LIBNAME}_LIBRARY" "${LIBNAME}_FOUND")
   if(${LIBNAME}_FOUND)
     if(NOT REQUIRE_PACKAGE_DRY_RUN)
+      message(STATUS "Found library ${name}: ${${LIBNAME}_LIBRARY}")
       target_include_directories(${target} ${scope} "${${LIBNAME}_INCLUDE_DIR}")
       target_link_libraries(${target} ${scope} "${${LIBNAME}_LIBRARY}")
     endif()
@@ -58,7 +58,7 @@ function(target_require_package target scope name)
     endif()
     
   elseif(NOT REQUIRE_PACKAGE_OPTIONAL)
-    message(SEND_ERROR "Failed to find library ${name}")
+    message(SEND_ERROR "Failed to find library ${name}${fail_reason}")
   endif()
   if(REQUIRE_PACKAGE_OPTIONAL)
     set(${REQUIRE_PACKAGE_OPTIONAL} ${${LIBNAME}_FOUND} PARENT_SCOPE)
