@@ -1,9 +1,13 @@
 cmake_minimum_required(VERSION 3.4)
 set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/cmake" )
+
 include(SetProjectCompiler)
 
 project(shuttlesock LANGUAGES "C" VERSION 0.0.1)
 set(DESCRIPTION "speedy server library with a focus on moving sockets between processes")
+
+
+
 include(PaddedVersionNumber)
 padded_version_number(shuttlesock_VERSION_PADDED shuttlesock)
 
@@ -78,6 +82,9 @@ if(SHUTTLESOCK_HAVE_IO_URING)
   shuttlesock_link_liburing("${LIBURING_BUILD_STATIC}")
 endif()
 
+#openssl
+include(ShuttlesockOpenSSL)
+shuttlesock_link_openssl("${OPENSSL_BUILD_STATIC}")
 
 add_executable(shuso_test 
   test/test.c
