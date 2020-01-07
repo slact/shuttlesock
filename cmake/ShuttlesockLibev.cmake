@@ -57,7 +57,7 @@ function(shuttlesock_link_libev STATIC_BUILD)
     
     set(LIBEV_PREFIX_DIR ${CMAKE_CURRENT_BINARY_DIR}/libev)
     include(ExternalProject)
-    ExternalProject_Add(libev_autoconf
+    ExternalProject_Add(libev
       URL "http://dist.schmorp.de/libev/Attic/libev-${LIBEV_RELEASE_VERSION}.tar.gz"
       URL_MD5 ${LIBEV_RELEASE_MD5}
       DOWNLOAD_NO_PROGRESS 1
@@ -70,8 +70,13 @@ function(shuttlesock_link_libev STATIC_BUILD)
       BUILD_BYPRODUCTS ${LIBEV_PREFIX_DIR}/lib/libev.a
       BUILD_IN_SOURCE 1
     )
-    target_include_directories(shuttlesock PUBLIC ${LIBEV_PREFIX_DIR}/include)
-    add_dependencies(shuttlesock libev_autoconf)
+    
+    ExternalProject_Add_Step(libev symlink_includes
+      COMMAND ${CMAKE_COMMAND} -E create_symlink  "${LIBEV_PREFIX_DIR}/include" "${CMAKE_CURRENT_BINARY_DIR}/src/include/shuttlesock/libev"
+    )
+    target_include_directories(shuttlesock PUBLIC "${CMAKE_CURRENT_BINARY_DIR}/src/include/shuttlesock/libev")
     target_link_libraries(shuttlesock PUBLIC ${LIBEV_PREFIX_DIR}/lib/libev.a)
+    
+    add_dependencies(shuttlesock libev)
   endif()
 endfunction()

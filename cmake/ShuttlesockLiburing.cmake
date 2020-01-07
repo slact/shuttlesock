@@ -6,14 +6,14 @@ function(shuttlesock_link_liburing)
   
   include(ProcessorCount)
   ProcessorCount(processor_count)
-  if(NOT processor_count GREATER 1)
+  if(processor_count GREATER 1)
     set(LIBURING_MAKE_PARALLEL_FLAG -j${processor_count})
   endif()
 
   set(LIBURING_PREFIX_DIR ${CMAKE_CURRENT_BINARY_DIR}/liburing)
   
   include(ExternalProject)
-  ExternalProject_Add(uring_static
+  ExternalProject_Add(liburing
     URL "https://git.kernel.dk/cgit/liburing/snapshot/liburing-${LIBURING_RELEASE_VERSION}.tar.gz"
     URL_MD5 ""
     DOWNLOAD_NO_PROGRESS 1
@@ -26,20 +26,13 @@ function(shuttlesock_link_liburing)
     BUILD_IN_SOURCE 1
   )
 
-  add_dependencies(shuttlesock uring_static)
-  target_include_directories(shuttlesock PRIVATE ${LIBURING_PREFIX_DIR}/include)
+  add_dependencies(shuttlesock liburing)
+  
+  ExternalProject_Add_Step(liburing symlink_includes
+      COMMAND ${CMAKE_COMMAND} -E create_symlink  "${LIBURING_PREFIX_DIR}/include" "${CMAKE_CURRENT_BINARY_DIR}/src/include/shuttlesock/liburing"
+    )
+  target_include_directories(shuttlesock PUBLIC "${CMAKE_CURRENT_BINARY_DIR}/src/include/shuttlesock/liburing")
+  
   target_link_libraries(shuttlesock PRIVATE ${LIBURING_PREFIX_DIR}/lib/liburing.a)
   
-  #target_include_directories(shuttlesock PRIVATE lib/liburing/src)
-  #liburing
-  #add_library(uring STATIC 
-  #  lib/liburing/src/queue.c
-  #  lib/liburing/src/register.c
-  #  lib/liburing/src/setup.c
-  #  lib/liburing/src/syscall.c
-  #)
-  #if("${CMAKE_C_COMPILER_ID}" MATCHES "^(GNU)|((Apple)?Clang)$")
-  #  target_compile_options(uring PRIVATE -Wno-pointer-arith)
-  #endif()
-  #target_link_libraries(shuttlesock PRIVATE uring)
 endfunction()

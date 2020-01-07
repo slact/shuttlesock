@@ -63,7 +63,7 @@ function(shuttlesock_link_c_ares STATIC_BUILD)
     include(ExternalProject)
     
     set(c_ares_PREFIX ${CMAKE_CURRENT_BINARY_DIR}/c_ares)
-    ExternalProject_Add(c_ares_static
+    ExternalProject_Add(c_ares
       URL "https://c-ares.haxx.se/download/c-ares-${C_ARES_RELEASE_VERSION}.tar.gz"
       URL_MD5 "${C_ARES_RELEASE_MD5}"
       PREFIX "${c_ares_PREFIX}"
@@ -78,12 +78,12 @@ function(shuttlesock_link_c_ares STATIC_BUILD)
         -DCMAKE_INSTALL_INCLUDEDIR=${c_ares_PREFIX}/include
       BUILD_BYPRODUCTS ${c_ares_PREFIX}/lib/libcares.a
     )
-    #ExternalProject_Add_Step(c_ares_static symlink_includes
-    #  COMMAND ${CMAKE_COMMAND} -E create_symlink  "${c_ares_PREFIX}/include" "${CMAKE_CURRENT_BINARY_DIR}/src/include/shuttlesock/c_ares"
-    #)
-    #target_include_directories(shuttlesock PUBLIC "${CMAKE_CURRENT_BINARY_DIR}/src/include/shuttlesock/c_ares")
+    ExternalProject_Add_Step(c_ares symlink_includes
+      COMMAND ${CMAKE_COMMAND} -E create_symlink  "${c_ares_PREFIX}/include" "${CMAKE_CURRENT_BINARY_DIR}/src/include/shuttlesock/c_ares"
+    )
+    target_include_directories(shuttlesock PUBLIC "${CMAKE_CURRENT_BINARY_DIR}/src/include/shuttlesock/c_ares")
     
-    add_dependencies(shuttlesock c_ares_static)
+    add_dependencies(shuttlesock c_ares)
     
     target_link_libraries(shuttlesock PUBLIC ${c_ares_PREFIX}/lib/libcares.a)
   endif()

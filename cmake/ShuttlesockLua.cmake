@@ -54,32 +54,41 @@ function(shuttlesock_link_lua STATIC_BUILD LUA_EXTRA_CFLAGS)
       endif()
     endif()
     
-    set(LUA_PREFIX_DIR ${CMAKE_CURRENT_BINARY_DIR}/src/lua_static/)
-    include(ExternalProject)
+    set(LUA_PREFIX_DIR ${CMAKE_CURRENT_BINARY_DIR}/lua)
     
     include(ProcessorCount)
     ProcessorCount(processor_count)
-    if(NOT processor_count EQUAL 0)
+    if(processor_count GREATER 1)
       set(LUA_MAKE_PARALLEL_FLAG -j${processor_count})
     endif()
     
-    ExternalProject_Add(lua_static
+    include(ExternalProject)
+    ExternalProject_Add(lua
       URL "https://www.lua.org/ftp/lua-${LUA_RELEASE_VERSION}.tar.gz"
       URL_MD5 "${LUA_RELEASE_MD5}"
       DOWNLOAD_NO_PROGRESS 1
       DOWNLOAD_DIR ${CMAKE_CURRENT_LIST_DIR}/.cmake_downloads
       CONFIGURE_COMMAND ""
-      PREFIX ${CMAKE_CURRENT_BINARY_DIR}
-      BUILD_COMMAND make "CC=${SHUTTLESOCK_SHARED_CC}" "MYCFLAGS=${SHUTTLESOCK_SHARED_CFLAGS} -O${OPTIMIZE_LEVEL} ${LUA_EXTRA_CFLAGS} -fPIC -g -DLUA_COMPAT_5_2 -DLUA_COMPAT_5_1" "MYLDFLAGS=${SHUTTLESOCK_SHARED_LDFLAGS}" ${LUA_MAKE_PARALLEL_FLAG} ${LUA_BUILD_TARGET}
-      INSTALL_COMMAND ""
-      BUILD_BYPRODUCTS ${LUA_PREFIX_DIR}/src/liblua.a
+      PREFIX ${LUA_PREFIX_DIR}
+      BUILD_COMMAND make 
+        "CC=${SHUTTLESOCK_SHARED_CC}"
+        "MYCFLAGS=${SHUTTLESOCK_SHARED_CFLAGS} -O${OPTIMIZE_LEVEL} ${LUA_EXTRA_CFLAGS} -fPIC -g -DLUA_COMPAT_5_2 -DLUA_COMPAT_5_1"
+        "MYLDFLAGS=${SHUTTLESOCK_SHARED_LDFLAGS}"
+        ${LUA_MAKE_PARALLEL_FLAG}
+        ${LUA_BUILD_TARGET}
+      INSTALL_COMMAND make "INSTALL_TOP=${LUA_PREFIX_DIR}" install
+      BUILD_BYPRODUCTS ${LUA_PREFIX_DIR}/lib/liblua.a
       BUILD_IN_SOURCE 1
     )
-    target_include_directories(shuttlesock PUBLIC ${LUA_PREFIX_DIR}/src)
-    add_dependencies(shuttlesock lua_static)
-    add_library(lualib STATIC IMPORTED)
-    set_target_properties(lualib PROPERTIES IMPORTED_LOCATION ${LUA_PREFIX_DIR}/src/liblua.a)
-    target_link_libraries(shuttlesock PRIVATE lualib)
+    
+    ExternalProject_Add_Step(lua symlink_includes
+      COMMAND ${CMAKE_COMMAND} -E create_symlink  "${LUA_PREFIX_DIR}/include" "${CMAKE_CURRENT_BINARY_DIR}/src/include/shuttlesock/lua"
+    )
+    target_include_directories(shuttlesock PUBLIC "${CMAKE_CURRENT_BINARY_DIR}/src/include/shuttlesock/lua")
+    
+    target_link_libraries(shuttlesock PUBLIC ${LUA_PREFIX_DIR}/lib/liblua.a)
     target_link_libraries(shuttlesock PRIVATE dl)
+    
+    add_dependencies(shuttlesock lua)
   endif()
 endfunction()
