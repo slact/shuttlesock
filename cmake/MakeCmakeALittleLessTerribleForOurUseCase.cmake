@@ -89,7 +89,7 @@ if(CMAKE_BUILD_TYPE MATCHES "^Debug")
     set(OPTIMIZE_LEVEL 0)
   endif()
   
-  add_compiler_flags(-Wall -Wextra -Wpedantic -Wno-unused-parameter -Wpointer-sign -Wpointer-arith -Wshadow -Wsign-compare -ggdb -O${OPTIMIZE_LEVEL} -fno-omit-frame-pointer -fstack-protector-strong)
+  add_compiler_flags(-Wall -Wextra -Wno-unused-parameter -Wpointer-sign -Wpointer-arith -Wshadow -Wsign-compare -ggdb -O${OPTIMIZE_LEVEL} -fno-omit-frame-pointer -fstack-protector-strong)
   if ("${CMAKE_C_COMPILER_ID}" STREQUAL "GNU")
     add_compiler_flags(-Wmaybe-uninitialized -fvar-tracking-assignments)
   elseif("${CMAKE_C_COMPILER_ID}" MATCHES "^(Apple)?Clang$")
