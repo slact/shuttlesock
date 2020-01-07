@@ -244,14 +244,14 @@ class Opts
       end
     end
     
-    if !@direct_build && !@ninja && cmake_build_output.match("--parallel")
-      begin
-        require 'etc'
-        nprocs = Etc.nprocessors
-        build_opts += ["--parallel", "#{nprocs}"]
-      rescue Exception
-      end
-    end
+    #if !@direct_build && !@ninja && cmake_build_output.match("--parallel")
+    #  begin
+    #    require 'etc'
+    #    nprocs = Etc.nprocessors
+    #    build_opts += ["--parallel", "#{nprocs}"]
+    #  rescue Exception
+    #  end
+    #end
     
     make_command = (@direct_build ? [(@have_ninja ? 'ninja' : 'make')] : ['cmake', '--build', BUILD_DIR]) + build_opts
     in_dir(@direct_build ? :build : :base) do

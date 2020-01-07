@@ -81,7 +81,7 @@ function(shuttlesock_link_c_ares STATIC_BUILD)
     ExternalProject_Add_Step(c_ares symlink_includes
       COMMAND ${CMAKE_COMMAND} -E create_symlink  "${C_ARES_PREFIX}/include" "${CMAKE_CURRENT_BINARY_DIR}/src/include/shuttlesock/c_ares"
     )
-    target_include_directories(shuttlesock PUBLIC "${CMAKE_CURRENT_BINARY_DIR}/src/include/shuttlesock/c_ares")
+    target_include_directories(shuttlesock SYSTEM PUBLIC "${CMAKE_CURRENT_BINARY_DIR}/src/include/shuttlesock/c_ares")
     
     add_dependencies(shuttlesock c_ares)
     
