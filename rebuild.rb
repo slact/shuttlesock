@@ -511,7 +511,7 @@ rebuild = Opts.new do
     cmake_define: {LUA_BUILD_STATIC_EXTRAFLAGS: "-DLUA_USE_APICHECK"}
   
   libs_static :debug_flag,
-    imply: [:lua_static, :openssl_static, :liburing_static, :libev_static, :c_ares_static]
+    imply: [:lua_static, :openssl_static, :liburing_static, :libev_static, :c_ares_static, :pcre_static]
   
   lua_static :debug_flag,
     cmake_define: {LUA_BUILD_STATIC: true}
@@ -527,6 +527,9 @@ rebuild = Opts.new do
   
   c_ares_static :debug_flag,
     cmake_define: {C_ARES_BUILD_STATIC: 1}
+  
+  pcre_static :debug_flag,
+    cmake_define: {PCRE_BUILD_STATIC: 1}
   
   makefile :debug_flag,
     set: {generator: "Unix Makefiles"}
