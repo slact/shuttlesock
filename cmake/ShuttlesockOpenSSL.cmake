@@ -5,6 +5,23 @@ set(OPENSSL_MIN_VERSION "1.0.0")
 
 function(shuttlesock_link_openssl STATIC_BUILD)  
   if(NOT STATIC_BUILD)
+    if(NOT DEFINED OPENSSL_ROOT_DIR)
+      if(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
+        #add some homebrew path hints
+        find_program(BREW_PROGRAM NAMES brew HINTS /usr/local/bin/)
+        if(BREW_PROGRAM)
+          execute_process(
+            COMMAND ${BREW_PROGRAM} --prefix openssl
+            OUTPUT_VARIABLE brew_output
+            RESULT_VARIABLE brew_result
+          )
+          if(RESULT_VARIABLE EQUAL 0)
+            set(OPENSSL_ROOT_DIR "${brew_output}")
+          endif()
+        endif()
+      endif()
+    endif()
+    
     include(FindOpenSSL)
     if(OPENSSL_FOUND)
       target_include_directories(shuttlesock PUBLIC ${OPENSSL_INCLUDE_DIR})
