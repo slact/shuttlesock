@@ -40,7 +40,7 @@ osx_task:
     - ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)" < /dev/null
     - brew install ccache libev zsh ruby lua luarocks pcre openssl c-ares
   test_basic_script:
-    - ./rebuild.sh
+    - ./rebuild.sh verbose
     - ./test.sh --color
   test_optimized_script:
     - ./rebuild.sh O3
