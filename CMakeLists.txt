@@ -45,11 +45,14 @@ set(THIRDPARTY_PREFIX "${CMAKE_CURRENT_BINARY_DIR}/thirdparty")
 file(MAKE_DIRECTORY "${THIRDPARTY_PREFIX}")
 target_include_directories(shuttlesock SYSTEM PUBLIC "${THIRDPARTY_PREFIX}/include")
 
+set(SHUTTLESOCK_USE_HYPERSCAN OFF) #no hyperscan for now
+
 include(ShuttlesockTestFeatures)
 shuttlesock_test_features(
   CONDITIONS
     USE_EVENTFD           SHUTTLESOCK_USE_EVENTFD
     USE_IO_URING          SHUTTLESOCK_USE_IO_URING
+    USE_HYPERSCAN         SHUTTLESOCK_USE_HYPERSCAN
   RESULTS
     TYPEOF_MACRO          SHUTTLESOCK_HAVE_TYPEOF
     TYPE_GENERIC_MACROS   SHUTTLESOCK_HAVE_TYPE_GENERIC_MACROS
@@ -61,8 +64,8 @@ shuttlesock_test_features(
     SO_REUSEPORT          SHUTTLESOCK_HAVE_SO_REUSEPORT
     IPV6                  SHUTTLESOCK_HAVE_IPV6
     STRSIGNAL             SHUTTLESOCK_HAVE_STRSIGNAL
+    HYPERSCAN             SHUTTLESOCK_HAVE_HYPERSCAN
 )
-
 
 #pthreads
 set(THREADS_PREFER_PTHREAD_FLAG ON)
@@ -102,6 +105,13 @@ shuttlesock_link_nghttp2("${NGHTTP2_BUILD_STATIC}")
 #pcre2
 include(ShuttlesockPCRE)
 shuttlesock_link_pcre("${PCRE_BUILD_STATIC}")
+
+if(SHUTTLESOCK_HAVE_HYPERSCAN)
+  #hyperscan - x86-64 stupid fast kitchen sink multi-regex engine
+  # (but no backreferences)
+  include(ShuttlesockHyperscan)
+  shuttlesock_link_hyperscan("${HYPERSCAN_BUILD_STATIC}")
+endif()
 
 add_executable(shuso_test 
   test/test.c

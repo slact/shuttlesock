@@ -14,10 +14,12 @@ function(shuttlesock_test_features)
     SO_REUSEPORT
     IPV6
     STRSIGNAL
+    HYPERSCAN
   )
   set(conditions
     USE_EVENTFD
     USE_IO_URING
+    USE_HYPERSCAN
   )
   
   cmake_parse_arguments(TEST "" "" "CONDITIONS;RESULTS" ${ARGN})
@@ -134,5 +136,29 @@ function(shuttlesock_test_features)
     include(TestStrsignal)
     test_strsignal(have_strsignal)
     set(${RESULT_STRSIGNAL} ${have_strsignal} CACHE INTERNAL "system has strsignal()")
+  endif()
+  
+  
+  #can we use hyperscan? Only if it's an x86 or x86-64 CPU
+  if(NOT DEFINED ${RESULT_HYPERSCAN} OR (NOT "${${CONDITION_USE_HYPERSCAN}}" STREQUAL "${TEST_FEATURES_USE_HYPERSCAN_PREVIOUS_VALUE}"))
+    set(TEST_FEATURES_USE_HYPERSCAN_PREVIOUS_VALUE "${${CONDITION_USE_HYPERSCAN}}" CACHE INTERNAL "")
+    if(("${${CONDITION_USE_HYPERSCAN}}" STREQUAL "") OR "${${CONDITION_USE_HYPERSCAN}}")
+      message(STATUS "Check if system is x86 or x86_64 for Hyperscan")
+      include(TargetArch)
+      target_architecture(target_arch)
+      if(target_arch STREQUAL "x86_64" OR target_arch STREQUAL "i386")
+        set(on_x86 YES)
+        message(STATUS "Check if system is x86 or x86_64 for Hyperscan - yes (${target_arch})")
+      else()
+        message(STATUS "Check if system is x86 or x86_64 for Hyperscan - no (${target_arch})")
+      endif()
+      set(${RESULT_HYPERSCAN} "${on_x86}" CACHE INTERNAL "hyperscan can be used")
+      if("${${CONDITION_USE_HYPERSCAN}}" STREQUAL "FORCE" AND NOT "${RESULT_HYPERSCAN}")
+        message(FATAL_ERROR "Shuttlesock was configuired to force usage of hyperscan, but it is not supported on this system")
+      endif()
+    else()
+      message(STATUS "Don't bother checking if system supports hyperscan")
+      set(${RESULT_HYPERSCAN} "FALSE" CACHE INTERNAL "hyperscan can be used" FORCE)
+    endif()
   endif()
 endfunction()
