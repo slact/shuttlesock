@@ -36,8 +36,9 @@ osx_task:
   osx_instance:
     image: mojave-xcode-10.3
   setup_script:
-    - 
     - ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)" < /dev/null
+    - brew update
+    - brew upgrade
     - brew install ccache libev zsh ruby lua luarocks pcre openssl c-ares
   test_basic_script:
     - ./rebuild.sh verbose
