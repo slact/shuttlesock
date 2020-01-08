@@ -36,8 +36,9 @@ osx_task:
   osx_instance:
     image: mojave-xcode-10.3
   setup_script:
+    - 
     - ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)" < /dev/null
-    - brew install ccache libev zsh ruby lua luarocks pcre openssl
+    - brew install ccache libev zsh ruby lua luarocks pcre openssl c-ares
   test_basic_script:
     - ./rebuild.sh
     - ./test.sh --color
@@ -51,7 +52,7 @@ osx_task:
 freebsd_task:
   freebsd_instance:
     image: freebsd-12-0-release-amd64
-  setup_script: pkg install -y gmake cmake ccache libev valgrind zsh ruby lua53 openssl-devel pcre2
+  setup_script: pkg install -y c-ares gmake cmake ccache libev valgrind zsh ruby lua53 openssl pcre2
   test_basic_script:
     - ruby ./rebuild.rb
     - zsh ./test.sh --color
