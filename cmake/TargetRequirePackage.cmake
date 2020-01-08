@@ -2,13 +2,19 @@ include(FindPackageHandleStandardArgs)
 include(GNUInstallDirs)
 
 function(target_require_package target scope name)
-  set(oneValueArgs HEADER_NAME OPTIONAL INCLUDE_PATH_VAR LINK_LIB_VAR)
-  cmake_parse_arguments(REQUIRE_PACKAGE "DRY_RUN" "${oneValueArgs}" "" "${ARGN}")
-    
+  set(oneValueArgs OPTIONAL INCLUDE_PATH_VAR LINK_LIB_VAR)
+  cmake_parse_arguments(REQUIRE_PACKAGE "DRY_RUN" "${oneValueArgs}" "HEADER_NAME;LIB_NAME" "${ARGN}")
   string(TOUPPER ${name} NAME)
   set(libname lib${name})
   string(TOUPPER ${libname} LIBNAME)
   string(TOUPPER ${scope} scope)
+  
+  if(NOT REQUIRE_PACKAGE_HEADER_NAME)
+    set(REQUIRE_PACKAGE_HEADER_NAME "${name}.h")
+  endif()
+  if(NOT REQUIRE_PACKAGE_LIB_NAME)
+    set(REQUIRE_PACKAGE_LIB_NAME ${name})
+  endif()
   
   set(possible_scopes PUBLIC PRIVATE)
   if(NOT scope IN_LIST possible_scopes)
@@ -18,9 +24,6 @@ function(target_require_package target scope name)
   if(${LIBNAME}_FOUND)
     #message("found ${name} with find_package()")
   else()
-    if(NOT DEFINED REQUIRE_PACKAGE_HEADER_NAME)
-      set(REQUIRE_PACKAGE_HEADER_NAME "${name}.h")
-    endif()
     find_path("${LIBNAME}_INCLUDE_DIR"
       NAMES
         ${REQUIRE_PACKAGE_HEADER_NAME}
@@ -31,7 +34,7 @@ function(target_require_package target scope name)
 
     find_library(${LIBNAME}_LIBRARY
       NAMES
-        "${name}"
+        ${REQUIRE_PACKAGE_LIB_NAME}
       HINTS 
         ${PC_${LIBNAME}_LIBDIR} ${PC_${LIBNAME}_LIBRARY_DIRS}
     )
