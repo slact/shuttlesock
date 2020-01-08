@@ -4,6 +4,7 @@ set(LIBEV_RELEASE_MD5 20111fda0df0a289c152faa2aac91b08)
 set(LIBEV_MIN_VERSION "4.31")
 
 include(TargetRequirePackage)
+include(CheckCSourceRuns)
 
 function(shuttlesock_link_libev STATIC_BUILD)
 
@@ -60,21 +61,17 @@ function(shuttlesock_link_libev STATIC_BUILD)
       URL "http://dist.schmorp.de/libev/Attic/libev-${LIBEV_RELEASE_VERSION}.tar.gz"
       URL_MD5 ${LIBEV_RELEASE_MD5}
       DOWNLOAD_NO_PROGRESS 1
-      DOWNLOAD_DIR ${CMAKE_CURRENT_LIST_DIR}/.cmake_downloads
+      DOWNLOAD_DIR "${THIRDPARTY_DOWNLOAD}"
     #  SOURCE_DIR ${LIBEV_DIR}
-      CONFIGURE_COMMAND sh -c "CFLAGS=\"${SHUTTLESOCK_SHARED_CFLAGS} -O${OPTIMIZE_LEVEL} -w\" LDFLAGS=\"${SHUTTLESOCK_SHARED_LDFLAGS}\" CC=\"${SHUTTLESOCK_SHARED_CC}\" ./configure --prefix=\"${LIBEV_PREFIX_DIR}\" --enable-shared=no --with-pic=yes"
+      CONFIGURE_COMMAND sh -c "CFLAGS=\"${SHUTTLESOCK_SHARED_CFLAGS} -O${OPTIMIZE_LEVEL} -w\" LDFLAGS=\"${SHUTTLESOCK_SHARED_LDFLAGS}\" CC=\"${SHUTTLESOCK_SHARED_CC}\" ./configure --prefix=\"${THIRDPARTY_PREFIX}\" --enable-shared=no --with-pic=yes"
       PREFIX ${LIBEV_PREFIX_DIR}
       BUILD_COMMAND make ${LIBEV_MAKE_PARALLEL_FLAG}
       INSTALL_COMMAND make install
-      BUILD_BYPRODUCTS ${LIBEV_PREFIX_DIR}/lib/libev.a
+      BUILD_BYPRODUCTS ${THIRDPARTY_PREFIX}/lib/libev.a
       BUILD_IN_SOURCE 1
     )
     
-    ExternalProject_Add_Step(libev symlink_includes
-      COMMAND ${CMAKE_COMMAND} -E create_symlink  "${LIBEV_PREFIX_DIR}/include" "${CMAKE_CURRENT_BINARY_DIR}/src/include/shuttlesock/libev"
-    )
-    target_include_directories(shuttlesock PUBLIC "${CMAKE_CURRENT_BINARY_DIR}/src/include/shuttlesock/libev")
-    target_link_libraries(shuttlesock PUBLIC ${LIBEV_PREFIX_DIR}/lib/libev.a)
+    target_link_libraries(shuttlesock PUBLIC ${THIRDPARTY_PREFIX}/lib/libev.a)
     
     add_dependencies(shuttlesock libev)
   endif()

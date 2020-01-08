@@ -32,28 +32,23 @@ function(shuttlesock_link_openssl STATIC_BUILD)
       URL "https://www.openssl.org/source/openssl-${OPENSSL_RELEASE_VERSION}.tar.gz"
       URL_HASH "SHA256=${OPENSSL_RELEASE_SHA256}"
       DOWNLOAD_NO_PROGRESS 1
-      DOWNLOAD_DIR ${CMAKE_CURRENT_LIST_DIR}/.cmake_downloads
+      DOWNLOAD_DIR "${THIRDPARTY_DOWNLOAD}"
       PREFIX ${OPENSSL_PREFIX_DIR}
       CONFIGURE_COMMAND
-        ./config no-shared no-ssl2 "--prefix=${OPENSSL_PREFIX_DIR}" ${SHUTTLESOCK_SHARED_CFLAGS} ${SHUTTLESOCK_SHARED_LDFLAGS} ${OPENSSL_PEDANTIC_FLAG}
+        ./config no-shared no-ssl2 "--prefix=${THIRDPARTY_PREFIX}" ${SHUTTLESOCK_SHARED_CFLAGS} ${SHUTTLESOCK_SHARED_LDFLAGS} ${OPENSSL_PEDANTIC_FLAG}
       BUILD_COMMAND make 
         "CC=${SHUTTLESOCK_SHARED_CC}"
         ${OPENSSL_MAKE_PARALLEL_FLAG}
         build_libs
       INSTALL_COMMAND make install_dev
       BUILD_BYPRODUCTS
-        ${OPENSSL_PREFIX_DIR}/lib/libssl.a
-        ${OPENSSL_PREFIX_DIR}/lib/libcrypto.a
+        ${THIRDPARTY_PREFIX}/lib/libssl.a
+        ${THIRDPARTY_PREFIX}/lib/libcrypto.a
       BUILD_IN_SOURCE 1
     )
     
-    ExternalProject_Add_Step(openssl symlink_includes
-      COMMAND ${CMAKE_COMMAND} -E create_symlink  "${OPENSSL_PREFIX_DIR}/include" "${CMAKE_CURRENT_BINARY_DIR}/src/include/shuttlesock/openssl"
-    )
-    target_include_directories(shuttlesock PUBLIC "${CMAKE_CURRENT_BINARY_DIR}/src/include/shuttlesock/openssl")
-    
-    target_link_libraries(shuttlesock PUBLIC ${OPENSSL_PREFIX_DIR}/lib/libssl.a)
-    target_link_libraries(shuttlesock PUBLIC ${OPENSSL_PREFIX_DIR}/lib/libcrypto.a)
+    target_link_libraries(shuttlesock PUBLIC ${THIRDPARTY_PREFIX}/lib/libssl.a)
+    target_link_libraries(shuttlesock PUBLIC ${THIRDPARTY_PREFIX}/lib/libcrypto.a)
     
     add_dependencies(shuttlesock openssl)
   endif()

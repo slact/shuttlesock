@@ -40,6 +40,11 @@ target_include_directories(shuttlesock PUBLIC ${CMAKE_CURRENT_BINARY_DIR}/src/in
 target_include_directories(shuttlesock PUBLIC src/include)
 target_include_directories(shuttlesock PRIVATE src)
 
+set(THIRDPARTY_DOWNLOAD "${CMAKE_CURRENT_LIST_DIR}/thirdparty")
+set(THIRDPARTY_PREFIX "${CMAKE_CURRENT_BINARY_DIR}/thirdparty")
+file(MAKE_DIRECTORY "${THIRDPARTY_PREFIX}")
+target_include_directories(shuttlesock SYSTEM PUBLIC "${THIRDPARTY_PREFIX}/include")
+
 include(ShuttlesockTestFeatures)
 shuttlesock_test_features(
   CONDITIONS
@@ -76,8 +81,8 @@ shuttlesock_link_lua("${LUA_BUILD_STATIC}" "${LUA_BUILD_STATIC_EXTRAFLAGS}")
 include(ShuttlesockC-ares)
 shuttlesock_link_c_ares("${C_ARES_BUILD_STATIC}")
 
-#Linux kernel's io_uring
 if(SHUTTLESOCK_HAVE_IO_URING)
+  #Linux kernel's io_uring
   include(ShuttlesockLiburing)
   shuttlesock_link_liburing("${LIBURING_BUILD_STATIC}")
 endif()
@@ -85,6 +90,18 @@ endif()
 #openssl
 include(ShuttlesockOpenSSL)
 shuttlesock_link_openssl("${OPENSSL_BUILD_STATIC}")
+
+#pico http parser
+include(ShuttlesockPicoHttpParser)
+shuttlesock_link_picohttpparser()
+
+#nghttp2
+include(ShuttlesockNghttp2)
+shuttlesock_link_nghttp2("${NGHTTP2_BUILD_STATIC}")
+
+#pcre2
+include(ShuttlesockPCRE)
+shuttlesock_link_pcre("${PCRE_BUILD_STATIC}")
 
 add_executable(shuso_test 
   test/test.c

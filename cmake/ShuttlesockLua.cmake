@@ -67,7 +67,7 @@ function(shuttlesock_link_lua STATIC_BUILD LUA_EXTRA_CFLAGS)
       URL "https://www.lua.org/ftp/lua-${LUA_RELEASE_VERSION}.tar.gz"
       URL_MD5 "${LUA_RELEASE_MD5}"
       DOWNLOAD_NO_PROGRESS 1
-      DOWNLOAD_DIR ${CMAKE_CURRENT_LIST_DIR}/.cmake_downloads
+      DOWNLOAD_DIR "${THIRDPARTY_DOWNLOAD}"
       CONFIGURE_COMMAND ""
       PREFIX ${LUA_PREFIX_DIR}
       BUILD_COMMAND make 
@@ -76,17 +76,12 @@ function(shuttlesock_link_lua STATIC_BUILD LUA_EXTRA_CFLAGS)
         "MYLDFLAGS=${SHUTTLESOCK_SHARED_LDFLAGS}"
         ${LUA_MAKE_PARALLEL_FLAG}
         ${LUA_BUILD_TARGET}
-      INSTALL_COMMAND make "INSTALL_TOP=${LUA_PREFIX_DIR}" install
-      BUILD_BYPRODUCTS ${LUA_PREFIX_DIR}/lib/liblua.a
+      INSTALL_COMMAND make "INSTALL_TOP=${THIRDPARTY_PREFIX}" install
+      BUILD_BYPRODUCTS ${THIRDPARTY_PREFIX}/lib/liblua.a
       BUILD_IN_SOURCE 1
     )
     
-    ExternalProject_Add_Step(lua symlink_includes
-      COMMAND ${CMAKE_COMMAND} -E create_symlink  "${LUA_PREFIX_DIR}/include" "${CMAKE_CURRENT_BINARY_DIR}/src/include/shuttlesock/lua"
-    )
-    target_include_directories(shuttlesock PUBLIC "${CMAKE_CURRENT_BINARY_DIR}/src/include/shuttlesock/lua")
-    
-    target_link_libraries(shuttlesock PUBLIC ${LUA_PREFIX_DIR}/lib/liblua.a)
+    target_link_libraries(shuttlesock PUBLIC ${THIRDPARTY_PREFIX}/lib/liblua.a)
     target_link_libraries(shuttlesock PRIVATE dl)
     
     add_dependencies(shuttlesock lua)

@@ -62,29 +62,28 @@ function(shuttlesock_link_c_ares STATIC_BUILD)
   else()
     include(ExternalProject)
     
+    if(CMAKE_C_COMPILER_LAUNCHER)
+      set(maybe_ccache "-DCMAKE_C_COMPILER_LAUNCHER=${CMAKE_C_COMPILER_LAUNCHER}" "-DCMAKE_CXX_COMPILER_LAUNCHER=${CMAKE_CXX_COMPILER_LAUNCHER}")
+    endif()
+    
     set(C_ARES_PREFIX ${CMAKE_CURRENT_BINARY_DIR}/c_ares)
     ExternalProject_Add(c_ares
       URL "https://c-ares.haxx.se/download/c-ares-${C_ARES_RELEASE_VERSION}.tar.gz"
       URL_MD5 "${C_ARES_RELEASE_MD5}"
       PREFIX "${C_ARES_PREFIX}"
-      DOWNLOAD_DIR ${CMAKE_CURRENT_LIST_DIR}/.cmake_downloads
+      DOWNLOAD_DIR "${THIRDPARTY_DOWNLOAD}"
       CMAKE_ARGS
         -DCARES_STATIC=ON
         -DCARES_SHARED=OFF
         -DCMAKE_POSITION_INDEPENDENT_CODE=ON
         -DCARES_BUILD_TOOLS=OFF
-        -DCMAKE_INSTALL_BINDIR=${C_ARES_PREFIX}/bin
-        -DCMAKE_INSTALL_LIBDIR=${C_ARES_PREFIX}/lib
-        -DCMAKE_INSTALL_INCLUDEDIR=${C_ARES_PREFIX}/include
-      BUILD_BYPRODUCTS ${C_ARES_PREFIX}/lib/libcares.a
+        "-DCMAKE_INSTALL_PREFIX=${THIRDPARTY_PREFIX}"
+        ${maybe_ccache}
+      BUILD_BYPRODUCTS ${THIRDPARTY_PREFIX}/lib/libcares.a
     )
-    ExternalProject_Add_Step(c_ares symlink_includes
-      COMMAND ${CMAKE_COMMAND} -E create_symlink  "${C_ARES_PREFIX}/include" "${CMAKE_CURRENT_BINARY_DIR}/src/include/shuttlesock/c_ares"
-    )
-    target_include_directories(shuttlesock SYSTEM PUBLIC "${CMAKE_CURRENT_BINARY_DIR}/src/include/shuttlesock/c_ares")
     
     add_dependencies(shuttlesock c_ares)
     
-    target_link_libraries(shuttlesock PUBLIC ${C_ARES_PREFIX}/lib/libcares.a)
+    target_link_libraries(shuttlesock PUBLIC ${THIRDPARTY_PREFIX}/lib/libcares.a)
   endif()
 endfunction()

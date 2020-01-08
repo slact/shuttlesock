@@ -33,21 +33,15 @@ function(shuttlesock_link_liburing STATIC_BUILD)
       URL_MD5 ""
       DOWNLOAD_NO_PROGRESS 1
       PREFIX ${LIBURING_PREFIX_DIR}
-      DOWNLOAD_DIR ${CMAKE_CURRENT_LIST_DIR}/.cmake_downloads
-      CONFIGURE_COMMAND sh -c "CFLAGS=\"${SHUTTLESOCK_SHARED_CFLAGS} -O${OPTIMIZE_LEVEL} -w\" LDFLAGS=\"${SHUTTLESOCK_SHARED_LDFLAGS}\" CC=\"${SHUTTLESOCK_SHARED_CC}\" ./configure --prefix=${LIBURING_PREFIX_DIR}"
+      DOWNLOAD_DIR "${THIRDPARTY_DOWNLOAD}"
+      CONFIGURE_COMMAND sh -c "CFLAGS=\"${SHUTTLESOCK_SHARED_CFLAGS} -O${OPTIMIZE_LEVEL} -w\" LDFLAGS=\"${SHUTTLESOCK_SHARED_LDFLAGS}\" CC=\"${SHUTTLESOCK_SHARED_CC}\" ./configure --prefix=${THIRDPARTY_PREFIX}"
       BUILD_COMMAND make ${LIBEV_MAKE_PARALLEL_FLAG} -C src liburing.a
       INSTALL_COMMAND make install
-      BUILD_BYPRODUCTS ${LIBURING_PREFIX_DIR}/lib/liburing.a
+      BUILD_BYPRODUCTS ${THIRDPARTY_PREFIX}/lib/liburing.a
       BUILD_IN_SOURCE 1
     )
-
     add_dependencies(shuttlesock liburing)
     
-    ExternalProject_Add_Step(liburing symlink_includes
-        COMMAND ${CMAKE_COMMAND} -E create_symlink  "${LIBURING_PREFIX_DIR}/include" "${CMAKE_CURRENT_BINARY_DIR}/src/include/shuttlesock/liburing"
-      )
-    target_include_directories(shuttlesock PUBLIC "${CMAKE_CURRENT_BINARY_DIR}/src/include/shuttlesock/liburing")
-    
-    target_link_libraries(shuttlesock PRIVATE ${LIBURING_PREFIX_DIR}/lib/liburing.a)
+    target_link_libraries(shuttlesock PRIVATE ${THIRDPARTY_PREFIX}/lib/liburing.a)
   endif()
 endfunction()

@@ -5,4 +5,5 @@ CMakeFiles/
 cachegrind.*
 callgrind-*
 coverage/
-.cmake_downloads/
+thirdparty/*.tar.*
+thirdparty/*.zip
