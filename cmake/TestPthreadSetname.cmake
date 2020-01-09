@@ -2,10 +2,10 @@ include(CheckCSourceCompiles)
 include(CMakePushCheckState)
 
 function(test_pthread_setname thread_libs style_var pthread_np_var)
-  message(STATUS "Detecting pthread setname style")
-  
   set(THREADS_PREFER_PTHREAD_FLAG ON)
   find_package(Threads REQUIRED QUIET)
+  
+  message(STATUS "Detecting pthread setname style")
   
   cmake_push_check_state(RESET)
   set(CMAKE_REQUIRED_QUIET 1)

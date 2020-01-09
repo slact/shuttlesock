@@ -7,12 +7,13 @@ include(CMakePushCheckState)
 function(shuttlesock_link_pcre STATIC_BUILD)
   if(NOT STATIC_BUILD)
     target_require_package(shuttlesock PUBLIC pcre2-posix HEADER_NAME pcre2posix.h
+      DISPLAY_NAME "pcre2 (posix)"
       DRY_RUN
       OPTIONAL PCRE2_FOUND
     )
   endif()
   if(PCRE2_FOUND)
-    target_require_package(shuttlesock PUBLIC pcre2-posix HEADER_NAME pcre2posix.h)
+    target_require_package(shuttlesock PUBLIC pcre2-posix HEADER_NAME pcre2posix.h QUIET)
     target_link_libraries(shuttlesock PUBLIC pcre2-posix)
   else()
     include(ExternalProject)

@@ -11,7 +11,7 @@ function(shuttlesock_link_liburing STATIC_BUILD)
       DRY_RUN
     )
     if(LIBURING_FOUND)
-      target_require_package(shuttlesock PUBLIC uring HEADER_NAME liburing.h)
+      target_require_package(shuttlesock PUBLIC uring HEADER_NAME liburing.h QUIET)
     else()
       message(STATUS "liburing not found. Will build from source.")
       set(STATIC_BUILD ON)

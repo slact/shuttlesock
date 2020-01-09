@@ -21,8 +21,8 @@ function(shuttlesock_link_hyperscan STATIC_BUILD)
         hs hs_runtime
       HEADER_NAME
         hs.h hs_compile.h hs_runtime.h
+      QUIET
     )
-    target_link_libraries(shuttlesock PUBLIC hyperscan)
   else()
     
     find_program(RAGEL_BINARY NAMES ragel)

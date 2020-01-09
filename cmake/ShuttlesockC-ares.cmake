@@ -47,6 +47,7 @@ function(shuttlesock_link_c_ares STATIC_BUILD)
   #version 1.13.0 is where ares_set_socket_functions got added, which we need
   if(NOT STATIC_BUILD)
     target_require_package(shuttlesock PUBLIC cares HEADER_NAME ares.h
+      DISPLAY_NAME "c-ares"
       DRY_RUN
       OPTIONAL C_ARES_FOUND
       INCLUDE_PATH_VAR cares_include_path
@@ -57,8 +58,7 @@ function(shuttlesock_link_c_ares STATIC_BUILD)
     endif()
   endif()
   if(C_ARES_FOUND AND C_ARES_VERSION_OK)
-    target_require_package(shuttlesock PUBLIC cares HEADER_NAME ares.h)
-    target_link_libraries(shuttlesock PUBLIC cares)
+    target_require_package(shuttlesock PUBLIC cares HEADER_NAME ares.h QUIET)
   else()
     include(ExternalProject)
     

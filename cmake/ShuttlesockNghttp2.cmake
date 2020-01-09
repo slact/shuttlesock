@@ -6,14 +6,15 @@ include(CMakePushCheckState)
 
 function(shuttlesock_link_nghttp2 STATIC_BUILD)
   if(NOT STATIC_BUILD)
-    target_require_package(shuttlesock PUBLIC nghttp2 HEADER_NAME nghttp2/nghttp2.h
+    target_require_package(shuttlesock PUBLIC nghttp2
+      HEADER_NAME nghttp2/nghttp2.h
+      DISPLAY_NAME "nghttp2"
       DRY_RUN
       OPTIONAL NGHTTP2_FOUND
     )
   endif()
   if(NGHTTP2_FOUND)
-    target_require_package(shuttlesock PUBLIC nghttp2 HEADER_NAME nghttp2/nghttp2.h)
-    target_link_libraries(shuttlesock PUBLIC nghttp2)
+    target_require_package(shuttlesock PUBLIC nghttp2 HEADER_NAME nghttp2/nghttp2.h QUIET)
   else()
     include(ExternalProject)
     

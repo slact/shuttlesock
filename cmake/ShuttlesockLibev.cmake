@@ -10,6 +10,7 @@ function(shuttlesock_link_libev STATIC_BUILD)
 
   if(NOT STATIC_BUILD)
     target_require_package(shuttlesock PUBLIC ev
+      NAME "libev"
       OPTIONAL LIBEV_FOUND
       DRY_RUN
       INCLUDE_PATH_VAR libev_include_path
@@ -37,7 +38,7 @@ function(shuttlesock_link_libev STATIC_BUILD)
       
       if(libev_version_ok_result)
         message(STATUS "Check if libev version >= ${LIBEV_MIN_VERSION} - yes (${libev_version_found})")
-        target_require_package(shuttlesock PUBLIC ev)
+        target_require_package(shuttlesock PUBLIC ev QUIET)
       else()
         message(STATUS "Check if libev version >= ${LIBEV_MIN_VERSION} - no (${libev_version_found}). Will build it from source.")
         set(STATIC_BUILD "YES")
