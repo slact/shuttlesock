@@ -84,9 +84,9 @@ shuttlesock_link_lua("${LUA_BUILD_STATIC}" "${LUA_BUILD_STATIC_EXTRAFLAGS}")
 include(ShuttlesockC-ares)
 shuttlesock_link_c_ares("${C_ARES_BUILD_STATIC}")
 
+#Linux kernel's io_uring
+include(ShuttlesockLiburing)
 if(SHUTTLESOCK_HAVE_IO_URING)
-  #Linux kernel's io_uring
-  include(ShuttlesockLiburing)
   shuttlesock_link_liburing("${LIBURING_BUILD_STATIC}")
 endif()
 
@@ -106,10 +106,10 @@ shuttlesock_link_nghttp2("${NGHTTP2_BUILD_STATIC}")
 include(ShuttlesockPCRE)
 shuttlesock_link_pcre("${PCRE_BUILD_STATIC}")
 
-if(SHUTTLESOCK_HAVE_HYPERSCAN)
-  #hyperscan - x86-64 stupid fast kitchen sink multi-regex engine
-  # (but no backreferences)
-  include(ShuttlesockHyperscan)
+#hyperscan - x86-64 stupid fast kitchen sink multi-regex engine
+# (but no backreferences)
+include(ShuttlesockHyperscan)
+if(SHUTTLESOCK_HAVE_HYPERSCAN)  
   shuttlesock_link_hyperscan("${HYPERSCAN_BUILD_STATIC}")
 endif()
 
