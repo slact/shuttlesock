@@ -34,6 +34,7 @@ target_sources(shuttlesock PRIVATE
   src/module_event.c
   src/embedded_lua_scripts.c
   src/lua_utils.c
+  src/io.c
 )
 
 target_include_directories(shuttlesock PUBLIC ${CMAKE_CURRENT_BINARY_DIR}/src/include)

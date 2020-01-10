@@ -19,6 +19,7 @@
 #include <shuttlesock/resolver.h>
 #include <shuttlesock/shared_slab.h>
 #include <shuttlesock/log.h>
+#include <shuttlesock/io.h>
 #include <shuttlesock/module.h>
 #include <shuttlesock/lua_utils.h>
 #include <shuttlesock/sysutil.h>
@@ -167,6 +168,9 @@ struct shuso_s {
     shuso_loop                 *loop;
     unsigned int                flags;
   }                           ev;
+  struct {
+    bool                        on;
+  }                           io_uring;
   shuso_common_t             *common;
   struct {                  //base_watchers
     shuso_ev_signal              signal[8];
