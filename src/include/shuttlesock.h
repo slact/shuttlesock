@@ -242,6 +242,11 @@ bool shuso_processes_share_heap(shuso_t *S, int procnum1, int procnum2);
 const char *shuso_process_as_string(int procnum);
 const char *shuso_runstate_as_string(shuso_runstate_t state);
 
+struct shuso_fn_debug_info_s {
+  const char *name;
+  const char *file;
+  int         line;
+};
 
 #define SHUSO_EACH_WORKER(S, cur) \
   for(shuso_process_t *cur = &S->common->process.worker[*S->common->process.workers_start], *___worker_end = &S->common->process.worker[*S->common->process.workers_end]; cur < ___worker_end; cur++)

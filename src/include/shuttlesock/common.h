@@ -8,6 +8,8 @@
 #define container_of(ptr, type, member) ((type *)(void *)((char *)(1 ? (ptr) : &((type *)0)->member) - offsetof(type, member)))
 #endif
 
+typedef struct shuso_fn_debug_info_s shuso_fn_debug_info_t;
+
 typedef struct ev_loop shuso_loop; //don't want to write struct ev_loop everywhere or use EV_A and EV_P_ macros, they're ugly.
 
 typedef enum {
@@ -105,7 +107,6 @@ typedef bool shuso_module_init_fn(shuso_t *S, shuso_module_t *);
 typedef bool shuso_module_config_init_fn(shuso_t *S, shuso_module_t *, shuso_setting_block_t *);
 
 typedef void shuso_module_event_fn(shuso_t *S, shuso_event_state_t *, intptr_t code, void *data, void *pd);
-
 
 #if defined(__has_feature)
   #if __has_feature(memory_sanitizer)
