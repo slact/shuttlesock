@@ -17,30 +17,36 @@ function(shuttlesock_link_libev STATIC_BUILD)
       LINK_LIB_VAR libev_lib_path
     )
     if(LIBEV_FOUND)
-      message(STATUS "Check if libev version >= ${LIBEV_MIN_VERSION}")
-      cmake_push_check_state(RESET)
-      set(CMAKE_REQUIRED_QUIET 1)
-      set(CMAKE_REQUIRED_INCLUDES "${libev_include_path}")
-      set(CMAKE_REQUIRED_LIBRARIES "${libev_lib_path}")
-      string(REGEX MATCH "^([0-9]+)\\.([0-9]+)$" libev_version_match "${LIBEV_MIN_VERSION}")
-      set(ver_major ${CMAKE_MATCH_1})
-      set(ver_minor ${CMAKE_MATCH_2})
-      check_c_source_runs("
-        #include <ev.h>
-        #include <stdio.h>
-        int main(void) {
-          printf(\"%d.%d\", EV_VERSION_MAJOR, EV_VERSION_MINOR);
-          return !(EV_VERSION_MAJOR >= ${ver_major} && EV_VERSION_MINOR >= ${ver_minor});
-        }
-      " libev_version_ok_result)
-      set(libev_version_found "${RUN_OUTPUT}")
-      cmake_reset_check_state()
+      if(NOT DEFINED LIBEV_MIN_VERSION_SATISFIED)
+        message(STATUS "Check if libev version >= ${LIBEV_MIN_VERSION}")
+        cmake_push_check_state(RESET)
+        set(CMAKE_REQUIRED_QUIET 1)
+        set(CMAKE_REQUIRED_INCLUDES "${libev_include_path}")
+        set(CMAKE_REQUIRED_LIBRARIES "${libev_lib_path}")
+        string(REGEX MATCH "^([0-9]+)\\.([0-9]+)$" libev_version_match "${LIBEV_MIN_VERSION}")
+        set(ver_major ${CMAKE_MATCH_1})
+        set(ver_minor ${CMAKE_MATCH_2})
+        check_c_source_runs("
+          #include <ev.h>
+          #include <stdio.h>
+          int main(void) {
+            printf(\"%d.%d\", (int)EV_VERSION_MAJOR, (int)EV_VERSION_MINOR);
+            return (EV_VERSION_MAJOR >= ${ver_major} && EV_VERSION_MINOR >= ${ver_minor}) ? 0 : 1;
+          }
+        " LIBEV_MIN_VERSION_SATISFIED)
+        set(LIBEV_MIN_VERSION_SATISFIED "${LIBEV_MIN_VERSION_SATISFIED}" CACHE INTERNAL "")
+        set(LIBEV_FOUND_VERSION "${RUN_OUTPUT}" CACHE INTERNAL "")
+        cmake_reset_check_state()
+        if(LIBEV_MIN_VERSION_SATISFIED)
+          message(STATUS "Check if libev version >= ${LIBEV_MIN_VERSION} - yes (${LIBEV_FOUND_VERSION})")
+        else()
+          message(STATUS "Check if libev version >= ${LIBEV_MIN_VERSION} - no (${LIBEV_FOUND_VERSION}). Will build it from source.")
+        endif()        
+      endif()
       
-      if(libev_version_ok_result)
-        message(STATUS "Check if libev version >= ${LIBEV_MIN_VERSION} - yes (${libev_version_found})")
+      if(LIBEV_MIN_VERSION_SATISFIED)
         target_require_package(shuttlesock PUBLIC ev QUIET)
       else()
-        message(STATUS "Check if libev version >= ${LIBEV_MIN_VERSION} - no (${libev_version_found}). Will build it from source.")
         set(STATIC_BUILD "YES")
       endif()
     else()
