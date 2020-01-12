@@ -35,8 +35,12 @@ class Opts
     def initialize(opts)
       @opts = opts
     end
-    def method_missing(*arg)
+    def DEFINE_OPTION(*arg)
       @opts.define_option(*arg)
+    end
+    
+    def method_missing(*arg)
+      DEFINE_OPTION(*arg)
     end
   end
   
@@ -452,8 +456,11 @@ rebuild = Opts.new do
   release_debug :debug_flag,
     build: "RelWithDebInfo"
   
-  self.test :debug_flag,
-    set: {run_test: true}
+  DEFINE_OPTION(:test, :debug_flag,
+    {
+      set: {run_test: true}
+    }
+  )
   
   test_selector :debug_flag, 
     display_as: "test_selector=<selector>",
