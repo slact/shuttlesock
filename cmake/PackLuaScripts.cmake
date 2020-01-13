@@ -6,9 +6,6 @@ set(packed_lua_scripts_config "" CACHE INTERNAL "packed lua scripts config" FORC
 set(LUA_VERSION_STRING "5.3")
 
 find_program(LUA_PROGRAM NAMES lua53 lua5.3 lua)
-if(NOT LUA_PROGRAM)
-  message(FATAL_ERROR "Could not find Lua program")
-endif()
 if(LUA_PROGRAM)
   execute_process(
     COMMAND "${LUA_PROGRAM}" -v
@@ -18,6 +15,16 @@ if(LUA_PROGRAM)
   if("${lua_version_match}" EQUAL "-1")
     message(FATAL_ERROR "Wrong Lua program version, expected ${LUA_VERSION_STRING}, got ${lua_output}")
   endif()
+else()
+  
+  include(ShuttlesockLua)
+  shuttlesock_build_lua("")
+  
+  set(HAVE_LUACHECK OFF)
+  set(SHUTTLESOCK_NO_LUAC_VERSION_CHECK ON)
+  
+  set(LUA_PROGRAM "${THIRDPARTY_PREFIX}/bin/lua")
+  set(LUAC_PROGRAM "${THIRDPARTY_PREFIX}/bin/luac")
 endif()
 
 if(NOT DEFINED HAVE_LUACHECK)
@@ -38,7 +45,7 @@ if(NOT DEFINED HAVE_LUACHECK)
   endif()
 endif()
 
-if(NOT SHUTTLESOCK_NO_LUAC)
+if(NOT SHUTTLESOCK_NO_LUAC OR SHUTTLESOCK_NO_LUAC_VERSION_CHECK)
   find_program(LUAC_PROGRAM NAMES luac53 luac5.3 luac)
 endif()
 if(LUAC_PROGRAM)
@@ -82,15 +89,19 @@ macro(pack_lua_script_internal module_name source_file)
     set(command_action "Compiling")
     set(compile_command ${LUAC_PROGRAM} -o ${CMAKE_CURRENT_BINARY_DIR}/${outfile} ${source_file})
     set(source_compiled "true")
+    set(command_deps "${LUA_PROGRAM};${LUAC_PROGRAM}")
   else()
     set(command_action "Including")
     set(compile_command ${CMAKE_COMMAND} -E copy "${source_file}" "${CMAKE_CURRENT_BINARY_DIR}/${outfile}")
     set(source_compiled "false")
+    set(command_deps "${LUA_PROGRAM}")
   endif()
   add_custom_command(OUTPUT ${outfile}
     COMMAND ${LUA_PROGRAM} cmake/PackLuaScripts.lua ${checkarg} "${source_file}"
     COMMAND ${compile_command}
-    DEPENDS ${source_file}
+    DEPENDS
+      ${source_file}
+      ${command_deps}
     WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
     COMMENT "${command_action}${command_check}${is_bundled} Lua ${script_kind} \"${module_name}\" ${source_file}"
   )
