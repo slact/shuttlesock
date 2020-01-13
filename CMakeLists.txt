@@ -119,8 +119,6 @@ add_executable(shuso_test
   test/test_utils.c
 )
 target_link_libraries(shuso_test PRIVATE shuttlesock)
-target_include_directories(shuso_test PRIVATE ${LUA_INCLUDE_DIR})
-target_link_libraries(shuso_test PRIVATE ${LUA_LIBRARIES})
 target_include_directories(shuso_test PRIVATE test)
 
 #set default log level

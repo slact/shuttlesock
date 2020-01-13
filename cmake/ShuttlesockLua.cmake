@@ -13,24 +13,11 @@ function(shuttlesock_link_lua STATIC_BUILD LUA_EXTRA_CFLAGS)
       target_include_directories(shuttlesock PUBLIC ${LUA_INCLUDE_DIR})
       target_link_libraries(shuttlesock PUBLIC ${LUA_LIBRARIES})
     else()
-      message(FATAL_ERROR "Failed to find Lua ${Lua_FIND_VERSION}")
+      message(STATUS "Could not find Lua ${Lua_FIND_VERSION}. Will build from source.")
+      set(STATIC_BUILD ON)
     endif()
-  else()
-    if(CMAKE_SYSTEM_NAME STREQUAL Linux)
-      set(LUA_BUILD_TARGET linux)
-        target_link_libraries(shuttlesock PRIVATE m) #lua links to libm on linux only
-    elseif(CMAKE_SYSTEM_NAME STREQUAL Darwin)
-      set(LUA_BUILD_TARGET macosx)
-    elseif(CMAKE_SYSTEM_NAME STREQUAL FreeBSD)
-      set(LUA_BUILD_TARGET freebsd)
-    elseif(CMAKE_SYSTEM_NAME STREQUAL Solaris)
-      set(LUA_BUILD_TARGET solaris)
-    elseif(CMAKE_SYSTEM_NAME STREQUAL BSD)
-      set(LUA_BUILD_TARGET bsd)
-    else()
-      set(LUA_BUILD_TARGET posix)
-    endif()
-    
+  endif()
+  if(STATIC_BUILD)
     #we want to see if Lua is installed locally to copy its package.path and package.cpath
     find_program(LUA_BINARY NAMES lua53 lua5.3 lua)
     if(LUA_BINARY)
@@ -54,36 +41,69 @@ function(shuttlesock_link_lua STATIC_BUILD LUA_EXTRA_CFLAGS)
       endif()
     endif()
     
-    set(LUA_PREFIX_DIR ${CMAKE_CURRENT_BINARY_DIR}/lua)
-    
-    include(ProcessorCount)
-    ProcessorCount(processor_count)
-    if(processor_count GREATER 1)
-      set(LUA_MAKE_PARALLEL_FLAG -j${processor_count})
-    endif()
-    
-    include(ExternalProject)
-    ExternalProject_Add(lua
-      URL "https://www.lua.org/ftp/lua-${LUA_RELEASE_VERSION}.tar.gz"
-      URL_MD5 "${LUA_RELEASE_MD5}"
-      DOWNLOAD_NO_PROGRESS 1
-      DOWNLOAD_DIR "${THIRDPARTY_DOWNLOAD}"
-      CONFIGURE_COMMAND ""
-      PREFIX ${LUA_PREFIX_DIR}
-      BUILD_COMMAND make 
-        "CC=${SHUTTLESOCK_SHARED_CC}"
-        "MYCFLAGS=${SHUTTLESOCK_SHARED_CFLAGS} -O${OPTIMIZE_LEVEL} ${LUA_EXTRA_CFLAGS} -fPIC -g -DLUA_COMPAT_5_2 -DLUA_COMPAT_5_1"
-        "MYLDFLAGS=${SHUTTLESOCK_SHARED_LDFLAGS}"
-        ${LUA_MAKE_PARALLEL_FLAG}
-        ${LUA_BUILD_TARGET}
-      INSTALL_COMMAND make "INSTALL_TOP=${THIRDPARTY_PREFIX}" install
-      BUILD_BYPRODUCTS ${THIRDPARTY_PREFIX}/lib/liblua.a
-      BUILD_IN_SOURCE 1
-    )
-    
+    shuttlesock_build_lua("${LUA_EXTRA_CFLAGS}")
     target_link_libraries(shuttlesock PUBLIC ${THIRDPARTY_PREFIX}/lib/liblua.a)
+    if(CMAKE_SYSTEM_NAME STREQUAL Linux)
+      target_link_libraries(shuttlesock PRIVATE m) #lua links to libm on linux only
+    endif()
     target_link_libraries(shuttlesock PRIVATE dl)
-    
-    add_dependencies(shuttlesock lua)
   endif()
+endfunction()
+
+function (shuttlesock_build_lua LUA_EXTRA_CFLAGS)
+  if(SHUTTLESOCK_BUILD_LUA)
+    #already building it
+    return()
+  else()
+    set(SHUTTLESOCK_BUILD_LUA ON CACHE INTERNAL "")
+  endif()
+  
+  if(CMAKE_SYSTEM_NAME STREQUAL Linux)
+    set(LUA_BUILD_TARGET linux)
+    target_link_libraries(shuttlesock PRIVATE m) #lua links to libm on linux only
+  elseif(CMAKE_SYSTEM_NAME STREQUAL Darwin)
+    set(LUA_BUILD_TARGET macosx)
+  elseif(CMAKE_SYSTEM_NAME STREQUAL FreeBSD)
+    set(LUA_BUILD_TARGET freebsd)
+  elseif(CMAKE_SYSTEM_NAME STREQUAL Solaris)
+    set(LUA_BUILD_TARGET solaris)
+  elseif(CMAKE_SYSTEM_NAME STREQUAL BSD)
+    set(LUA_BUILD_TARGET bsd)
+  else()
+    set(LUA_BUILD_TARGET posix)
+  endif()
+  
+  set(LUA_PREFIX_DIR ${CMAKE_CURRENT_BINARY_DIR}/lua)
+    
+  include(ProcessorCount)
+  ProcessorCount(processor_count)
+  if(processor_count GREATER 1)
+    set(LUA_MAKE_PARALLEL_FLAG -j${processor_count})
+  endif()
+  
+  include(ExternalProject)
+  ExternalProject_Add(lua
+    URL "https://www.lua.org/ftp/lua-${LUA_RELEASE_VERSION}.tar.gz"
+    URL_MD5 "${LUA_RELEASE_MD5}"
+    DOWNLOAD_NO_PROGRESS 1
+    DOWNLOAD_DIR "${THIRDPARTY_DOWNLOAD}"
+    CONFIGURE_COMMAND ""
+    PREFIX ${LUA_PREFIX_DIR}
+    BUILD_COMMAND make 
+      "CC=${SHUTTLESOCK_SHARED_CC}"
+      "MYCFLAGS=${SHUTTLESOCK_SHARED_CFLAGS} -O${OPTIMIZE_LEVEL} ${LUA_EXTRA_CFLAGS} -fPIC -g -DLUA_COMPAT_5_2 -DLUA_COMPAT_5_1"
+      "MYLDFLAGS=${SHUTTLESOCK_SHARED_LDFLAGS}"
+      ${LUA_MAKE_PARALLEL_FLAG}
+      ${LUA_BUILD_TARGET}
+    INSTALL_COMMAND make "INSTALL_TOP=${THIRDPARTY_PREFIX}" install
+    BUILD_BYPRODUCTS
+      ${THIRDPARTY_PREFIX}/lib/liblua.a
+      ${THIRDPARTY_PREFIX}/bin/lua
+      ${THIRDPARTY_PREFIX}/bin/luac
+      ${THIRDPARTY_PREFIX}/include/
+    BUILD_IN_SOURCE 1
+  )
+  
+  add_dependencies(shuttlesock lua)
+
 endfunction()
