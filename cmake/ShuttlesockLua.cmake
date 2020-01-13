@@ -41,7 +41,7 @@ function(shuttlesock_link_lua STATIC_BUILD LUA_EXTRA_CFLAGS)
       endif()
     endif()
     
-    shuttlesock_build_lua(LUA_EXTRA_CFLAGS)
+    shuttlesock_build_lua("${LUA_EXTRA_CFLAGS}")
     target_link_libraries(shuttlesock PUBLIC ${THIRDPARTY_PREFIX}/lib/liblua.a)
     if(CMAKE_SYSTEM_NAME STREQUAL Linux)
       target_link_libraries(shuttlesock PRIVATE m) #lua links to libm on linux only
