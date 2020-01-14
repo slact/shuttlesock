@@ -290,50 +290,6 @@ static int Lua_shuso_process_runstate(lua_State *L) {
   return 1;
 }
 
-/*
-static int Lua_shuso_spawn_manager(lua_State *L) {
-  shuso_t *S = shuso_state(L);
-  if(!shuso_spawn_manager(S)) {
-    return luaS_shuso_error(L);
-  }
-  lua_pushboolean(L, 1);
-  return 1;
-}
-static int Lua_shuso_stop_manager(lua_State *L) {
-  shuso_t      *S = shuso_state(L);
-  shuso_stop_t  lvl = stop_level_string_arg_to_enum(L, "ask", 1);
-  if(!shuso_stop_manager(S, lvl)) {
-    return luaS_shuso_error(L);
-  }
-  lua_pushboolean(L, 1);
-  return 1;
-}
-static int Lua_shuso_spawn_worker(lua_State *L) {
-  shuso_t    *S = shuso_state(L);
-  int         workernum = S->common->process.workers_end;
-  shuso_process_t   *proc = &S->common->process.worker[workernum];
-  if(!shuso_spawn_worker(S, proc)) {
-    return luaS_shuso_error(L);
-  }
-  lua_pushboolean(L, 1);
-  return 1;
-}
-static int Lua_shuso_stop_worker(lua_State *L) {
-  shuso_t     *S = shuso_state(L);
-  int          workernum = luaL_checkinteger(L, 1);
-  if(workernum < *S->common->process.workers_start || workernum > S->common->process.workers_end) {
-    return luaL_error(L, "invalid worker %d (valid range: %d-%d)", workernum, *S->common->process.workers_start, S->common->process.workers_end);
-  }
-  shuso_process_t   *proc = &S->common->process.worker[workernum];
-  shuso_stop_t       lvl = stop_level_string_arg_to_enum(L, "ask", 2);
-  if(!shuso_stop_worker(S, proc, lvl)) {
-    return luaS_shuso_error(L);
-  }
-  S->common->process.workers_end++;
-  lua_pushboolean(L, 1);
-  return 1;
-}*/
-
 static int Lua_shuso_set_log_fd(lua_State *L) {
   shuso_t       *S = shuso_state(L);
   luaL_Stream   *io = luaL_checkudata(L, 1, LUA_FILEHANDLE);

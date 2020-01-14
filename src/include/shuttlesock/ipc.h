@@ -95,8 +95,11 @@ typedef struct {
 #ifdef SHUTTLESOCK_DEBUG_IPC_RECEIVE_CHECK_TIMER
   shuso_ev_timer        receive_check;
 #endif
-  shuso_io_t           *sendio;
-  shuso_io_t            receive_io;
+  struct {
+    shuso_io_t            *send;
+    shuso_io_t             receive;
+    shuso_io_t             receive_fd;
+  }                     io;
   
   struct {
     shuso_ipc_outbuf_t   *first;

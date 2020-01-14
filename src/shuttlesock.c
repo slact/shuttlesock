@@ -330,19 +330,18 @@ bool shuso_spawn_manager(shuso_t *S) {
   ev_loop_fork(S->ev.loop);
   *S->process->state = SHUSO_STATE_RUNNING;
   *S->common->process.workers_start = 0;
-  *S->common->process.workers_end = *S->common->process.workers_start;
+  *S->common->process.workers_end = *S->common->process.workers_start + S->common->config.workers;
 #ifdef SHUTTLESOCK_DEBUG_NO_WORKER_THREADS
   shuso_log_notice(S, "SHUTTLESOCK_DEBUG_NO_WORKER_THREADS is enabled, workers will be started inside the manager without their own separate threads");
 #endif
   shuso_log_notice(S, "started %s", shuso_process_as_string(S->procnum));
-  for(int i=0; i<S->common->config.workers; i++) {
-    if(shuso_spawn_worker(S, &S->common->process.worker[i])) {
-      (*S->common->process.workers_end)++;
-    }
-    else {
+  
+  for(int i= *S->common->process.workers_start; i<*S->common->process.workers_end; i++) {
+    if(!shuso_spawn_worker(S, &S->common->process.worker[i])) {
       failed_worker_spawns ++;
     }
   }
+  *S->common->process.workers_end -= failed_worker_spawns;
   return failed_worker_spawns == 0;
 }
 

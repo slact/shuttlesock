@@ -115,6 +115,37 @@ bool shuso_ipc_channel_local_init(shuso_t *S) {
 #endif
   
   shuso_ev_io_init(S, &S->ipc.socket_transfer_receive, proc->ipc.socket_transfer_fd[0], EV_READ, ipc_socket_transfer_receive_cb, S->process);
+  
+  int out_count;
+  if(S->procnum == SHUTTLESOCK_MASTER) {
+    //manager only talks to the manager directly (well, and to itself..)
+    out_count = 2;
+  }
+  else if(S->procnum == SHUTTLESOCK_MANAGER) {
+    out_count = 2+SHUTTLESOCK_MAX_WORKERS;
+    //gotta be able to talk to everybody
+  }
+  else if(S->procnum >= SHUTTLESOCK_WORKER) {
+    out_count = *S->common->process.workers_end;
+  }
+  else {
+    abort();
+  }
+  shuso_io_t *io_send_array = shuso_stalloc(&S->stalloc, sizeof(shuso_io_t) * out_count);
+  if(!io_send_array) {
+    shuso_log_error(S, "failed to allocate shuso_io for IPC");
+    return false;
+  }
+  S->ipc.io.send = &io_send_array[-SHUTTLESOCK_MASTER];
+  
+  shuso_io_coroutine_start(S, &S->ipc.io.send[SHUTTLESOCK_MASTER], );
+  
+  
+  for(int i=*S->common->process.workers_start; i<*S->common->process.workers_end; i++) {
+    shuso_io_coroutine_start(S, );
+  }
+  
+  //TODO init io send & receive
   return true;
 }
 
