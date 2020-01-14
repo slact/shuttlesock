@@ -2,6 +2,7 @@
 #define SHUTTLESOCK_IPC_H
 #include <stdatomic.h>
 #include <shuttlesock/common.h>
+#include <shuttlesock/io.h>
 
 #define SHUTTLESOCK_IPC_CMD_NIL                   0
 
@@ -94,6 +95,9 @@ typedef struct {
 #ifdef SHUTTLESOCK_DEBUG_IPC_RECEIVE_CHECK_TIMER
   shuso_ev_timer        receive_check;
 #endif
+  shuso_io_t           *sendio;
+  shuso_io_t            receive_io;
+  
   struct {
     shuso_ipc_outbuf_t   *first;
     shuso_ipc_outbuf_t   *last;
