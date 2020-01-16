@@ -98,6 +98,18 @@ bool shuso_ipc_channel_shared_destroy(shuso_t *S, shuso_process_t *proc) {
   return true;
 }
 
+void ipc_send_coroutine(shuso_t *S, shuso_io_t *io) {
+  
+}
+void ipc_send_fd_coroutine(shuso_t *S, shuso_io_t *io) {
+  
+}
+
+static void ipc_channel_local_recv_coroutine_init(shuso_t *S, int procnum) {
+  shuso_io_coro_init(S, &S->ipc.io.send[procnum], S->common->process.worker[procnum].ipc.fd[1], ipc_send_coroutine, (void *)(intptr_t )procnum);
+  shuso_io_coro_init(S, &S->ipc.io.send[procnum], S->common->process.worker[procnum].ipc.socket_transfer_fd[1], ipc_send_fd_coroutine, (void *)(intptr_t )procnum);
+}
+
 bool shuso_ipc_channel_local_init(shuso_t *S) {
   shuso_process_t  *proc = S->process;
   shuso_ev_timer_init(S, &S->ipc.send_retry, 0.0, S->common->config.ipc.send_retry_delay, ipc_send_retry_cb, S->process);
@@ -138,14 +150,17 @@ bool shuso_ipc_channel_local_init(shuso_t *S) {
   }
   S->ipc.io.send = &io_send_array[-SHUTTLESOCK_MASTER];
   
-  shuso_io_coroutine_start(S, &S->ipc.io.send[SHUTTLESOCK_MASTER], );
+  ipc_channel_local_recv_coroutine_init(S, SHUTTLESOCK_MASTER);
+  ipc_channel_local_recv_coroutine_init(S, SHUTTLESOCK_MANAGER);
   
-  
-  for(int i=*S->common->process.workers_start; i<*S->common->process.workers_end; i++) {
-    shuso_io_coroutine_start(S, );
+  if(S->procnum == SHUTTLESOCK_MANAGER || S->procnum >= SHUTTLESOCK_WORKER) {
+    for(int i=*S->common->process.workers_start; i<*S->common->process.workers_end; i++) {
+      ipc_channel_local_recv_coroutine_init(S, i);
+    }
   }
   
-  //TODO init io send & receive
+  
+  
   return true;
 }
 

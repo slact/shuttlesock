@@ -7,7 +7,7 @@
 
 typedef struct shuso_io_s shuso_io_t;
 
-typedef void shuso_io_fn(shuso_t *S, shuso_io_t *io, int error);
+typedef void shuso_io_fn(shuso_t *S, shuso_io_t *io);
 
 typedef enum {
   SHUSO_IO_OP_READV,
@@ -24,11 +24,13 @@ struct shuso_io_s {
     struct msghdr  *msg;
     struct iovec   *iov;
     char           *buf;
+    void           *data;
   };
   union {
     int     iovcnt;
     size_t  len;
     int     flags;
+    int     int_data;
   };
   
   ssize_t           result;
@@ -43,7 +45,6 @@ struct shuso_io_s {
   unsigned          op_registered_memory_buffer:1;
   uint16_t          coroutine_stage;
 #ifdef SHUTTLESOCK_DEBUG_IO
-  shuso_fn_debug_info_t creator;
   shuso_fn_debug_info_t runner;
   shuso_fn_debug_info_t op_caller;
 #endif
@@ -56,11 +57,20 @@ struct shuso_io_s {
 #define SHUSO_IO_UNCHANGED_CALLBACK ((shuso_io_fn *)-1)
 #define SHUSO_IO_UNCHANGED_PRIVDATA ((void *)-1)
 
-void shuso_io_init_fd(shuso_t *S, shuso_io_t *io, int fd);
-void shuso_io_init_socket(shuso_t *S, shuso_io_t *io, shuso_socket_t *socket);
-void shuso_io_set_callback(shuso_io_t *io, shuso_io_fn *cb);
-void shuso_io_set_privdata(shuso_io_t *io, void *pd);
-
+#ifdef SHUTTLESOCK_DEBUG_IO
+#define shuso_io_coro_init(...) do { \
+  __shuso_io_coro_init(__VA_ARGS__); \
+  io->creator.name = __FUNCTION__; \
+  io->creator.file = __FILE__; \
+  io->creator.line = __LINE__; \
+} while(0)  
+#else
+#define shuso_io_coro_init(...) \
+  __shuso_io_coro_init(__VA_ARGS__)
+#endif
+  
+void __shuso_io_coro_init(shuso_t *S, shuso_io_t *io, int fd, shuso_io_fn *coro, void *privdata);
+void shuso_io_coro_resume(shuso_io_t *io, void *data, int int_data);
 
 void shuso_io_writev(shuso_io_t *io, struct iovec *iov, int iovcnt, shuso_io_fn *cb, void *pd);
 void shuso_io_readv(shuso_io_t *io, struct iovec *iov, int iovcnt, shuso_io_fn *cb, void *pd);
@@ -81,27 +91,6 @@ void shuso_io_sendmsg(shuso_io_t *io, struct msghdr *msg, int flags, shuso_io_fn
 void shuso_io_recvmsg(shuso_io_t *io, struct msghdr *msg, int flags, shuso_io_fn *cb, void *pd);
 
 void shuso_io_close(shuso_io_t *io);
-
-#ifdef SHUTTLESOCK_DEBUG_IO
-#define shuso_io_coro_init(shuso_state, io, filedes, coroutine_fn) do { \
-  *(io) = (shuso_io_t *) { \
-    creator.name = __FUNCTION__, \
-    creator.file = __FILE__, \
-    creator.line = __LINE__, \
-    S = shuso_state, \
-    callback = coroutine_fn, \
-    fd = filedes
-  } \
-} while(0)  
-#else
-#define shuso_io_coro_init(shuso_state, io, filedes, coroutine_fn) do { \
-  *(io) = (shuso_io_t *) { \
-    S = shuso_state, \
-    callback = coroutine_fn, \
-    fd = filedes \
-  } \
-} while(0)
-#endif
 
 
 #define ___SHUSO_IO_CORO_BEGIN(io) \

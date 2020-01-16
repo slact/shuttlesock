@@ -8,6 +8,26 @@
 #include <liburing.h>
 #endif
 
+void shuso_io_coro_init(shuso_t *S, shuso_io_t *io, int fd, shuso_io_fn *coro, void *privdata) {
+  *io = (shuso_io_t ){
+    .S = S,
+    .data = NULL,
+    .int_data = 0,
+    .result = 0,
+    .privdata = privdata,
+    .busy = false,
+    .coroutine_stage = 0,
+    .callback = coro,
+    .fd = fd
+  };
+}
+
+void shuso_io_coro_resume(shuso_io_t *io, void *data, int int_data) {
+  io->data = data;
+  io->int_data = int_data;
+  io->callback(io->S, io);
+}
+
 static size_t iovec_size(const struct iovec *iov, int iovcnt) {
   size_t sz = 0;
   for(int i=0; i<iovcnt; i++) {
@@ -122,7 +142,8 @@ static void shuso_io_ev_operation(shuso_io_t *io) {
   
   if(result_sz == -1) {
     //legit error happened
-    io->callback(io->S, io, errno);
+    io->result = errno;
+    io->callback(io->S, io);
     return;
   }
   
@@ -138,8 +159,8 @@ static void shuso_io_ev_operation(shuso_io_t *io) {
     retry_ev_operation(io);
     return;
   }
-  
-  io->callback(io->S, io, 0);
+  io->result = 0;
+  io->callback(io->S, io);
 }
 
 static void shuso_io_operation(shuso_io_t *io) {
