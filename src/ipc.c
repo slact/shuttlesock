@@ -98,7 +98,7 @@ bool shuso_ipc_channel_shared_destroy(shuso_t *S, shuso_process_t *proc) {
   return true;
 }
 
-void ipc_send_coroutine(shuso_t *S, shuso_io_t *io) {
+void ipc_send_ipc_notice_coroutine(shuso_t *S, shuso_io_t *io) {
   
 }
 void ipc_send_fd_coroutine(shuso_t *S, shuso_io_t *io) {
@@ -106,7 +106,7 @@ void ipc_send_fd_coroutine(shuso_t *S, shuso_io_t *io) {
 }
 
 static void ipc_channel_local_recv_coroutine_init(shuso_t *S, int procnum) {
-  shuso_io_coro_init(S, &S->ipc.io.send[procnum], S->common->process.worker[procnum].ipc.fd[1], ipc_send_coroutine, (void *)(intptr_t )procnum);
+  shuso_io_coro_init(S, &S->ipc.io.send[procnum], S->common->process.worker[procnum].ipc.fd[1], ipc_send_ipc_notice_coroutine, (void *)(intptr_t )procnum);
   shuso_io_coro_init(S, &S->ipc.io.send[procnum], S->common->process.worker[procnum].ipc.socket_transfer_fd[1], ipc_send_fd_coroutine, (void *)(intptr_t )procnum);
 }
 

@@ -8,7 +8,7 @@
 #include <liburing.h>
 #endif
 
-void shuso_io_coro_init(shuso_t *S, shuso_io_t *io, int fd, shuso_io_fn *coro, void *privdata) {
+void __shuso_io_coro_init(shuso_t *S, shuso_io_t *io, int fd, shuso_io_fn *coro, void *privdata) {
   *io = (shuso_io_t ){
     .S = S,
     .data = NULL,
@@ -22,9 +22,19 @@ void shuso_io_coro_init(shuso_t *S, shuso_io_t *io, int fd, shuso_io_fn *coro, v
   };
 }
 
-void shuso_io_coro_resume(shuso_io_t *io, void *data, int int_data) {
-  io->data = data;
-  io->int_data = int_data;
+void shuso_io_coro_resume_data(shuso_io_t *io, char *buf, size_t len) {
+  io->buf = buf;
+  io->len = len;
+  io->callback(io->S, io);
+}
+void shuso_io_coro_resume_iovec(shuso_io_t *io, struct iovec *iov, int iovcnt) {
+  io->iov = iov;
+  io->iovcnt = iovcnt;
+  io->callback(io->S, io);
+}
+void shuso_io_coro_resume_msg(shuso_io_t *io, struct msghdr *msg, int flags) {
+  io->msg = msg;
+  io->flags = flags;
   io->callback(io->S, io);
 }
 

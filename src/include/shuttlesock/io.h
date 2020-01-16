@@ -70,7 +70,20 @@ struct shuso_io_s {
 #endif
   
 void __shuso_io_coro_init(shuso_t *S, shuso_io_t *io, int fd, shuso_io_fn *coro, void *privdata);
-void shuso_io_coro_resume(shuso_io_t *io, void *data, int int_data);
+
+#define shuso_io_coro_resume(io, data, int_data) \
+_Generic((data), \
+  char *         : shuso_io_coro_resume_buf, \
+  void *         : shuso_io_coro_resume_buf, \
+  struct iovec * : shuso_io_coro_resume_iovec, \
+  struct msghdr *: shuso_io_coro_resume_msg \
+)(io, data, int_data)
+
+void shuso_io_coro_resume_buf(shuso_io_t *io, char *buf, size_t len);
+void shuso_io_coro_resume_iovec(shuso_io_t *io, struct iovec *iov, int iovcnt);
+void shuso_io_coro_resume_msg(shuso_io_t *io, struct msghdr *msg, int iovcnt);
+
+void shuso_io_buffered_coro_resume(shuso_io_t *io);
 
 void shuso_io_writev(shuso_io_t *io, struct iovec *iov, int iovcnt, shuso_io_fn *cb, void *pd);
 void shuso_io_readv(shuso_io_t *io, struct iovec *iov, int iovcnt, shuso_io_fn *cb, void *pd);
