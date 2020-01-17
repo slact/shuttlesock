@@ -11,8 +11,6 @@
 void __shuso_io_coro_init(shuso_t *S, shuso_io_t *io, int fd, shuso_io_fn *coro, void *privdata) {
   *io = (shuso_io_t ){
     .S = S,
-    .data = NULL,
-    .int_data = 0,
     .result = 0,
     .privdata = privdata,
     .busy = false,

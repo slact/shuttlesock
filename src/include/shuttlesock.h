@@ -19,6 +19,7 @@
 #include <shuttlesock/resolver.h>
 #include <shuttlesock/shared_slab.h>
 #include <shuttlesock/log.h>
+#include <shuttlesock/buffer.h>
 #include <shuttlesock/io.h>
 #include <shuttlesock/module.h>
 #include <shuttlesock/lua_utils.h>

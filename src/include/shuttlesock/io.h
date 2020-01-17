@@ -24,13 +24,11 @@ struct shuso_io_s {
     struct msghdr  *msg;
     struct iovec   *iov;
     char           *buf;
-    void           *data;
   };
   union {
     int     iovcnt;
     size_t  len;
     int     flags;
-    int     int_data;
   };
   
   ssize_t           result;
