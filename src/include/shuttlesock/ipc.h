@@ -91,14 +91,27 @@ typedef struct {
 } shuso_ipc_fd_receiver_t;
 
 typedef struct {
+  shuso_io_t            notice;
+  shuso_io_t            fd;
+} shuso_io_send_t;
+
+typedef struct {
+  shuso_io_t             notice;
+  union {
+    uint64_t               eventfd;
+    char                   pipe[16];
+  }                      buf;
+  shuso_io_t             fd;
+} shuso_io_receive_t;
+
+typedef struct {
   shuso_ev_timer        send_retry;
 #ifdef SHUTTLESOCK_DEBUG_IPC_RECEIVE_CHECK_TIMER
   shuso_ev_timer        receive_check;
 #endif
   struct {
-    shuso_io_t            *send;
-    shuso_io_t             receive;
-    shuso_io_t             receive_fd;
+    shuso_io_send_t       *send;
+    shuso_io_receive_t     receive;
   }                     io;
   
   struct {

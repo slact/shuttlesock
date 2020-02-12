@@ -23,11 +23,11 @@
 #endif
 
 static void ipc_send_retry_cb(shuso_loop *loop, shuso_ev_timer *w, int revents);
-static void ipc_receive_cb(shuso_loop *loop, shuso_ev_io *w, int revents);
+
 #ifdef SHUTTLESOCK_DEBUG_IPC_RECEIVE_CHECK_TIMER
 static void ipc_receive_check_cb(shuso_loop *loop, shuso_ev_timer *w, int revents);
 #endif
-static void ipc_socket_transfer_receive_cb(shuso_loop *loop, shuso_ev_io *w, int revents);
+static void ipc_receive(shuso_t *S, shuso_process_t *proc);
 
 bool shuso_ipc_channel_shared_create(shuso_t *S, shuso_process_t *proc) {
   int               procnum = shuso_process_to_procnum(S, proc);
@@ -99,15 +99,183 @@ bool shuso_ipc_channel_shared_destroy(shuso_t *S, shuso_process_t *proc) {
 }
 
 void ipc_send_ipc_notice_coroutine(shuso_t *S, shuso_io_t *io) {
-  
+#ifdef SHUTTLESOCK_HAVE_EVENTFD
+  static const uint64_t data = 1;
+#else
+  static const char data = 0;
+#endif
+  SHUSO_IO_CORO_BEGIN(io);
+
+  SHUSO_IO_CORO_YIELD(write, &data, sizeof(data));
+  assert(io->result == sizeof(data));
+  SHUSO_IO_CORO_END;
 }
+
 void ipc_send_fd_coroutine(shuso_t *S, shuso_io_t *io) {
+  SHUSO_IO_CORO_BEGIN(io);
+  //TODO
+  SHUSO_IO_CORO_END;
+}
+static void ipc_channel_local_send_coroutines_init(shuso_t *S, int procnum) {
+  
+  shuso_io_coro_init(S, &S->ipc.io.send[procnum].notice, SHUSO_IO_WRITE, S->common->process.worker[procnum].ipc.fd[1], ipc_send_ipc_notice_coroutine, (void *)(intptr_t )procnum);
+  shuso_io_coro_init(S, &S->ipc.io.send[procnum].fd, SHUSO_IO_WRITE, S->common->process.worker[procnum].ipc.socket_transfer_fd[1], ipc_send_fd_coroutine, (void *)(intptr_t )procnum);
+
+}
+
+void ipc_receive_notice_coroutine(shuso_t *S, shuso_io_t *io) {
+  shuso_process_t    *proc = S->process;
+  shuso_io_receive_t *receiver = io->privdata;
+  
+  SHUSO_IO_CORO_BEGIN(io);
+  
+  do {
+#ifdef SHUTTLESOCK_HAVE_EVENTFD
+    SHUSO_IO_CORO_YIELD(read_partial, &receiver->buf.eventfd, sizeof(receiver->buf.eventfd));
+#else
+    do {
+      SHUSO_IO_CORO_YIELD(read_partial, receiver->buf.pipe, sizeof(receiver->buf.pipe));
+    } while(io->result > 0);
+    if(io->error == EAGAIN || io->error = EWOULDBLOCK) {
+      io->error = 0;
+    }
+#endif
+    ipc_receive(S, proc);
+    
+  } while(!io->error);
+  
+  SHUSO_IO_CORO_END;
   
 }
 
-static void ipc_channel_local_recv_coroutine_init(shuso_t *S, int procnum) {
-  shuso_io_coro_init(S, &S->ipc.io.send[procnum], S->common->process.worker[procnum].ipc.fd[1], ipc_send_ipc_notice_coroutine, (void *)(intptr_t )procnum);
-  shuso_io_coro_init(S, &S->ipc.io.send[procnum], S->common->process.worker[procnum].ipc.socket_transfer_fd[1], ipc_send_fd_coroutine, (void *)(intptr_t )procnum);
+static void ipc_handle_received_socket(shuso_t *S, int fd, uintptr_t ref, void *pd) {
+  shuso_ipc_fd_receiver_t *found = NULL;
+  for(unsigned i=0; i<S->ipc.fd_receiver.count; i++) {
+    if(S->ipc.fd_receiver.array[i].ref == ref) {
+      found = &S->ipc.fd_receiver.array[i];
+      break;
+    }
+  }
+  assert(fd != -1);
+  if(!found) {
+    shuso_ipc_fd_receiver_t *reallocd = realloc(S->ipc.fd_receiver.array, sizeof(*reallocd) * (S->ipc.fd_receiver.count+1));
+    if(!reallocd) {
+      shuso_log_error(S, "failed to receive file descriptor: no memory for realloc()");
+      if(fd != -1) {
+        close(fd);
+      }
+      return;
+    }
+    S->ipc.fd_receiver.array = reallocd;
+    found = &reallocd[S->ipc.fd_receiver.count];
+    *found = (shuso_ipc_fd_receiver_t) {
+      .ref = ref,
+      .callback = NULL,
+      .pd = NULL,
+      .buffered_fds.array = NULL,
+      .buffered_fds.count = 0,
+      .description = "buffered sockets waiting to be received"
+    };
+    S->ipc.fd_receiver.count++;
+  }
+  if(found->callback) {
+    found->callback(S, SHUSO_OK, found->ref, fd, pd, found->pd);
+  }
+  else {
+    shuso_ipc_buffered_fd_t  *reallocd = realloc(found->buffered_fds.array, sizeof(*reallocd) * (found->buffered_fds.count+1));
+    if(reallocd == NULL) {
+      shuso_log_error(S, "failed to receive file descriptor: no memory for buffered fd");
+      if(fd != -1) {
+        close(fd);
+      }
+      return;
+    }
+    
+    found->buffered_fds.array = reallocd;
+    reallocd[found->buffered_fds.count] = (shuso_ipc_buffered_fd_t ) {.fd = fd, .pd = pd};
+    found->buffered_fds.count++;
+  }
+}
+
+void ipc_receive_msg_fd_coroutine(shuso_t *S, shuso_io_t *io) {
+  typedef struct {
+    struct msghdr           msg;
+    uintptr_t               iov_buf[2];
+    struct iovec            iov;
+    union {
+      //Ancillary data buffer, wrapped in a union in order to ensure it is suitably aligned
+      struct cmsghdr          align;
+      char                    buf[CMSG_SPACE(sizeof(int))];
+    };
+  } msghdr_buf_t;
+  
+  msghdr_buf_t    *msghdr_buf = io->privdata;
+  if(!msghdr_buf) {
+    msghdr_buf = calloc(1, sizeof(*msghdr_buf));
+    io->privdata = msghdr_buf;
+  }
+  
+  struct cmsghdr  *cmsg;
+  
+  int              fd;
+  uintptr_t        ref;
+  void            *pd;
+  
+  SHUSO_IO_CORO_BEGIN(io);
+  do {
+    
+    msghdr_buf->iov = (struct iovec){
+      .iov_base = msghdr_buf->iov_buf,
+      .iov_len = sizeof(msghdr_buf->iov_buf)
+    };
+    
+    msghdr_buf->msg = (struct msghdr){
+      .msg_name = NULL,
+      .msg_namelen = 0,
+      
+      .msg_iov = &msghdr_buf->iov,
+      .msg_iovlen = 1,
+      
+      .msg_control = msghdr_buf->buf,
+      .msg_controllen = sizeof(msghdr_buf->buf),
+      
+      .msg_flags = 0
+    };
+    
+    SHUSO_IO_CORO_YIELD(recvmsg, &msghdr_buf->msg, 0);
+    if(io->error) {
+      goto end_coroutine;
+    }
+    if(io->result == -1) {
+      shuso_set_error(S, "recvmsg failed with code (-1)");
+      continue;
+    }
+    cmsg = CMSG_FIRSTHDR(&msghdr_buf->msg);
+    if(cmsg == NULL || cmsg->cmsg_len != CMSG_LEN(sizeof(int))) {
+      shuso_set_error(S, "bad cmsghdr while receiving fd");
+      continue;
+    }
+    else if(cmsg->cmsg_level != SOL_SOCKET) {
+      shuso_set_error(S, "bad cmsg_level while receiving fd");
+      continue;
+    }
+    else if(cmsg->cmsg_type != SCM_RIGHTS) {
+      shuso_set_error(S, "bad cmsg_type while receiving fd");
+      continue;
+    }
+    
+    fd = *((int *)CMSG_DATA(cmsg));
+    ref = msghdr_buf->iov_buf[0];
+    pd = (void *)msghdr_buf->iov_buf[1];
+    ipc_handle_received_socket(S, fd, ref, pd);
+  } while(1);
+  
+end_coroutine:
+  if(msghdr_buf) {
+    free(msghdr_buf);
+    io->privdata = NULL;
+  }
+  SHUSO_IO_CORO_END;
 }
 
 bool shuso_ipc_channel_local_init(shuso_t *S) {
@@ -120,13 +288,15 @@ bool shuso_ipc_channel_local_init(shuso_t *S) {
   S->ipc.fd_receiver.count = 0;
   S->ipc.fd_receiver.array = NULL;
   
+int               recv_notice_fd;
 #ifdef SHUTTLESOCK_HAVE_EVENTFD
-  shuso_ev_io_init(S, &S->ipc.receive, proc->ipc.fd[1], EV_READ, ipc_receive_cb, S->process);
+  recv_notice_fd = proc->ipc.fd[1];
 #else
-  shuso_ev_io_init(S, &S->ipc.receive, proc->ipc.fd[0], EV_READ, ipc_receive_cb, S->process);
+  //receiving end of the pipe
+  recv_notice_fd = proc->ipc.fd[0];
 #endif
-  
-  shuso_ev_io_init(S, &S->ipc.socket_transfer_receive, proc->ipc.socket_transfer_fd[0], EV_READ, ipc_socket_transfer_receive_cb, S->process);
+  shuso_io_coro_init(S, &S->ipc.io.receive.notice, recv_notice_fd, SHUSO_IO_READ, ipc_receive_notice_coroutine, &S->ipc.io.receive);
+  shuso_io_coro_init(S, &S->ipc.io.receive.fd, proc->ipc.socket_transfer_fd[0], SHUSO_IO_READ, ipc_receive_msg_fd_coroutine, &S->ipc.io.receive);
   
   int out_count;
   if(S->procnum == SHUTTLESOCK_MASTER) {
@@ -143,23 +313,21 @@ bool shuso_ipc_channel_local_init(shuso_t *S) {
   else {
     abort();
   }
-  shuso_io_t *io_send_array = shuso_stalloc(&S->stalloc, sizeof(shuso_io_t) * out_count);
-  if(!io_send_array) {
+  S->ipc.io.send = shuso_stalloc(&S->stalloc, sizeof(*S->ipc.io.send) * out_count);
+  if(!S->ipc.io.send) {
     shuso_log_error(S, "failed to allocate shuso_io for IPC");
     return false;
   }
-  S->ipc.io.send = &io_send_array[-SHUTTLESOCK_MASTER];
+  S->ipc.io.send = &S->ipc.io.send[-SHUTTLESOCK_MASTER]; //index it so that worker 0 is at [0]
   
-  ipc_channel_local_recv_coroutine_init(S, SHUTTLESOCK_MASTER);
-  ipc_channel_local_recv_coroutine_init(S, SHUTTLESOCK_MANAGER);
+  ipc_channel_local_send_coroutines_init(S, SHUTTLESOCK_MASTER);
+  ipc_channel_local_send_coroutines_init(S, SHUTTLESOCK_MANAGER);
   
   if(S->procnum == SHUTTLESOCK_MANAGER || S->procnum >= SHUTTLESOCK_WORKER) {
     for(int i=*S->common->process.workers_start; i<*S->common->process.workers_end; i++) {
-      ipc_channel_local_recv_coroutine_init(S, i);
+      ipc_channel_local_send_coroutines_init(S, i);
     }
   }
-  
-  
   
   return true;
 }
@@ -186,7 +354,7 @@ bool shuso_ipc_channel_local_stop(shuso_t *S) {
   }
   S->ipc.buf.first = NULL;
   S->ipc.buf.last = NULL;
-  if(shuso_ev_active(&S->ipc.send_retry)) {
+  if(shuso_ev_active(&(S->ipc.send_retry))) {
     shuso_ev_timer_stop(S, &S->ipc.send_retry);
   }
   
@@ -615,152 +783,4 @@ bool shuso_ipc_receive_fd_finish(shuso_t *S, uintptr_t ref) {
     S->ipc.fd_receiver.count--;
   }
   return true;
-}
-
-static void ipc_receive_cb(shuso_loop *loop, shuso_ev_io *w, int revents) {
-  shuso_t            *S = shuso_state(loop, w);
-  shuso_process_t    *proc = shuso_ev_data(w);
-  
-#ifdef SHUTTLESOCK_HAVE_EVENTFD
-  uint64_t buf;
-  ssize_t readsize = read(proc->ipc.fd[1], &buf, sizeof(buf));
-  if(readsize <= 0) {
-    shuso_log_error(S, "ipc_receive callback got eventfd readsize %zd", readsize);
-  }
-#else
-  char buf[32];
-  ssize_t readsize = read(proc->ipc.fd[0], buf, sizeof(buf));
-  if(readsize <= 0) {
-    shuso_log_error(S, "ipc_receive callback got eventfd readsize %zd", readsize);
-  }
-#endif
-  
-  ipc_receive(S, proc);
-}
-
-
-static shuso_status_t shuso_recv_fd(shuso_t *S, int fd_channel, int *fd, uintptr_t *ref, void **pd) {
-  int       n;
-  uintptr_t buf[2];
-  struct iovec iov = {
-    .iov_base = buf,
-    .iov_len = sizeof(buf)
-  };
-  
-  union {
-    //Ancillary data buffer, wrapped in a union in order to ensure it is suitably aligned
-    char buf[CMSG_SPACE(sizeof(*fd))];
-    struct cmsghdr align;
-  } ancillary_buf;
-  
-  struct msghdr msg = {
-    .msg_name = NULL,
-    .msg_namelen = 0,
-    
-    .msg_iov = &iov,
-    .msg_iovlen = 1,
-    
-    .msg_control = ancillary_buf.buf,
-    .msg_controllen = sizeof(ancillary_buf.buf),
-    
-    .msg_flags = 0
-  };
-  do {
-    n = recvmsg(fd_channel, &msg, 0);
-  } while(n == -1 && errno == EINTR);
-  if(n == 0 || (n == -1 && (errno == EAGAIN || errno == EWOULDBLOCK))) {
-    //nothing to recv
-    return SHUSO_DEFERRED;
-  }
-  else if(n == -1) {
-    shuso_set_error(S, "recvmsg failed with code (-1)");
-    return SHUSO_FAIL;
-  }
-  assert(n == sizeof(buf));
-  
-  struct cmsghdr *cmsg = CMSG_FIRSTHDR(&msg);
-  if(cmsg == NULL || cmsg->cmsg_len != CMSG_LEN(sizeof(*fd))) {
-    shuso_set_error(S, "bad cmsghdr while receiving fd");
-    return SHUSO_FAIL;
-  }
-  else if(cmsg->cmsg_level != SOL_SOCKET) {
-    shuso_set_error(S, "bad cmsg_level while receiving fd");
-    return SHUSO_FAIL;
-  }
-  else if(cmsg->cmsg_type != SCM_RIGHTS) {
-    shuso_set_error(S, "bad cmsg_type while receiving fd");
-    return SHUSO_FAIL;
-  }
-  *fd = *((int *)CMSG_DATA(cmsg));
-  *ref = buf[0];
-  *pd = (void *)buf[1];
-  return SHUSO_OK;
-}
-
-static void ipc_socket_transfer_receive_cb(shuso_loop *loop, shuso_ev_io *w, int revents) {
-  shuso_t            *S = shuso_state(loop, w);
-  shuso_process_t    *proc = shuso_ev_data(w);
-  uintptr_t ref;
-  void     *pd;
-  int       fd = -1;
-  int       rc;
-  while(true) {
-    rc = shuso_recv_fd(S, proc->ipc.socket_transfer_fd[0], &fd, &ref, &pd);
-    if(rc == SHUSO_FAIL) {
-      shuso_log_error(S, "failed to receive file descriptor: recvmsg error");
-      //TODO: investigate the errno, decide if we should keep looping
-      //for now, just bail out
-      break;
-    }
-    else if(rc == SHUSO_DEFERRED) {
-      break;
-    }
-    
-    shuso_ipc_fd_receiver_t *found = NULL;
-    for(unsigned i=0; i<S->ipc.fd_receiver.count; i++) {
-      if(S->ipc.fd_receiver.array[i].ref == ref) {
-        found = &S->ipc.fd_receiver.array[i];
-        break;
-      }
-    }
-    assert(fd != -1);
-    if(!found) {
-      shuso_ipc_fd_receiver_t *reallocd = realloc(S->ipc.fd_receiver.array, sizeof(*reallocd) * (S->ipc.fd_receiver.count+1));
-      if(!reallocd) {
-        shuso_log_error(S, "failed to receive file descriptor: no memory for realloc()");
-        if(fd != -1) {
-          close(fd);
-        }
-        continue;
-      }
-      S->ipc.fd_receiver.array = reallocd;
-      found = &reallocd[S->ipc.fd_receiver.count];
-      *found = (shuso_ipc_fd_receiver_t) {
-        .ref = ref,
-        .callback = NULL,
-        .pd = NULL,
-        .buffered_fds.array = NULL,
-        .buffered_fds.count = 0,
-        .description = "buffered sockets waiting to be received"
-      };
-      S->ipc.fd_receiver.count++;
-    }
-    if(found->callback) {
-      found->callback(S, SHUSO_OK, found->ref, fd, pd, found->pd);
-    }
-    else {
-      shuso_ipc_buffered_fd_t  *reallocd = realloc(found->buffered_fds.array, sizeof(*reallocd) * (found->buffered_fds.count+1));
-      if(reallocd == NULL) {
-        shuso_log_error(S, "failed to receive file descriptor: no memory for buffered fd");
-        if(fd != -1) {
-          close(fd);
-        }
-        continue;
-      }
-      
-      found->buffered_fds.array = reallocd;
-      reallocd[found->buffered_fds.count] = (shuso_ipc_buffered_fd_t ) {.fd = fd, .pd = pd};
-      found->buffered_fds.count++;
-    }
-  }
 }
