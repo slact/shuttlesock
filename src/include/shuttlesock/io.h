@@ -4,12 +4,17 @@
 #include <shuttlesock/common.h>
 #include <sys/uio.h>
 #include <sys/socket.h>
+#include <unistd.h>
 
 typedef struct shuso_io_s shuso_io_t;
 
 typedef void shuso_io_fn(shuso_t *S, shuso_io_t *io);
 
+#define SHUSO_IO_READ 1
+#define SHUSO_IO_WRITE 2
+
 typedef enum {
+  SHUSO_IO_OP_NONE,
   SHUSO_IO_OP_READV,
   SHUSO_IO_OP_WRITEV,
   SHUSO_IO_OP_READ,
@@ -17,6 +22,15 @@ typedef enum {
   SHUSO_IO_OP_SENDMSG,
   SHUSO_IO_OP_RECVMSG
 } shuso_io_opcode_t;
+
+typedef enum {
+  SHUSO_IO_WATCH_NONE = 0,
+  SHUSO_IO_WATCH_OP_FINISH,
+  SHUSO_IO_WATCH_OP_RETRY,
+  SHUSO_IO_WATCH_POLL_READ,
+  SHUSO_IO_WATCH_POLL_WRITE,
+  SHUSO_IO_WATCH_POLL_READWRITE,
+} shuso_io_watch_type_t;
 
 struct shuso_io_s {
   int               fd;
@@ -32,15 +46,21 @@ struct shuso_io_s {
   };
   
   ssize_t           result;
+  int               error;
   void             *privdata;
   
   bool              busy;
   
   //everything else is private, more or less
-  uint8_t           op_code;
+  shuso_io_watch_type_t watch_type;
+  unsigned          readwrite:2;
+  unsigned          use_io_uring:1;
+  
   unsigned          op_io_vector:1;
   unsigned          op_repeat_to_completion:1;
   unsigned          op_registered_memory_buffer:1;
+  
+  uint8_t           op_code;
   uint16_t          coroutine_stage;
 #ifdef SHUTTLESOCK_DEBUG_IO
   shuso_fn_debug_info_t runner;
@@ -49,6 +69,7 @@ struct shuso_io_s {
   
   shuso_t          *S;
   shuso_io_fn      *callback;
+  
   shuso_ev_io       watcher;
 };
 
@@ -67,7 +88,11 @@ struct shuso_io_s {
   __shuso_io_coro_init(__VA_ARGS__)
 #endif
   
-void __shuso_io_coro_init(shuso_t *S, shuso_io_t *io, int fd, shuso_io_fn *coro, void *privdata);
+void __shuso_io_coro_init(shuso_t *S, shuso_io_t *io, int fd, int readwrite, shuso_io_fn *coro, void *privdata);
+
+#define shuso_io_coro_start(io, data, int_data) \
+  assert(io->coroutine_stage == 0); \
+  shuso_io_coro_resume(io, data, int_data)
 
 #define shuso_io_coro_resume(io, data, int_data) \
 _Generic((data), \
@@ -76,6 +101,8 @@ _Generic((data), \
   struct iovec * : shuso_io_coro_resume_iovec, \
   struct msghdr *: shuso_io_coro_resume_msg \
 )(io, data, int_data)
+
+bool shuso_io_coro_fresh(shuso_io_t *io);
 
 void shuso_io_coro_resume_buf(shuso_io_t *io, char *buf, size_t len);
 void shuso_io_coro_resume_iovec(shuso_io_t *io, struct iovec *iov, int iovcnt);
@@ -107,14 +134,13 @@ void shuso_io_close(shuso_io_t *io);
 #define ___SHUSO_IO_CORO_BEGIN(io) \
 shuso_io_t *___coroutine_io_struct = io; \
 switch(io->coroutine_stage) { \
-  case 0: {
+  case 0:
 
 #define ___SHUSO_IO_CORO_YIELD(io_operation, arg1, arg2) \
     ___coroutine_io_struct->coroutine_stage = __LINE__; \
     shuso_io_ ## io_operation (___coroutine_io_struct, arg1, arg2, SHUSO_IO_UNCHANGED_CALLBACK, SHUSO_IO_UNCHANGED_PRIVDATA); \
     return; \
-  } \
-  case __LINE__: {
+  case __LINE__:
 
 #ifdef SHUTTLESOCK_DEBUG_IO
 
@@ -125,9 +151,9 @@ switch(io->coroutine_stage) { \
   ___SHUSO_IO_CORO_BEGIN(io)
   
 #define SHUSO_IO_CORO_YIELD(io_operation, arg1, arg2) \
-  io->op_caller.name = __FUNCTION__; \
-  io->op_caller.file = __FILE__; \
-  io->op_caller.line = __LINE__;
+  ___coroutine_io_struct->op_caller.name = __FUNCTION__; \
+  ___coroutine_io_struct->op_caller.file = __FILE__; \
+  ___coroutine_io_struct->op_caller.line = __LINE__;
   ___SHUSO_IO_CORO_YIELD(io_operation, arg1, arg2)
 #else
   
@@ -136,11 +162,12 @@ switch(io->coroutine_stage) { \
   
 #define SHUSO_IO_CORO_YIELD(io_operation, arg1, arg2) \
   ___SHUSO_IO_CORO_YIELD(io_operation, arg1, arg2)
+
 #endif
 
 #define SHUSO_IO_CORO_END \
-  } \
-}
+} \
+___coroutine_io_struct->coroutine_stage = 0
   
 
 
