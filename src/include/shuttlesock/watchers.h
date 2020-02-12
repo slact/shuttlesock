@@ -68,7 +68,7 @@ _Static_assert(offsetof(shuso_ev_io, state) == offsetof(shuso_ev_child, state), 
 _Static_assert(offsetof(shuso_ev_io, state) == offsetof(shuso_ev_signal, state), "mismatching shuso_ev_* state offset");
 #endif
 
-#define shuso_ev_active(watcher) (ev_is_active(&(watcher)->ev) || ev_is_pending(&(watcher)->ev))
+#define shuso_ev_active(watcher) ev_is_active(&((watcher)->ev))
 
 shuso_t *shuso_state_from_ev_io(struct ev_loop *loop, shuso_ev_io *w);
 shuso_t *shuso_state_from_ev_timer(struct ev_loop *loop, shuso_ev_timer *w);
@@ -88,6 +88,30 @@ typedef void shuso_ev_timer_fn(shuso_loop *, shuso_ev_timer *, int);
 typedef void shuso_ev_child_fn(shuso_loop *, shuso_ev_child *, int);
 typedef void shuso_ev_signal_fn(shuso_loop *, shuso_ev_signal *, int);
 
+#define shuso_ev_init(S, watcher, ...) \
+  _Generic((watcher), \
+           shuso_ev_io *:     shuso_ev_io_init, \
+           shuso_ev_timer *:  shuso_ev_timer_init, \
+           shuso_ev_signal *: shuso_ev_signal_init, \
+           shuso_ev_child *:  shuso_ev_child_init \
+  )(S, watcher, __VA_ARGS__)
+
+#define shuso_ev_start(S, watcher) \
+  _Generic((watcher), \
+           shuso_ev_io *:     shuso_ev_io_start, \
+           shuso_ev_timer *:  shuso_ev_timer_start, \
+           shuso_ev_signal *: shuso_ev_signal_start, \
+           shuso_ev_child *:  shuso_ev_child_start \
+  )(S, watcher)
+
+#define shuso_ev_stop(S, watcher) \
+  _Generic((watcher), \
+           shuso_ev_io *:     shuso_ev_io_stop, \
+           shuso_ev_timer *:  shuso_ev_timer_stop, \
+           shuso_ev_signal *: shuso_ev_signal_stop, \
+           shuso_ev_child *:  shuso_ev_child_stop \
+  )(S, watcher)
+  
 // ev_io
 void shuso_ev_io_init(shuso_t *S, shuso_ev_io *w, int fd, int events, shuso_ev_io_fn *cb, void *pd);
 void shuso_ev_io_start(shuso_t *S, shuso_ev_io *w);
