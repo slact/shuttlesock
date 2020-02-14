@@ -130,6 +130,10 @@ void ipc_receive_notice_coroutine(shuso_t *S, shuso_io_t *io) {
   SHUSO_IO_CORO_BEGIN(io);
   
   do {
+    SHUSO_IO_CORO_YIELD(wait, SHUSO_IO_READ);
+    if(io->error == ECANCELED) {
+      continue;
+    }
 #ifdef SHUTTLESOCK_HAVE_EVENTFD
     SHUSO_IO_CORO_YIELD(read_partial, &receiver->buf.eventfd, sizeof(receiver->buf.eventfd));
 #else
@@ -140,8 +144,9 @@ void ipc_receive_notice_coroutine(shuso_t *S, shuso_io_t *io) {
       io->error = 0;
     }
 #endif
-    ipc_receive(S, proc);
-    
+    if(!io->error) {
+      ipc_receive(S, proc);
+    }
   } while(!io->error);
   
   SHUSO_IO_CORO_END;
@@ -242,6 +247,10 @@ void ipc_receive_msg_fd_coroutine(shuso_t *S, shuso_io_t *io) {
       .msg_flags = 0
     };
     
+    SHUSO_IO_CORO_YIELD(wait, SHUSO_IO_READ);
+    if(io->error) {
+      goto end_coroutine;
+    }
     SHUSO_IO_CORO_YIELD(recvmsg, &msghdr_buf->msg, 0);
     if(io->error) {
       goto end_coroutine;
@@ -333,16 +342,16 @@ int               recv_notice_fd;
 }
 
 bool shuso_ipc_channel_local_start(shuso_t *S) {
-  shuso_ev_io_start(S, &S->ipc.receive);
-  shuso_ev_io_start(S, &S->ipc.socket_transfer_receive);
+  shuso_io_coro_start(&S->ipc.io.receive.notice);
+  shuso_io_coro_start(&S->ipc.io.receive.fd);
 #ifdef SHUTTLESOCK_DEBUG_IPC_RECEIVE_CHECK_TIMER
   shuso_ev_timer_start(S, &S->ipc.receive_check);
 #endif
   return true;
 }
 bool shuso_ipc_channel_local_stop(shuso_t *S) {
-  shuso_ev_io_stop(S, &S->ipc.receive);
-  shuso_ev_io_stop(S, &S->ipc.socket_transfer_receive);
+  shuso_io_coro_stop(&S->ipc.io.receive.notice);
+  shuso_io_coro_stop(&S->ipc.io.receive.fd);
 #ifdef SHUTTLESOCK_DEBUG_IPC_RECEIVE_CHECK_TIMER
   shuso_ev_timer_stop(S, &S->ipc.receive_check);
 #endif
@@ -430,7 +439,9 @@ static bool ipc_send_direct(shuso_t *S, shuso_process_t *src, shuso_process_t *d
   buf->ptr[next] = ptr;
   buf->code[next] = code;
   ipc_release_write_index(S, buf);
-
+  
+  shuso_io_coro_resume(&S->ipc.io.send[dst->procnum].notice);
+/*
   ssize_t written;
 #ifdef SHUTTLESOCK_HAVE_EVENTFD
   static const uint64_t incr = 1;
@@ -441,6 +452,7 @@ static bool ipc_send_direct(shuso_t *S, shuso_process_t *src, shuso_process_t *d
   written = write(dst->ipc.fd[1], &code, 1);
   assert(written == 1);
 #endif
+*/
   return true;
 }
 

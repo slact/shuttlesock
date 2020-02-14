@@ -122,8 +122,6 @@ typedef struct {
     shuso_ipc_fd_receiver_t *array;
     size_t                count;
   }                     fd_receiver;
-  shuso_ev_io           receive;
-  shuso_ev_io           socket_transfer_receive;
 } shuso_ipc_channel_local_t;
 
 

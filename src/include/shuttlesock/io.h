@@ -47,11 +47,11 @@ struct shuso_io_s {
   
   ssize_t           result;
   int               error;
+  shuso_io_fn      *coroutine;
   void             *privdata;
   
-  bool              busy;
-  
   //everything else is private, more or less
+  shuso_io_opcode_t op_code;
   shuso_io_watch_type_t watch_type;
   unsigned          readwrite:2;
   unsigned          use_io_uring:1;
@@ -60,7 +60,6 @@ struct shuso_io_s {
   unsigned          op_repeat_to_completion:1;
   unsigned          op_registered_memory_buffer:1;
   
-  uint8_t           op_code;
   uint16_t          coroutine_stage;
 #ifdef SHUTTLESOCK_DEBUG_IO
   shuso_fn_debug_info_t runner;
@@ -68,13 +67,9 @@ struct shuso_io_s {
 #endif
   
   shuso_t          *S;
-  shuso_io_fn      *callback;
   
   shuso_ev_io       watcher;
 };
-
-#define SHUSO_IO_UNCHANGED_CALLBACK ((shuso_io_fn *)-1)
-#define SHUSO_IO_UNCHANGED_PRIVDATA ((void *)-1)
 
 #ifdef SHUTTLESOCK_DEBUG_IO
 #define shuso_io_coro_init(...) do { \
@@ -90,11 +85,22 @@ struct shuso_io_s {
   
 void __shuso_io_coro_init(shuso_t *S, shuso_io_t *io, int fd, int readwrite, shuso_io_fn *coro, void *privdata);
 
-#define shuso_io_coro_start(io, data, int_data) \
-  assert(io->coroutine_stage == 0); \
+#define ___SHUSO_IO_CORO_START_VARARG(_1,_2,_3,NAME,...) NAME
+#define shuso_io_coro_start(...) ___SHUSO_IO_CORO_START_VARARG(__VA_ARGS__, SHUSO_IO_CORO_START_3, SHUSO_IO_CORO_START_2, SHUSO_IO_CORO_START_1)(__VA_ARGS__)
+
+#define SHUSO_IO_CORO_START_3(io, data, int_data) \
+  assert((io)->coroutine_stage == 0); \
   shuso_io_coro_resume(io, data, int_data)
 
-#define shuso_io_coro_resume(io, data, int_data) \
+#define SHUSO_IO_CORO_START_1(io) \
+  assert((io)->coroutine_stage == 0); \
+  shuso_io_coro_resume_buf(io, NULL, 0)
+
+  
+#define ___SHUSO_IO_CORO_RESUME_VARARG(_1,_2,_3,NAME,...) NAME
+#define shuso_io_coro_resume(...) ___SHUSO_IO_CORO_RESUME_VARARG(__VA_ARGS__, SHUSO_IO_CORO_RESUME_3, SHUSO_IO_CORO_RESUME_2, SHUSO_IO_CORO_RESUME_1)(__VA_ARGS__)
+  
+#define SHUSO_IO_CORO_RESUME_3(io, data, int_data) \
 _Generic((data), \
   char *         : shuso_io_coro_resume_buf, \
   void *         : shuso_io_coro_resume_buf, \
@@ -102,43 +108,50 @@ _Generic((data), \
   struct msghdr *: shuso_io_coro_resume_msg \
 )(io, data, int_data)
 
+#define SHUSO_IO_CORO_RESUME_1(io) shuso_io_coro_resume_buf(io, NULL, 0)
+
 bool shuso_io_coro_fresh(shuso_io_t *io);
+
+void shuso_io_coro_stop(shuso_io_t *io);
 
 void shuso_io_coro_resume_buf(shuso_io_t *io, char *buf, size_t len);
 void shuso_io_coro_resume_iovec(shuso_io_t *io, struct iovec *iov, int iovcnt);
 void shuso_io_coro_resume_msg(shuso_io_t *io, struct msghdr *msg, int iovcnt);
 
-void shuso_io_buffered_coro_resume(shuso_io_t *io);
 
-void shuso_io_writev(shuso_io_t *io, struct iovec *iov, int iovcnt, shuso_io_fn *cb, void *pd);
-void shuso_io_readv(shuso_io_t *io, struct iovec *iov, int iovcnt, shuso_io_fn *cb, void *pd);
+void shuso_io_writev(shuso_io_t *io, struct iovec *iov, int iovcnt);
+void shuso_io_readv(shuso_io_t *io, struct iovec *iov, int iovcnt);
 
-void shuso_io_writev_partial(shuso_io_t *io, struct iovec *iov, int iovcnt, shuso_io_fn *cb, void *pd);
-void shuso_io_readv_partial(shuso_io_t *io, struct iovec *iov, int iovcnt, shuso_io_fn *cb, void *pd);
+void shuso_io_writev_partial(shuso_io_t *io, struct iovec *iov, int iovcnt);
+void shuso_io_readv_partial(shuso_io_t *io, struct iovec *iov, int iovcnt);
 
-void shuso_io_write(shuso_io_t *io, const void *buf, size_t len, shuso_io_fn *cb, void *pd);
-void shuso_io_read(shuso_io_t *io, void *buf, size_t len, shuso_io_fn *cb, void *pd);
+void shuso_io_write(shuso_io_t *io, const void *buf, size_t len);
+void shuso_io_read(shuso_io_t *io, void *buf, size_t len);
 
-void shuso_io_write_partial(shuso_io_t *io, const void *buf, size_t len, shuso_io_fn *cb, void *pd);
-void shuso_io_read_partial(shuso_io_t *io, void *buf, size_t len, shuso_io_fn *cb, void *pd);
+void shuso_io_write_partial(shuso_io_t *io, const void *buf, size_t len);
+void shuso_io_read_partial(shuso_io_t *io, void *buf, size_t len);
 
-void shuso_io_connect(shuso_io_t *io, const shuso_socket_t *socket, shuso_io_fn *cb, void *pd);
-void shuso_io_accept(shuso_io_t *io, shuso_socket_t *socket, shuso_io_fn *cb, void *pd);
+void shuso_io_connect(shuso_io_t *io, const shuso_socket_t *socket);
+void shuso_io_accept(shuso_io_t *io, shuso_socket_t *socket);
 
-void shuso_io_sendmsg(shuso_io_t *io, struct msghdr *msg, int flags, shuso_io_fn *cb, void *pd);
-void shuso_io_recvmsg(shuso_io_t *io, struct msghdr *msg, int flags, shuso_io_fn *cb, void *pd);
+void shuso_io_sendmsg(shuso_io_t *io, struct msghdr *msg, int flags);
+void shuso_io_recvmsg(shuso_io_t *io, struct msghdr *msg, int flags);
+
+void shuso_io_wait(shuso_io_t *io, int evflags);
 
 void shuso_io_close(shuso_io_t *io);
 
+
+#define SHUSO_IO_ERROR_HANDLER (___coroutine_io_struct->error_handler)
 
 #define ___SHUSO_IO_CORO_BEGIN(io) \
 shuso_io_t *___coroutine_io_struct = io; \
 switch(io->coroutine_stage) { \
   case 0:
 
-#define ___SHUSO_IO_CORO_YIELD(io_operation, arg1, arg2) \
+#define ___SHUSO_IO_CORO_YIELD(io_operation, ...) \
     ___coroutine_io_struct->coroutine_stage = __LINE__; \
-    shuso_io_ ## io_operation (___coroutine_io_struct, arg1, arg2, SHUSO_IO_UNCHANGED_CALLBACK, SHUSO_IO_UNCHANGED_PRIVDATA); \
+    shuso_io_ ## io_operation (___coroutine_io_struct, __VA_ARGS__); \
     return; \
   case __LINE__:
 
@@ -150,18 +163,18 @@ switch(io->coroutine_stage) { \
   io->runner.line = __LINE__; \
   ___SHUSO_IO_CORO_BEGIN(io)
   
-#define SHUSO_IO_CORO_YIELD(io_operation, arg1, arg2) \
+#define SHUSO_IO_CORO_YIELD(io_operation, ...) \
   ___coroutine_io_struct->op_caller.name = __FUNCTION__; \
   ___coroutine_io_struct->op_caller.file = __FILE__; \
-  ___coroutine_io_struct->op_caller.line = __LINE__;
-  ___SHUSO_IO_CORO_YIELD(io_operation, arg1, arg2)
+  ___coroutine_io_struct->op_caller.line = __LINE__; \
+  ___SHUSO_IO_CORO_YIELD(io_operation, __VA_ARGS__)
 #else
   
 #define SHUSO_IO_CORO_BEGIN(io) \
   ___SHUSO_IO_CORO_BEGIN(io)
   
-#define SHUSO_IO_CORO_YIELD(io_operation, arg1, arg2) \
-  ___SHUSO_IO_CORO_YIELD(io_operation, arg1, arg2)
+#define SHUSO_IO_CORO_YIELD(io_operation, ...) \
+  ___SHUSO_IO_CORO_YIELD(io_operation, __VA_ARGS__)
 
 #endif
 

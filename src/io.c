@@ -8,12 +8,40 @@
 #include <liburing.h>
 #endif
 
+#define log_io_debug(io, fmt, ...) \
+  shuso_log_debug(io->S, "io %p op %s w %s: " fmt, (void *)(io), io_op_str((io)->op_code), io_watch_type_str((io)->watch_type), __VA_ARGS__)
+
 static void shuso_io_ev_operation(shuso_io_t *io);
 static void io_coro_run(shuso_io_t *io);
 
 bool shuso_io_coro_fresh(shuso_io_t *io) {
-  return io->coroutine_stage && !io->busy;
+  return io->coroutine_stage == 0 && io->watch_type == SHUSO_IO_WATCH_NONE;
 }
+
+static char *io_op_str(shuso_io_opcode_t op) {
+  switch(op) {
+    case SHUSO_IO_OP_NONE:    return "none";
+    case SHUSO_IO_OP_READV:   return "readv";
+    case SHUSO_IO_OP_WRITEV:  return "writev";
+    case SHUSO_IO_OP_READ:    return "read";
+    case SHUSO_IO_OP_WRITE:   return "write";
+    case SHUSO_IO_OP_SENDMSG: return "sendmsg";
+    case SHUSO_IO_OP_RECVMSG: return "recvmsg";
+  }
+  return "???";
+}
+static char *io_watch_type_str(shuso_io_watch_type_t watchtype) {
+  switch(watchtype) {
+    case SHUSO_IO_WATCH_NONE:       return "none";
+    case SHUSO_IO_WATCH_OP_FINISH:  return "op_finish";
+    case SHUSO_IO_WATCH_OP_RETRY:   return "op_retry";
+    case SHUSO_IO_WATCH_POLL_READ:  return "poll_read";
+    case SHUSO_IO_WATCH_POLL_WRITE: return "poll_write";
+    case SHUSO_IO_WATCH_POLL_READWRITE: return "poll_readwrite";
+  }
+  return "???";
+}
+
 
 static void io_ev_watcher_handler(shuso_loop *loop, shuso_ev_io *ev, int evflags);
 
@@ -22,38 +50,37 @@ void __shuso_io_coro_init(shuso_t *S, shuso_io_t *io, int fd, int readwrite, shu
     .S = S,
 #ifdef SHUTTLESOCK_HAVE_IO_URING
     .use_io_uring = S->io_uring.on,
+#else
+    .use_io_uring = 0,
 #endif
     .result = 0,
     .privdata = privdata,
-    .busy = false,
     .coroutine_stage = 0,
-    .callback = coro,
+    .coroutine = coro,
     .fd = fd,
     .watch_type = SHUSO_IO_WATCH_NONE,
     .error = 0,
     .readwrite = readwrite
   };
   
-#ifdef SHUTTLESOCK_HAVE_IO_URING
   if(io->use_io_uring) {
     //TODO: initialize io_uring fd watcher
-    return;
   }
-#endif
-
-  int events = 0;
-  if(io->readwrite & SHUSO_IO_READ) {
-    events |= SHUSO_IO_READ;
+  else {
+    int events = 0;
+    if(io->readwrite & SHUSO_IO_READ) {
+      events |= SHUSO_IO_READ;
+    }
+    if(io->readwrite & SHUSO_IO_WRITE) {
+      events |= SHUSO_IO_WRITE;
+    }
+    shuso_ev_init(io->S, &io->watcher, io->fd, events, io_ev_watcher_handler, io);
   }
-  if(io->readwrite & SHUSO_IO_WRITE) {
-    events |= SHUSO_IO_WRITE;
-  }
-  shuso_ev_init(io->S, &io->watcher, io->fd, events, io_ev_watcher_handler, io);
-  
 }
 
 static void io_ev_watcher_handler(shuso_loop *loop, shuso_ev_io *ev, int evflags) {
   shuso_io_t *io = shuso_ev_data(ev);
+  log_io_debug(io, "%s", "io_ev_watcher_handler");
   switch(io->watch_type) {
     
     case SHUSO_IO_WATCH_NONE:
@@ -91,51 +118,54 @@ static void io_ev_watcher_handler(shuso_loop *loop, shuso_ev_io *ev, int evflags
     case SHUSO_IO_WATCH_POLL_READ:
       if(evflags & EV_READ) {
         io->watch_type = SHUSO_IO_WATCH_NONE;
-        io_coro_run(io);
+        io->coroutine(io->S, io);
       }
       break;
     
     case SHUSO_IO_WATCH_POLL_WRITE:
       if(evflags & EV_WRITE) {
         io->watch_type = SHUSO_IO_WATCH_NONE;
-        io_coro_run(io);
+        io->coroutine(io->S, io);
       }
       break;
     
     case SHUSO_IO_WATCH_POLL_READWRITE:
       io->watch_type = SHUSO_IO_WATCH_NONE;
-      io_coro_run(io);
+      io->coroutine(io->S, io);
       break;
   }
 }
 
 static void io_coro_run(shuso_io_t *io) {
-  io->callback(io->S, io);
+  log_io_debug(io, "%s", "io_coro_run");
+  io->coroutine(io->S, io);
   if(io->watch_type != SHUSO_IO_WATCH_NONE) {
-#ifdef SHUTTLESOCK_HAVE_IO_URING
     if(io->use_io_uring) {
       //TODO: run io_uring fd poll maybe?
-      return;
     }
-#endif
-    //libev fd poll watcher
-    if(!shuso_ev_active(&io->watcher)) {
-      shuso_ev_start(io->S, &io->watcher);
+    else {
+      //libev fd poll watcher
+      if(!shuso_ev_active(&io->watcher)) {
+        shuso_ev_start(io->S, &io->watcher);
+      }
     }
   }
 }
 
-void shuso_io_coro_resume_data(shuso_io_t *io, char *buf, size_t len) {
+void shuso_io_coro_resume_buf(shuso_io_t *io, char *buf, size_t len) {
+  log_io_debug(io, "%s", "resume buf");
   io->buf = buf;
   io->len = len;
   io_coro_run(io);
 }
 void shuso_io_coro_resume_iovec(shuso_io_t *io, struct iovec *iov, int iovcnt) {
+  log_io_debug(io, "%s", "resume iovec");
   io->iov = iov;
   io->iovcnt = iovcnt;
   io_coro_run(io);
 }
 void shuso_io_coro_resume_msg(shuso_io_t *io, struct msghdr *msg, int flags) {
+  log_io_debug(io, "%s", "resume msg");
   io->msg = msg;
   io->flags = flags;
   io_coro_run(io);
@@ -170,6 +200,7 @@ static void retry_ev_operation(shuso_io_t *io) {
 }
 
 static void shuso_io_ev_operation(shuso_io_t *io) {
+  log_io_debug(io, "%s", "io_ev_operation");
   ssize_t required_sz;
   if(io->op_repeat_to_completion) {
     required_sz = io->op_io_vector ? iovec_size(io->iov, io->iovcnt) : io->len;
@@ -216,7 +247,7 @@ static void shuso_io_ev_operation(shuso_io_t *io) {
     //legit error happened
     io->result = -1;
     io->error = errno;
-    io->callback(io->S, io);
+    io->coroutine(io->S, io);
     return;
   }
   
@@ -232,8 +263,7 @@ static void shuso_io_ev_operation(shuso_io_t *io) {
     retry_ev_operation(io);
     return;
   }
-  io->result = 0;
-  io->callback(io->S, io);
+  io->coroutine(io->S, io);
 }
 
 static void shuso_io_operation(shuso_io_t *io) {
@@ -251,25 +281,19 @@ static void shuso_io_operation(shuso_io_t *io) {
       break;
   }
 #endif
-#ifdef SHUTTLESOCK_HAVE_IO_URING
   if(io->use_io_uring) {
     //do io_uring stuff
-    return;
   }
-#endif
-  shuso_io_ev_operation(io);
+  else {
+    shuso_io_ev_operation(io);
+  }
 }
 
-static void io_op_run(shuso_io_t *io, shuso_io_fn *cb, void *pd, int opcode, void *init_buf, ssize_t init_len, bool partial, bool registered) {
-  assert(!io->busy);
-  if(cb != SHUSO_IO_UNCHANGED_CALLBACK) {
-    io->callback = cb;
-  }
-  if(pd != SHUSO_IO_UNCHANGED_PRIVDATA) {
-    io->privdata = pd;
-  }
+static void io_op_run_new(shuso_io_t *io, int opcode, void *init_buf, ssize_t init_len, bool partial, bool registered) {
+  assert(io->watch_type == SHUSO_IO_WATCH_NONE);
   
   io->result = 0;
+  io->error = 0;
   io->op_code = opcode;
   if(opcode == SHUSO_IO_OP_READV || opcode == SHUSO_IO_OP_WRITEV) {
     io->op_io_vector = true;
@@ -286,37 +310,79 @@ static void io_op_run(shuso_io_t *io, shuso_io_fn *cb, void *pd, int opcode, voi
   
   shuso_io_operation(io);
 }
+
+void shuso_io_coro_stop(shuso_io_t *io) {
+  switch(io->watch_type) {
+    case SHUSO_IO_WATCH_NONE:
+      break;
+    case SHUSO_IO_WATCH_OP_FINISH:
+    case SHUSO_IO_WATCH_OP_RETRY:
+    case SHUSO_IO_WATCH_POLL_READ:
+    case SHUSO_IO_WATCH_POLL_WRITE:
+    case SHUSO_IO_WATCH_POLL_READWRITE:
+      io->watch_type = SHUSO_IO_WATCH_NONE;
+      io->result = -1;
+      io->error = ECANCELED;
+      io->coroutine(io->S, io);
+  }
+    if(io->use_io_uring) {
+      //TODO: stop io_uring fd poll
+    }
+    else {
+      //libev fd poll watcher
+      if(shuso_ev_active(&io->watcher)) {
+        shuso_ev_stop(io->S, &io->watcher);
+      }
+    }
   
-void shuso_io_writev_partial(shuso_io_t *io, struct iovec *iov, int iovcnt, shuso_io_fn *cb, void *pd) {
-  io_op_run(io, cb, pd, SHUSO_IO_OP_WRITEV, iov, iovcnt, true, false);
-}
-void shuso_io_writev(shuso_io_t *io, struct iovec *iov, int iovcnt, shuso_io_fn *cb, void *pd) {
-  io_op_run(io, cb, pd, SHUSO_IO_OP_WRITEV, iov, iovcnt, false, false);
-}
-void shuso_io_readv_partial(shuso_io_t *io, struct iovec *iov, int iovcnt, shuso_io_fn *cb, void *pd) {
-  io_op_run(io, cb, pd, SHUSO_IO_OP_READV, iov, iovcnt, true, false);
-}
-void shuso_io_readv(shuso_io_t *io, struct iovec *iov, int iovcnt, shuso_io_fn *cb, void *pd) {
-  io_op_run(io, cb, pd, SHUSO_IO_OP_READV, iov, iovcnt, false, false);
+  //STOP IT!
 }
 
-void shuso_io_write_partial(shuso_io_t *io, const void *buf, size_t len, shuso_io_fn *cb, void *pd) {
-  io_op_run(io, cb, pd, SHUSO_IO_OP_WRITE, (void *)buf, len, true, false);
-}
-void shuso_io_write(shuso_io_t *io, const void *buf, size_t len, shuso_io_fn *cb, void *pd) {
-  io_op_run(io, cb, pd, SHUSO_IO_OP_WRITE, (void *)buf, len, false, false);
-}
-void shuso_io_read_partial(shuso_io_t *io, void *buf, size_t len, shuso_io_fn *cb, void *pd) {
-  io_op_run(io, cb, pd, SHUSO_IO_OP_READ, buf, len, true, false);
-}
-void shuso_io_read(shuso_io_t *io, void *buf, size_t len, shuso_io_fn *cb, void *pd) {
-  io_op_run(io, cb, pd, SHUSO_IO_OP_READ, buf, len, false, false);
+void shuso_io_wait(shuso_io_t *io, int evflags) {
+  assert(io->watch_type == SHUSO_IO_WATCH_NONE);
+  switch(evflags) {
+    case SHUSO_IO_READ | SHUSO_IO_WRITE :
+      io->watch_type = SHUSO_IO_WATCH_POLL_READWRITE;
+      break;
+    case SHUSO_IO_READ:
+      io->watch_type = SHUSO_IO_WATCH_POLL_READ;
+      break;
+    case SHUSO_IO_WRITE:
+      io->watch_type = SHUSO_IO_WATCH_POLL_WRITE;
+      break;
+  }
 }
 
-void shuso_io_sendmsg(shuso_io_t *io, struct msghdr *msg, int flags, shuso_io_fn *cb, void *pd) {
-  io_op_run(io, cb, pd, SHUSO_IO_OP_SENDMSG, msg, flags, false, false);
+void shuso_io_writev_partial(shuso_io_t *io, struct iovec *iov, int iovcnt) {
+  io_op_run_new(io, SHUSO_IO_OP_WRITEV, iov, iovcnt, true, false);
 }
-void shuso_io_recvmsg(shuso_io_t *io, struct msghdr *msg, int flags, shuso_io_fn *cb, void *pd) {
-  io_op_run(io, cb, pd, SHUSO_IO_OP_RECVMSG, msg, flags, false, false);
+void shuso_io_writev(shuso_io_t *io, struct iovec *iov, int iovcnt) {
+  io_op_run_new(io, SHUSO_IO_OP_WRITEV, iov, iovcnt, false, false);
+}
+void shuso_io_readv_partial(shuso_io_t *io, struct iovec *iov, int iovcnt) {
+  io_op_run_new(io, SHUSO_IO_OP_READV, iov, iovcnt, true, false);
+}
+void shuso_io_readv(shuso_io_t *io, struct iovec *iov, int iovcnt) {
+  io_op_run_new(io, SHUSO_IO_OP_READV, iov, iovcnt, false, false);
+}
+
+void shuso_io_write_partial(shuso_io_t *io, const void *buf, size_t len) {
+  io_op_run_new(io, SHUSO_IO_OP_WRITE, (void *)buf, len, true, false);
+}
+void shuso_io_write(shuso_io_t *io, const void *buf, size_t len) {
+  io_op_run_new(io, SHUSO_IO_OP_WRITE, (void *)buf, len, false, false);
+}
+void shuso_io_read_partial(shuso_io_t *io, void *buf, size_t len) {
+  io_op_run_new(io, SHUSO_IO_OP_READ, buf, len, true, false);
+}
+void shuso_io_read(shuso_io_t *io, void *buf, size_t len) {
+  io_op_run_new(io, SHUSO_IO_OP_READ, buf, len, false, false);
+}
+
+void shuso_io_sendmsg(shuso_io_t *io, struct msghdr *msg, int flags) {
+  io_op_run_new(io, SHUSO_IO_OP_SENDMSG, msg, flags, false, false);
+}
+void shuso_io_recvmsg(shuso_io_t *io, struct msghdr *msg, int flags) {
+  io_op_run_new(io, SHUSO_IO_OP_RECVMSG, msg, flags, false, false);
 }
 
