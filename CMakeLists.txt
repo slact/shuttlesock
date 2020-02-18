@@ -6,8 +6,6 @@ include(SetProjectCompiler)
 project(shuttlesock LANGUAGES "C" VERSION 0.0.1)
 set(DESCRIPTION "speedy server library with a focus on moving sockets between processes")
 
-
-
 include(PaddedVersionNumber)
 padded_version_number(shuttlesock_VERSION_PADDED shuttlesock)
 
@@ -68,6 +66,9 @@ shuttlesock_test_features(
     STRSIGNAL             SHUTTLESOCK_HAVE_STRSIGNAL
     HYPERSCAN             SHUTTLESOCK_HAVE_HYPERSCAN
 )
+
+#set default max number of workers
+set(SHUTTLESOCK_MAX_WORKERS 8 CACHE INTERNAL "max number of workers")
 
 #pthreads
 set(THREADS_PREFER_PTHREAD_FLAG ON)
