@@ -333,7 +333,7 @@ static bool handle_lua_ipc_message(shuso_t *S, shuso_ipc_lua_data_t *d) {
 static void lua_ipc_handler(shuso_t *S, const uint8_t code, void *ptr) {
   shuso_ipc_lua_data_t  *d = ptr;
   d->success = true;
-  shuso_process_t *sender = shuso_procnum_to_process(S, d->origin_procnum);
+  shuso_process_t *sender = shuso_process(S, d->origin_procnum);
   shuso_ipc_send(S, sender, SHUTTLESOCK_IPC_CMD_LUA_MESSAGE_RESPONSE, d);
   handle_lua_ipc_message(S, d);
 }
@@ -419,7 +419,7 @@ int luaS_ipc_send_message(lua_State *L) {
   bool                   data_packed_here = false;
   bool                   processes_share_heap = true;
   shuso_t               *S = shuso_state(L);
-  shuso_process_t       *dst_proc = shuso_procnum_to_process(S, dst);
+  shuso_process_t       *dst_proc = shuso_process(S, dst);
   assert(top == 5);
   shuso_ipc_lua_data_t  *data;
   if(lua_isnil(L, 2)) {
@@ -496,12 +496,12 @@ static void lua_ipc_manager_proxy_handler(shuso_t *S, const uint8_t code, void *
   shuso_lua_ipc_proxy_msg_t *d = ptr;
   shuso_process_t *dst_proc;
   if(d->code == SHUTTLESOCK_IPC_CMD_LUA_MESSAGE) {
-    dst_proc = shuso_procnum_to_process(S, d->dst);
+    dst_proc = shuso_process(S, d->dst);
   }
   else {
     assert(d->code == SHUTTLESOCK_IPC_CMD_LUA_MESSAGE_RESPONSE);
     assert(d->data->success);
-    dst_proc = shuso_procnum_to_process(S, d->src);
+    dst_proc = shuso_process(S, d->src);
   }
     
   if(!shuso_ipc_send(S, dst_proc, SHUTTLESOCK_IPC_CMD_LUA_MANAGER_RECEIVE_PROXIED_MESSAGE, d)) {
