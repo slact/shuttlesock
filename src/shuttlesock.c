@@ -429,7 +429,7 @@ bool shuso_run(shuso_t *S) {
   }
   
   if(!(shuso_resolver_initialized = shuso_resolver_init(S, &S->common->config, &S->resolver))) {
-    err = "failed to spawn manager process";
+    err = "failed to initialize resolver shared DNS resolver";
     goto fail;
   }
   
