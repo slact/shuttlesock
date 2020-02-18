@@ -840,7 +840,7 @@ bool shuso_procnum_valid(shuso_t *S, int procnum, const char **err) {
   return true;
 }
 
-shuso_process_t *shuso_procnum_to_process(shuso_t *S, int procnum) {
+shuso_process_t *shuso_process(shuso_t *S, int procnum) {
  if(procnum < SHUTTLESOCK_MASTER || procnum > SHUTTLESOCK_MAX_WORKERS) {
    return NULL;
  }
