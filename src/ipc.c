@@ -33,6 +33,8 @@ bool shuso_ipc_channel_shared_create(shuso_t *S, shuso_process_t *proc) {
   int               procnum = shuso_process_to_procnum(S, proc);
   void             *ptr;
   
+  assert(proc->ipc.buf == NULL);
+  
   if(procnum == SHUTTLESOCK_MASTER || procnum == SHUTTLESOCK_MANAGER) {
     ptr = mmap(NULL, sizeof(shuso_ipc_ringbuf_t), PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_SHARED,-1, 0);
   }
@@ -58,6 +60,7 @@ bool shuso_ipc_channel_shared_create(shuso_t *S, shuso_process_t *proc) {
   fcntl(fds[0], F_SETFL, O_NONBLOCK);
   fcntl(fds[1], F_SETFL, O_NONBLOCK);
 #endif
+  
   proc->ipc.fd[0] = fds[0];
   proc->ipc.fd[1] = fds[1];
   
@@ -105,7 +108,6 @@ void ipc_send_ipc_notice_coroutine(shuso_t *S, shuso_io_t *io) {
   static const char data = 0;
 #endif
   SHUSO_IO_CORO_BEGIN(io);
-
   SHUSO_IO_CORO_YIELD(write, &data, sizeof(data));
   assert(io->result == sizeof(data));
   SHUSO_IO_CORO_END(io);
@@ -117,10 +119,13 @@ void ipc_send_fd_coroutine(shuso_t *S, shuso_io_t *io) {
   SHUSO_IO_CORO_END(io);
 }
 static void ipc_channel_local_send_coroutines_init(shuso_t *S, int procnum) {
+  shuso_process_t *dstproc = shuso_process(S, procnum);
+  shuso_io_send_t *send = &S->ipc.io.send[procnum];
   
-  shuso_io_coro_init(S, &S->ipc.io.send[procnum].notice, SHUSO_IO_WRITE, S->common->process.worker[procnum].ipc.fd[1], ipc_send_ipc_notice_coroutine, (void *)(intptr_t )procnum);
-  shuso_io_coro_init(S, &S->ipc.io.send[procnum].fd, SHUSO_IO_WRITE, S->common->process.worker[procnum].ipc.socket_transfer_fd[1], ipc_send_fd_coroutine, (void *)(intptr_t )procnum);
-
+  assert(dstproc);
+  
+  shuso_io_coro_init(S, &send->notice, dstproc->ipc.fd[1], SHUSO_IO_WRITE, ipc_send_ipc_notice_coroutine, (void *)(intptr_t )procnum);
+  shuso_io_coro_init(S, &send->fd, dstproc->ipc.socket_transfer_fd[1], SHUSO_IO_WRITE, ipc_send_fd_coroutine, (void *)(intptr_t )procnum);
 }
 
 void ipc_receive_notice_coroutine(shuso_t *S, shuso_io_t *io) {
@@ -130,18 +135,18 @@ void ipc_receive_notice_coroutine(shuso_t *S, shuso_io_t *io) {
   SHUSO_IO_CORO_BEGIN(io);
   
   do {
-    SHUSO_IO_CORO_YIELD(wait, SHUSO_IO_READ);
-    if(io->error == ECANCELED) {
-      continue;
-    }
 #ifdef SHUTTLESOCK_HAVE_EVENTFD
-    SHUSO_IO_CORO_YIELD(read_partial, &receiver->buf.eventfd, sizeof(receiver->buf.eventfd));
+    SHUSO_IO_CORO_YIELD(read, &receiver->buf.eventfd, sizeof(receiver->buf.eventfd));
 #else
     do {
+      //eat up everything in the buffer. we don't care about the contents, only that it must all be consumed
       SHUSO_IO_CORO_YIELD(read_partial, receiver->buf.pipe, sizeof(receiver->buf.pipe));
     } while(io->result > 0);
     if(io->error == EAGAIN || io->error = EWOULDBLOCK) {
-      io->error = 0;
+      SHUSO_IO_CORO_YIELD(wait, SHUSO_IO_READ);
+      if(io->error == ECANCELED) {
+        continue;
+      }
     }
 #endif
     if(!io->error) {
@@ -304,22 +309,15 @@ int               recv_notice_fd;
   recv_notice_fd = proc->ipc.fd[0];
 #endif
   shuso_io_coro_init(S, &S->ipc.io.receive.notice, recv_notice_fd, SHUSO_IO_READ, ipc_receive_notice_coroutine, &S->ipc.io.receive);
-  shuso_io_coro_init(S, &S->ipc.io.receive.fd, proc->ipc.socket_transfer_fd[0], SHUSO_IO_READ, ipc_receive_msg_fd_coroutine, &S->ipc.io.receive);
+  shuso_io_coro_init(S, &S->ipc.io.receive.fd, proc->ipc.socket_transfer_fd[0], SHUSO_IO_READ, ipc_receive_msg_fd_coroutine, NULL);
   
   int out_count;
   if(S->procnum == SHUTTLESOCK_MASTER) {
-    //manager only talks to the manager directly (well, and to itself..)
+    //master only talks to the manager directly (well, and to itself..)
     out_count = 2;
   }
-  else if(S->procnum == SHUTTLESOCK_MANAGER) {
-    out_count = 2+SHUTTLESOCK_MAX_WORKERS;
-    //gotta be able to talk to everybody
-  }
-  else if(S->procnum >= SHUTTLESOCK_WORKER) {
-    out_count = *S->common->process.workers_end;
-  }
   else {
-    abort();
+    out_count = 2 + *S->common->process.workers_end;
   }
   S->ipc.io.send = shuso_stalloc(&S->stalloc, sizeof(*S->ipc.io.send) * out_count);
   if(!S->ipc.io.send) {
@@ -438,7 +436,7 @@ static bool ipc_send_direct(shuso_t *S, shuso_process_t *src, shuso_process_t *d
   buf->ptr[next] = ptr;
   buf->code[next] = code;
   ipc_release_write_index(S, buf);
-  
+  //shuso_log_debug(S, "ipc_send_direct %p %d fd %d %d", &S->ipc.io.send[dst->procnum].notice, dst->procnum, S->ipc.io.send[dst->procnum].notice.fd, dst->procnum, S->ipc.io.send[dst->procnum].notice.watcher.ev.fd);
   shuso_io_coro_resume(&S->ipc.io.send[dst->procnum].notice);
 /*
   ssize_t written;
@@ -607,6 +605,7 @@ static void ipc_receive(shuso_t *S, shuso_process_t *proc) {
       if(S->common->ipc_handlers[code].receive == (shuso_ipc_fn *)&do_nothing) {
         shuso_log_error(S, "ipc: [%d] isn't handled, do nothing.", (int )code);
       }
+      //shuso_log(S, "ipc received code %d", code);
       S->common->ipc_handlers[code].receive(S, code, ptr);
     }
   }
