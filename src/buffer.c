@@ -31,7 +31,7 @@ void shuso_buffer_init(shuso_buffer_t *buf, shuso_buffer_memory_type_t mtype, vo
 }
 
 void *shuso_buffer_allocate(shuso_t *S, shuso_buffer_t *buf, size_t sz) {
-  void *data;
+  void *data = NULL;
   switch(buf->memory_type) {
     case SHUSO_BUF_HEAP:
       data = malloc(sz);
@@ -147,7 +147,10 @@ char *shuso_buffer_add_msg_fd(shuso_t *S, shuso_buffer_t *buf, int fd,size_t dat
   cmsg->cmsg_len = CMSG_LEN(sizeof(fd));
   memcpy(CMSG_DATA(cmsg), &fd, sizeof(fd));
   
-  msgblob->iov.iov_base = &msgblob[1];
+  msgblob->iov.iov_base = &msgblob[1]; //clang analyzer doesn't like this.
+  //it would be nice to have added a data[] at the end of the msgblob, but the trailing 
+  // space is already taken up by char buf[CMSG_SPACE(...)]
+  
   msgblob->iov.iov_len = data_sz;
   
   *link = (shuso_buffer_link_t ) {
