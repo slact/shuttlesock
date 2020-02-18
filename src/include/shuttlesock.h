@@ -217,9 +217,7 @@ bool shuso_configure_finish(shuso_t *S);
 bool shuso_destroy(shuso_t *S);
 bool shuso_run(shuso_t *S);
 bool shuso_stop(shuso_t *S, shuso_stop_t forcefulness);
-bool shuso_spawn_manager(shuso_t *S);
 bool shuso_stop_manager(shuso_t *S, shuso_stop_t forcefulness);
-bool shuso_spawn_worker(shuso_t *S, shuso_process_t *proc);
 bool shuso_stop_worker(shuso_t *S, shuso_process_t *proc, shuso_stop_t
  forcefulness);
 bool shuso_stop_manager(shuso_t *S, shuso_stop_t forcefulness);
