@@ -223,7 +223,7 @@ bool shuso_stop_worker(shuso_t *S, shuso_process_t *proc, shuso_stop_t
 bool shuso_stop_manager(shuso_t *S, shuso_stop_t forcefulness);
 
 bool shuso_is_master(shuso_t *S);
-bool shuso_is_forked_manager(shuso_t *S);
+bool shuso_is_manager(shuso_t *S);
 
 
 bool shuso_set_log_fd(shuso_t *S, int fd);

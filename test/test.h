@@ -143,7 +143,7 @@ do { \
 #define assert_shuso_ran_ok(S) \
 do { \
   snow_fail_update(); \
-  if(shuso_is_forked_manager(S)) { \
+  if(shuso_is_manager(S)) { \
     snow_bail(); \
   } \
   else { \
