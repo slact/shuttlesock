@@ -28,9 +28,12 @@ static void signal_handle(shuso_t *S, const uint8_t code, void *ptr) {
   }
 }
 
-
-static void shutdown_handle(shuso_t *S, const uint8_t code, void *ptr) {
-  shuso_stop_t stop_type = (shuso_stop_t )(intptr_t )ptr;
+static void shutdown_handle_cb(shuso_loop *loop, shuso_ev_timer *w, int revents) {
+  shuso_t           *S = shuso_state(loop, w);
+  shuso_stop_t       stop_type = (shuso_stop_t )(intptr_t )(shuso_ev_data(w));
+  
+  shuso_remove_timer_watcher(S, w);
+  
   if(S->procnum == SHUTTLESOCK_MASTER) {
     shuso_stop(S, stop_type);
   }
@@ -41,6 +44,12 @@ static void shutdown_handle(shuso_t *S, const uint8_t code, void *ptr) {
   else if(S->procnum >= SHUTTLESOCK_WORKER) {
     shuso_stop_worker(S, S->process, stop_type);
   }
+}
+
+static void shutdown_handle(shuso_t *S, const uint8_t code, void *ptr) {
+  //don't want to stop from within the handler, it may free() the calling IPC coroutine before it's finished
+  
+  shuso_add_timer_watcher(S, 0.0, 0.0, shutdown_handle_cb, ptr);
 }
 
 static void reconfigure_handle(shuso_t *S, const uint8_t code, void *ptr) {
