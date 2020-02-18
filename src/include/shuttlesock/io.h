@@ -178,9 +178,10 @@ switch(io->coroutine_stage) { \
 
 #endif
 
-#define SHUSO_IO_CORO_END \
+#define SHUSO_IO_CORO_END(io) \
 } \
-___coroutine_io_struct->coroutine_stage = 0
+assert(io == ___coroutine_io_struct); \
+___coroutine_io_struct->coroutine_stage = 0 \
   
 
 

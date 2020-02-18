@@ -108,13 +108,13 @@ void ipc_send_ipc_notice_coroutine(shuso_t *S, shuso_io_t *io) {
 
   SHUSO_IO_CORO_YIELD(write, &data, sizeof(data));
   assert(io->result == sizeof(data));
-  SHUSO_IO_CORO_END;
+  SHUSO_IO_CORO_END(io);
 }
 
 void ipc_send_fd_coroutine(shuso_t *S, shuso_io_t *io) {
   SHUSO_IO_CORO_BEGIN(io);
   //TODO
-  SHUSO_IO_CORO_END;
+  SHUSO_IO_CORO_END(io);
 }
 static void ipc_channel_local_send_coroutines_init(shuso_t *S, int procnum) {
   
@@ -149,8 +149,7 @@ void ipc_receive_notice_coroutine(shuso_t *S, shuso_io_t *io) {
     }
   } while(!io->error);
   
-  SHUSO_IO_CORO_END;
-  
+  SHUSO_IO_CORO_END(io);
 }
 
 static void ipc_handle_received_socket(shuso_t *S, int fd, uintptr_t ref, void *pd) {
@@ -284,7 +283,7 @@ end_coroutine:
     free(msghdr_buf);
     io->privdata = NULL;
   }
-  SHUSO_IO_CORO_END;
+  SHUSO_IO_CORO_END(io);
 }
 
 bool shuso_ipc_channel_local_init(shuso_t *S) {
