@@ -9,16 +9,18 @@
 #endif
 
 #define log_io_debug(io, fmt, ...) \
-  shuso_log_debug(io->S, "io %p op %s w %s: " fmt, (void *)(io), io_op_str((io)->op_code), io_watch_type_str((io)->watch_type), __VA_ARGS__)
+  shuso_log_debug(io->S, "io %p fd %d op %s w %s: " fmt, (void *)(io), (io)->fd, io_op_str((io)->op_code), io_watch_type_str((io)->watch_type), __VA_ARGS__)
 
 static void shuso_io_ev_operation(shuso_io_t *io);
 static void io_coro_run(shuso_io_t *io);
+static void shuso_io_operation(shuso_io_t *io);
 
 bool shuso_io_coro_fresh(shuso_io_t *io) {
   return io->coroutine_stage == 0 && io->watch_type == SHUSO_IO_WATCH_NONE;
 }
 
-static char *io_op_str(shuso_io_opcode_t op) {
+/*
+static char *shuso_io_op_str(shuso_io_opcode_t op) {
   switch(op) {
     case SHUSO_IO_OP_NONE:    return "none";
     case SHUSO_IO_OP_READV:   return "readv";
@@ -30,7 +32,7 @@ static char *io_op_str(shuso_io_opcode_t op) {
   }
   return "???";
 }
-static char *io_watch_type_str(shuso_io_watch_type_t watchtype) {
+static char *shuso_io_watch_type_str(shuso_io_watch_type_t watchtype) {
   switch(watchtype) {
     case SHUSO_IO_WATCH_NONE:       return "none";
     case SHUSO_IO_WATCH_OP_FINISH:  return "op_finish";
@@ -41,11 +43,12 @@ static char *io_watch_type_str(shuso_io_watch_type_t watchtype) {
   }
   return "???";
 }
-
+*/
 
 static void io_ev_watcher_handler(shuso_loop *loop, shuso_ev_io *ev, int evflags);
 
 void __shuso_io_coro_init(shuso_t *S, shuso_io_t *io, int fd, int readwrite, shuso_io_fn *coro, void *privdata) {
+  assert(readwrite == SHUSO_IO_READ || readwrite == SHUSO_IO_WRITE || readwrite == (SHUSO_IO_READ | SHUSO_IO_WRITE));
   *io = (shuso_io_t ){
     .S = S,
 #ifdef SHUTTLESOCK_HAVE_IO_URING
@@ -78,94 +81,102 @@ void __shuso_io_coro_init(shuso_t *S, shuso_io_t *io, int fd, int readwrite, shu
   }
 }
 
+static bool ev_opcode_match_event_type(shuso_io_opcode_t opcode, int evflags) {
+  switch(opcode) {
+    case SHUSO_IO_OP_NONE:
+      //should not happen
+      raise(SIGABRT);
+      return false;
+      
+    case SHUSO_IO_OP_READV:
+    case SHUSO_IO_OP_READ:
+    case SHUSO_IO_OP_RECVMSG:
+      return evflags & EV_READ;
+    
+    case SHUSO_IO_OP_WRITEV:
+    case SHUSO_IO_OP_WRITE:
+    case SHUSO_IO_OP_SENDMSG:
+      return evflags & EV_WRITE;
+  }
+  return false;
+}
+
+static bool ev_watch_poll_match_event_type(shuso_io_watch_type_t watchtype, int evflags) {
+  if(evflags & EV_READ) {
+    return watchtype == SHUSO_IO_WATCH_POLL_READ || watchtype == SHUSO_IO_WATCH_POLL_READWRITE;
+  }
+  if(evflags & EV_WRITE) {
+    return watchtype == SHUSO_IO_WATCH_POLL_WRITE || watchtype == SHUSO_IO_WATCH_POLL_READWRITE;
+  }
+  return false;
+}
+
 static void io_ev_watcher_handler(shuso_loop *loop, shuso_ev_io *ev, int evflags) {
   shuso_io_t *io = shuso_ev_data(ev);
-  log_io_debug(io, "%s", "io_ev_watcher_handler");
-  switch(io->watch_type) {
-    
+  
+  switch(io->watch_type) {    
     case SHUSO_IO_WATCH_NONE:
-      //this should never happen
+      //should never happer
       raise(SIGABRT);
       break;
     
     case SHUSO_IO_WATCH_OP_FINISH:
+      raise(SIGABRT); //should never happen using libev
+      break;
+      
     case SHUSO_IO_WATCH_OP_RETRY:
-      switch((shuso_io_opcode_t )io->op_code) {
-        case SHUSO_IO_OP_NONE:
-          //this should never happen
-          raise(SIGABRT);
-          break;
-          
-        case SHUSO_IO_OP_READV:
-        case SHUSO_IO_OP_READ:
-        case SHUSO_IO_OP_RECVMSG:
-          if(evflags & EV_READ) {
-            io->watch_type = SHUSO_IO_WATCH_NONE;
-            shuso_io_ev_operation(io);
-          }
-          break;
-        case SHUSO_IO_OP_WRITEV:
-        case SHUSO_IO_OP_WRITE:
-        case SHUSO_IO_OP_SENDMSG:
-          if(evflags & EV_WRITE) {
-            io->watch_type = SHUSO_IO_WATCH_NONE;
-            shuso_io_ev_operation(io);
-          }
-          break;
+      if(ev_opcode_match_event_type(io->op_code, evflags)) {
+        io->watch_type = SHUSO_IO_WATCH_NONE;
+        assert(io->op_code != SHUSO_IO_OP_NONE);
+        shuso_io_operation(io);
       }
       break;
     
     case SHUSO_IO_WATCH_POLL_READ:
-      if(evflags & EV_READ) {
-        io->watch_type = SHUSO_IO_WATCH_NONE;
-        io->coroutine(io->S, io);
-      }
-      break;
-    
     case SHUSO_IO_WATCH_POLL_WRITE:
-      if(evflags & EV_WRITE) {
+    case SHUSO_IO_WATCH_POLL_READWRITE:
+      if(ev_watch_poll_match_event_type(io->watch_type, evflags)) {
         io->watch_type = SHUSO_IO_WATCH_NONE;
-        io->coroutine(io->S, io);
+        io_coro_run(io);
       }
       break;
-    
-    case SHUSO_IO_WATCH_POLL_READWRITE:
-      io->watch_type = SHUSO_IO_WATCH_NONE;
-      io->coroutine(io->S, io);
-      break;
+  }
+}
+
+static void io_watch_update(shuso_io_t *io) {
+#ifdef SHUTTLESOCK_HAVE_IO_URING
+  if(io->use_io_uring) {
+    //TODO: //run watcher or op via io_uring
+    return;
+  }
+#endif
+  bool ev_watcher_active = shuso_ev_active(&io->watcher);
+  if(io->watch_type == SHUSO_IO_WATCH_NONE && ev_watcher_active) {
+    //watcher needs to be stopped
+    shuso_ev_stop(io->S, &io->watcher);
+  }
+  else if(io->watch_type != SHUSO_IO_WATCH_NONE && !ev_watcher_active) {
+    //watcher needs to be started
+    shuso_ev_start(io->S, &io->watcher);
   }
 }
 
 static void io_coro_run(shuso_io_t *io) {
-  log_io_debug(io, "%s", "io_coro_run");
   io->coroutine(io->S, io);
-  if(io->watch_type != SHUSO_IO_WATCH_NONE) {
-    if(io->use_io_uring) {
-      //TODO: run io_uring fd poll maybe?
-    }
-    else {
-      //libev fd poll watcher
-      if(!shuso_ev_active(&io->watcher)) {
-        shuso_ev_start(io->S, &io->watcher);
-      }
-    }
-  }
+  io_watch_update(io);
 }
 
 void shuso_io_coro_resume_buf(shuso_io_t *io, char *buf, size_t len) {
-  log_io_debug(io, "%s", "resume buf");
   io->buf = buf;
   io->len = len;
   io_coro_run(io);
 }
 void shuso_io_coro_resume_iovec(shuso_io_t *io, struct iovec *iov, int iovcnt) {
-  log_io_debug(io, "%s", "resume iovec");
   io->iov = iov;
   io->iovcnt = iovcnt;
   io_coro_run(io);
 }
 void shuso_io_coro_resume_msg(shuso_io_t *io, struct msghdr *msg, int flags) {
-  log_io_debug(io, "%s", "resume msg");
   io->msg = msg;
   io->flags = flags;
   io_coro_run(io);
@@ -197,15 +208,15 @@ static void iovec_update_after_incomplete_write(struct iovec **iov_ptr, int *iov
 static void retry_ev_operation(shuso_io_t *io) {
   assert(io->watch_type == SHUSO_IO_WATCH_NONE);
   io->watch_type = SHUSO_IO_WATCH_OP_RETRY;
+  io_watch_update(io);
 }
 
 static void shuso_io_ev_operation(shuso_io_t *io) {
-  log_io_debug(io, "%s", "io_ev_operation");
-  ssize_t required_sz;
-  if(io->op_repeat_to_completion) {
+  ssize_t required_sz = 0;
+  bool op_repeat_to_completion = io->op_repeat_to_completion;
+  if(op_repeat_to_completion) {
     required_sz = io->op_io_vector ? iovec_size(io->iov, io->iovcnt) : io->len;
   }
-  
   ssize_t result_sz;
   do {
     switch((shuso_io_opcode_t )io->op_code) {
@@ -226,12 +237,13 @@ static void shuso_io_ev_operation(shuso_io_t *io) {
       case SHUSO_IO_OP_WRITEV:
         result_sz = writev(io->fd, io->iov, io->iovcnt);
         break;
-      case SHUSO_IO_OP_SENDMSG:
-        result_sz = sendmsg(io->fd, io->msg, io->flags);
-        break;
       case SHUSO_IO_OP_RECVMSG:
         result_sz = recvmsg(io->fd, io->msg, io->flags);
         break;
+      case SHUSO_IO_OP_SENDMSG:
+        result_sz = sendmsg(io->fd, io->msg, io->flags);
+        break;
+      
     }
   } while(result_sz == -1 && errno == EINTR);
   
@@ -247,11 +259,12 @@ static void shuso_io_ev_operation(shuso_io_t *io) {
     //legit error happened
     io->result = -1;
     io->error = errno;
-    io->coroutine(io->S, io);
+    io->op_code = SHUSO_IO_OP_NONE;
+    io_coro_run(io);
     return;
   }
   
-  if(io->op_repeat_to_completion && result_sz < required_sz) {
+  if(op_repeat_to_completion && result_sz < required_sz) {
     if(io->op_io_vector) {
       iovec_update_after_incomplete_write(&io->iov, &io->iovcnt, result_sz);
     }
@@ -263,7 +276,9 @@ static void shuso_io_ev_operation(shuso_io_t *io) {
     retry_ev_operation(io);
     return;
   }
-  io->coroutine(io->S, io);
+  
+  io->op_code = SHUSO_IO_OP_NONE;
+  io_coro_run(io);
 }
 
 static void shuso_io_operation(shuso_io_t *io) {
@@ -290,8 +305,6 @@ static void shuso_io_operation(shuso_io_t *io) {
 }
 
 static void io_op_run_new(shuso_io_t *io, int opcode, void *init_buf, ssize_t init_len, bool partial, bool registered) {
-  assert(io->watch_type == SHUSO_IO_WATCH_NONE);
-  
   io->result = 0;
   io->error = 0;
   io->op_code = opcode;
@@ -325,21 +338,18 @@ void shuso_io_coro_stop(shuso_io_t *io) {
       io->error = ECANCELED;
       io->coroutine(io->S, io);
   }
-    if(io->use_io_uring) {
-      //TODO: stop io_uring fd poll
-    }
-    else {
-      //libev fd poll watcher
-      if(shuso_ev_active(&io->watcher)) {
-        shuso_ev_stop(io->S, &io->watcher);
-      }
-    }
-  
-  //STOP IT!
+  shuso_io_coro_abort(io);
+}
+
+void shuso_io_coro_abort(shuso_io_t *io) {
+  io->watch_type = SHUSO_IO_WATCH_NONE;
+  io->error = ECANCELED;
+  io->result = -1;
+  io_watch_update(io);
+  //stop it at once!
 }
 
 void shuso_io_wait(shuso_io_t *io, int evflags) {
-  assert(io->watch_type == SHUSO_IO_WATCH_NONE);
   switch(evflags) {
     case SHUSO_IO_READ | SHUSO_IO_WRITE :
       io->watch_type = SHUSO_IO_WATCH_POLL_READWRITE;
@@ -351,6 +361,7 @@ void shuso_io_wait(shuso_io_t *io, int evflags) {
       io->watch_type = SHUSO_IO_WATCH_POLL_WRITE;
       break;
   }
+  io_watch_update(io);
 }
 
 void shuso_io_writev_partial(shuso_io_t *io, struct iovec *iov, int iovcnt) {

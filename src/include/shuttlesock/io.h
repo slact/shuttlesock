@@ -113,6 +113,7 @@ _Generic((data), \
 bool shuso_io_coro_fresh(shuso_io_t *io);
 
 void shuso_io_coro_stop(shuso_io_t *io);
+void shuso_io_coro_abort(shuso_io_t *io);
 
 void shuso_io_coro_resume_buf(shuso_io_t *io, char *buf, size_t len);
 void shuso_io_coro_resume_iovec(shuso_io_t *io, struct iovec *iov, int iovcnt);
