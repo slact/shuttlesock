@@ -110,7 +110,7 @@ bool shuso_ipc_commands_init(shuso_t *S) {
 static void manager_proxy_message_handle(shuso_t *S, const uint8_t code, void *ptr) {
   assert(S->procnum == SHUTTLESOCK_MANAGER);
   shuso_ipc_manager_proxy_msg_t *d = ptr;
-  if(!shuso_ipc_send(S, shuso_procnum_to_process(S, d->dst), SHUTTLESOCK_IPC_CMD_RECEIVE_PROXIED_MESSAGE, d)) {
+  if(!shuso_ipc_send(S, shuso_process(S, d->dst), SHUTTLESOCK_IPC_CMD_RECEIVE_PROXIED_MESSAGE, d)) {
     shuso_set_error(S, "failed to proxy IPC message");
     shuso_shared_slab_free(&S->common->shm, d);
   }
