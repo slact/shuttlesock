@@ -396,7 +396,6 @@ bool shuso_stop_manager(shuso_t *S, shuso_stop_t forcefulness) {
       all_stopped = all_stopped && (*worker->state == SHUSO_STATE_DEAD);
     }
     if(all_stopped) {
-      //S->common->phase_handlers.stop_manager(S, S->common->phase_handlers.privdata);
       shuso_core_module_event_publish(S, "manager.stop", SHUSO_OK, NULL);
       //TODO: deferred stopping
       ev_break(S->ev.loop, EVBREAK_ALL);
