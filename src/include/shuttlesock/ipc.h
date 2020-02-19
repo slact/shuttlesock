@@ -3,6 +3,7 @@
 #include <stdatomic.h>
 #include <shuttlesock/common.h>
 #include <shuttlesock/io.h>
+#include <shuttlesock/buffer.h>
 
 #define SHUTTLESOCK_IPC_CMD_NIL                   0
 
@@ -92,6 +93,7 @@ typedef struct {
 typedef struct {
   shuso_io_t            notice;
   shuso_io_t            fd;
+  shuso_buffer_t        fd_msg_buf;
 } shuso_io_send_t;
 
 typedef struct {

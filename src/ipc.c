@@ -114,9 +114,17 @@ void ipc_send_ipc_notice_coroutine(shuso_t *S, shuso_io_t *io) {
 }
 
 void ipc_send_fd_coroutine(shuso_t *S, shuso_io_t *io) {
+  shuso_buffer_t        *buf = io->privdata;
+  shuso_buffer_link_t   *next;
   SHUSO_IO_CORO_BEGIN(io);
-  //TODO
+  while(!io->error && (next = shuso_buffer_next(S, buf)) != NULL) {
+    SHUSO_IO_CORO_YIELD(sendmsg, next->msg, 0);
+    
+    shuso_buffer_free(S, buf, shuso_buffer_dequeue(S, buf)); // cleans up before free()ing, which runs the completion callback
+  };
   SHUSO_IO_CORO_END(io);
+  
+  //TODO: cleanup buffer in case an error interrupted buffered  
 }
 static void ipc_channel_local_send_coroutines_init(shuso_t *S, int procnum) {
   shuso_process_t *dstproc = shuso_process(S, procnum);
@@ -124,8 +132,10 @@ static void ipc_channel_local_send_coroutines_init(shuso_t *S, int procnum) {
   
   assert(dstproc);
   
-  shuso_io_coro_init(S, &send->notice, dstproc->ipc.fd[1], SHUSO_IO_WRITE, ipc_send_ipc_notice_coroutine, (void *)(intptr_t )procnum);
-  shuso_io_coro_init(S, &send->fd, dstproc->ipc.socket_transfer_fd[1], SHUSO_IO_WRITE, ipc_send_fd_coroutine, (void *)(intptr_t )procnum);
+  shuso_io_coro_init(S, &send->notice, dstproc->ipc.fd[1], SHUSO_IO_WRITE, ipc_send_ipc_notice_coroutine, NULL);
+  
+  shuso_buffer_init(S, &send->fd_msg_buf, SHUSO_BUF_HEAP, NULL); //TODO use a more efficient buffer memory model
+  shuso_io_coro_init(S, &send->fd, dstproc->ipc.socket_transfer_fd[1], SHUSO_IO_WRITE, ipc_send_fd_coroutine, &send->fd_msg_buf);
 }
 
 void ipc_receive_notice_coroutine(shuso_t *S, shuso_io_t *io) {
@@ -639,48 +649,17 @@ static void ipc_receive_timeout_cb(shuso_loop *loop, shuso_ev_timer *w, int reve
 }
 
 bool shuso_ipc_send_fd(shuso_t *S, shuso_process_t *dst_proc, int fd, uintptr_t ref, void *pd) {
-  int       n;
-  
   uintptr_t buf[2] = {ref, (uintptr_t )pd};
   
-  struct iovec iov = {
-    .iov_base = buf,
-    .iov_len = sizeof(buf)
-  };
-  
-  union {
-    //Ancillary data buffer, wrapped in a union in order to ensure it is suitably aligned
-    char buf[CMSG_SPACE(sizeof(fd))];
-    struct cmsghdr align;
-  } ancillary_buf = {{0}};
-  
-  
-  struct msghdr msg = {
-    .msg_name = NULL,
-    .msg_namelen = 0,
-    
-    .msg_iov = &iov,
-    .msg_iovlen = 1,
-    
-    .msg_control = ancillary_buf.buf,
-    .msg_controllen = sizeof(ancillary_buf.buf),
-    
-    .msg_flags = 0
-  };
-  
-  struct cmsghdr *cmsg = CMSG_FIRSTHDR(&msg);
-  cmsg->cmsg_level = SOL_SOCKET;
-  cmsg->cmsg_type = SCM_RIGHTS;
-  cmsg->cmsg_len = CMSG_LEN(sizeof(fd));
-  
-  memcpy(CMSG_DATA(cmsg), &fd, sizeof(fd));
-  
-  do {
-    n = sendmsg(dst_proc->ipc.socket_transfer_fd[1], &msg, 0);
-  } while(n == -1 && errno == EINTR);
-  if(n <= 0) {
-    return shuso_set_error_errno(S, "failed to send fd: %s", strerror(errno));
+  shuso_io_send_t  *send = &S->ipc.io.send[dst_proc->procnum];
+  char             *iov_bufspace = shuso_buffer_add_msg_fd(S, &send->fd_msg_buf, fd, sizeof(buf));
+  if(!iov_bufspace) {
+    return shuso_set_error(S, "failed to send fd: no space for fd buffer link");
   }
+  memcpy(iov_bufspace, buf, sizeof(buf));
+  
+  shuso_io_coro_resume(&send->fd);
+  
   return true;
 }
 
