@@ -2,7 +2,7 @@
 #include <shuttlesock/buffer.h>
 #include <errno.h>
 
-void shuso_buffer_init(shuso_buffer_t *buf, shuso_buffer_memory_type_t mtype, void *allocator_data) {
+void shuso_buffer_init(shuso_t *S, shuso_buffer_t *buf, shuso_buffer_memory_type_t mtype, void *allocator_data) {
   *buf = (shuso_buffer_t) {
     .first = NULL,
     .last = NULL,
@@ -59,7 +59,47 @@ void *shuso_buffer_allocate(shuso_t *S, shuso_buffer_t *buf, size_t sz) {
   return data;
 }
 
-static void buffer_append_link(shuso_buffer_t *buf, shuso_buffer_link_t *link) {
+static void shuso_buffer_cleanup(shuso_t *S, shuso_buffer_t *buf, shuso_buffer_link_t *link) {
+  if(!link->have_cleanup) {
+    return;
+  }
+  
+  shuso_buffer_link_with_cleanup_t *lnc = container_of(link, shuso_buffer_link_with_cleanup_t, link); // link-and-cleanup
+  
+  lnc->cleanup.cleanup(S, buf, link, lnc->cleanup.cleanup_privdata);
+}
+
+void shuso_buffer_free(shuso_t *S, shuso_buffer_t *buf, shuso_buffer_link_t *link) {
+  assert(buf->first != link && buf->last != link);
+  
+  shuso_buffer_cleanup(S, buf, link);
+  shuso_buffer_memory_type_t mtype = link->memory_type;
+  if(mtype == SHUSO_BUF_DEFAULT) {
+    mtype = buf->memory_type;
+  }
+  switch(mtype) {
+    case SHUSO_BUF_HEAP:
+      free(link);
+      break;
+    case SHUSO_BUF_STALLOC:
+      //can't free
+      break;
+    case SHUSO_BUF_FIXED:
+      //TODO
+      abort();
+      break;
+    case SHUSO_BUF_SHARED:
+      shuso_shared_slab_free(buf->shm, link);
+      break;
+    case SHUSO_BUF_DEFAULT:
+    case SHUSO_BUF_EXTERNAL:
+    case SHUSO_BUF_MMAPPED:
+      //that makes no sense
+      abort();
+  }
+}
+
+void shuso_buffer_queue(shuso_t *S, shuso_buffer_t *buf, shuso_buffer_link_t *link) {
   shuso_buffer_link_t *last = buf->last;
   if(!buf->first) {
     buf->first = link;
@@ -68,6 +108,25 @@ static void buffer_append_link(shuso_buffer_t *buf, shuso_buffer_link_t *link) {
     last->next = link;
   }
   buf->last = link;
+}
+
+shuso_buffer_link_t *shuso_buffer_dequeue(shuso_t *S, shuso_buffer_t *buf) {
+  shuso_buffer_link_t *link = buf->first;
+  if(!link) {
+    return NULL;
+  }
+  buf->first = link->next;
+  if(buf->last == link) {
+    buf->last = NULL;
+  }
+  return link;
+}
+
+shuso_buffer_link_t *shuso_buffer_last(shuso_t *S, shuso_buffer_t *buf) {
+  return buf->last;
+}
+shuso_buffer_link_t *shuso_buffer_next(shuso_t *S, shuso_buffer_t *buf) {
+  return buf->first;
 }
 
 char *shuso_buffer_add_charbuf(shuso_t *S, shuso_buffer_t *buf, size_t len) {
@@ -85,7 +144,7 @@ char *shuso_buffer_add_charbuf(shuso_t *S, shuso_buffer_t *buf, size_t len) {
     .memory_type = SHUSO_BUF_DEFAULT,
     .next = NULL
   };
-  buffer_append_link(buf, link);
+  shuso_buffer_queue(S, buf, link);
   return charbuf;
 }
 
@@ -104,28 +163,59 @@ struct iovec *shuso_buffer_add_iovec(shuso_t *S, shuso_buffer_t *buf, int iovcnt
     .memory_type = SHUSO_BUF_DEFAULT,
     .next = NULL
   };
-  buffer_append_link(buf, link);
+  shuso_buffer_queue(S, buf, link);
   return iov;
 }
 
+
 char *shuso_buffer_add_msg_fd(shuso_t *S, shuso_buffer_t *buf, int fd,size_t data_sz) {
+  return shuso_buffer_add_msg_fd_with_cleanup(S, buf, fd, data_sz, NULL, NULL);
+}
+char *shuso_buffer_add_msg_fd_with_cleanup(shuso_t *S, shuso_buffer_t *buf, int fd,size_t data_sz, shuso_buffer_link_cleanup_fn *cleanup, void *cleanup_pd) {
   struct msgblob_s {
     struct msghdr                         msg;
-    struct iovec iov;
+    struct iovec                          iov;
     union {
-      char buf[CMSG_SPACE(sizeof(int))];
-      struct cmsghdr align;
-    }                                    ancillary_buf;
+      char                                  buf[CMSG_SPACE(sizeof(int))];
+      struct cmsghdr                        align;
+    }                                     ancillary_buf;
   } *msgblob;
   
   shuso_buffer_link_t *link;
   struct msghdr       *msg;
-  size_t               sz = sizeof(*msgblob) + data_sz;
-  if((link = shuso_buffer_allocate(S, buf, sz)) == NULL) {
-    return NULL;
-  }
   
-  msgblob = (void *)&link[1];
+  if(cleanup) {
+    struct {
+      shuso_buffer_link_with_cleanup_t lwc;
+      struct msgblob_s         msgblob;
+    } *linkblob;
+    
+    if((linkblob = shuso_buffer_allocate(S, buf, sizeof(*linkblob) + data_sz)) == NULL) {
+      return NULL;
+    }
+    
+    linkblob->lwc.cleanup.cleanup = cleanup;
+    linkblob->lwc.cleanup.cleanup_privdata = cleanup_pd;
+    link = &linkblob->lwc.link;
+    msgblob = &linkblob->msgblob;
+    
+    assert((void *)link == (void *)linkblob);
+  }
+  else {
+    struct {
+      shuso_buffer_link_t link;
+      struct msgblob_s         msgblob;
+    } *linkblob;
+    
+    if((linkblob = shuso_buffer_allocate(S, buf, sizeof(*linkblob) + data_sz)) == NULL) {
+      return NULL;
+    }
+    
+    link = &linkblob->link;
+    msgblob = &linkblob->msgblob;
+    
+    assert((void *)link == (void *)linkblob);
+  }
   
   *msgblob = (struct msgblob_s) {
     .ancillary_buf = {{0}},
@@ -158,8 +248,9 @@ char *shuso_buffer_add_msg_fd(shuso_t *S, shuso_buffer_t *buf, int fd,size_t dat
     .flags = 0,
     .data_type = SHUSO_BUF_IOVEC,
     .memory_type = SHUSO_BUF_DEFAULT,
-    .next = NULL
+    .next = NULL,
+    .have_cleanup = cleanup ? 1 : 0
   };
-  buffer_append_link(buf, link);
+  shuso_buffer_queue(S, buf, link);
   return msgblob->iov.iov_base;
 }
