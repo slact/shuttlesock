@@ -717,7 +717,7 @@ static bool shuso_spawn_workers(shuso_t *S, shuso_t **worker_state) {
   int num_workers = *S->common->process.workers_end - *S->common->process.workers_start;
 
   for(int i = 0; i < num_workers; i++) {
-    if(!shuso_spawn_worker(S, worker_state[i])) {
+    if(worker_state[i] && !shuso_spawn_worker(S, worker_state[i])) {
       failed_worker_spawns ++;
     }
   }
