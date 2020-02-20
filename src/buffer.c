@@ -86,7 +86,6 @@ void shuso_buffer_free(shuso_t *S, shuso_buffer_t *buf, shuso_buffer_link_t *lin
       break;
     case SHUSO_BUF_FIXED:
       //TODO
-      abort();
       break;
     case SHUSO_BUF_SHARED:
       shuso_shared_slab_free(buf->shm, link);
