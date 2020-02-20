@@ -27,7 +27,7 @@ static void ipc_send_retry_cb(shuso_loop *loop, shuso_ev_timer *w, int revents);
 #ifdef SHUTTLESOCK_DEBUG_IPC_RECEIVE_CHECK_TIMER
 static void ipc_receive_check_cb(shuso_loop *loop, shuso_ev_timer *w, int revents);
 #endif
-static void ipc_receive(shuso_t *S, shuso_process_t *proc);
+static bool ipc_receive(shuso_t *S, shuso_process_t *proc);
 
 bool shuso_ipc_channel_shared_create(shuso_t *S, shuso_process_t *proc) {
   int               procnum = shuso_process_to_procnum(S, proc);
@@ -141,30 +141,38 @@ static void ipc_channel_local_send_coroutines_init(shuso_t *S, int procnum) {
 void ipc_receive_notice_coroutine(shuso_t *S, shuso_io_t *io) {
   shuso_process_t    *proc = S->process;
   shuso_io_receive_t *receiver = io->privdata;
+  int err;
   
   SHUSO_IO_CORO_BEGIN(io);
   
-  do {
 #ifdef SHUTTLESOCK_HAVE_EVENTFD
+  
+  do {
     SHUSO_IO_CORO_YIELD(read, &receiver->buf.eventfd, sizeof(receiver->buf.eventfd));
+    err = io->error;
+  } while(!err && ipc_receive(S, proc));
+  
 #else
-    do {
-      //eat up everything in the buffer. we don't care about the contents, only that it must all be consumed
-      SHUSO_IO_CORO_YIELD(read_partial, receiver->buf.pipe, sizeof(receiver->buf.pipe));
-    } while(io->result > 0);
-    if(io->error == EAGAIN || io->error = EWOULDBLOCK) {
-      SHUSO_IO_CORO_YIELD(wait, SHUSO_IO_READ);
-      if(io->error == ECANCELED) {
-        continue;
-      }
-    }
-#endif
+  
+  do {
+    SHUSO_IO_CORO_YIELD(wait, SHUSO_IO_READ);
     if(!io->error) {
-      ipc_receive(S, proc);
+      do {
+        //eat up everything in the buffer. we don't care about the contents, only that it must all be consumed
+        SHUSO_IO_CORO_YIELD(read_partial, receiver->buf.pipe, sizeof(receiver->buf.pipe));
+      } while(io->result > 0);
     }
-  } while(!io->error);
+    
+    err = io->error;
+    if(err == EAGAIN || err == EWOULDBLOCK) {
+      err = 0;
+    }
+  } while(!err && ipc_receive(S, proc));
+  
+#endif
   
   SHUSO_IO_CORO_END(io);
+  
 }
 
 static void ipc_handle_received_socket(shuso_t *S, int fd, uintptr_t ref, void *pd) {
@@ -594,7 +602,7 @@ static void ipc_send_retry_cb(shuso_loop *loop, shuso_ev_timer *w, int revents) 
   S->ipc.buf.last = NULL;
 }
 
-static void ipc_receive(shuso_t *S, shuso_process_t *proc) {
+static bool ipc_receive(shuso_t *S, shuso_process_t *proc) {
   shuso_ipc_ringbuf_t  *in = proc->ipc.buf;
   uint_fast8_t          code;
   void                 *ptr;
@@ -615,7 +623,6 @@ static void ipc_receive(shuso_t *S, shuso_process_t *proc) {
       if(S->common->ipc_handlers[code].receive == (shuso_ipc_fn *)&do_nothing) {
         shuso_log_error(S, "ipc: [%d] isn't handled, do nothing.", (int )code);
       }
-      //shuso_log(S, "ipc received code %d", code);
       S->common->ipc_handlers[code].receive(S, code, ptr);
     }
   }
@@ -624,6 +631,7 @@ static void ipc_receive(shuso_t *S, shuso_process_t *proc) {
     assert(in->index.next_write_reserve == in->index.next_write_release);
     in->full = false;
   }
+  return true;
 }
 
 #ifdef SHUTTLESOCK_DEBUG_IPC_RECEIVE_CHECK_TIMER
