@@ -263,6 +263,7 @@ fail:
 static bool test_features(shuso_t *S, const char **errmsg) {
   if(S->common->config.features.io_uring) {
     //TODO: set S->common.features.io_uring
+    return false; //not implemented yet
   }
   return true;
 }
