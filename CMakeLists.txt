@@ -68,7 +68,7 @@ shuttlesock_test_features(
 )
 
 #set default max number of workers
-set(SHUTTLESOCK_MAX_WORKERS 8 CACHE INTERNAL "max number of workers")
+set(SHUTTLESOCK_MAX_WORKERS 256 CACHE INTERNAL "max number of workers")
 
 #pthreads
 set(THREADS_PREFER_PTHREAD_FLAG ON)
