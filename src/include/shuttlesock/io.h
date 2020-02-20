@@ -40,7 +40,7 @@ struct shuso_io_s {
     char           *buf;
   };
   union {
-    int     iovcnt;
+    size_t  iovcnt;
     size_t  len;
     int     flags;
   };

@@ -18,7 +18,6 @@ static void shuso_io_operation(shuso_io_t *io);
 bool shuso_io_coro_fresh(shuso_io_t *io) {
   return io->coroutine_stage == 0 && io->watch_type == SHUSO_IO_WATCH_NONE;
 }
-
 /*
 static char *shuso_io_op_str(shuso_io_opcode_t op) {
   switch(op) {
@@ -32,6 +31,9 @@ static char *shuso_io_op_str(shuso_io_opcode_t op) {
   }
   return "???";
 }
+*/
+
+/*
 static char *shuso_io_watch_type_str(shuso_io_watch_type_t watchtype) {
   switch(watchtype) {
     case SHUSO_IO_WATCH_NONE:       return "none";
@@ -182,18 +184,21 @@ void shuso_io_coro_resume_msg(shuso_io_t *io, struct msghdr *msg, int flags) {
   io_coro_run(io);
 }
 
-static size_t iovec_size(const struct iovec *iov, int iovcnt) {
+/*
+static size_t iovec_size(const struct iovec *iov, size_t iovcnt) {
   size_t sz = 0;
-  for(int i=0; i<iovcnt; i++) {
+  for(size_t i=0; i<iovcnt; i++) {
     sz += iov->iov_len;
   }
   return sz;
 }
-static void iovec_update_after_incomplete_write(struct iovec **iov_ptr, int *iovcnt_ptr, ssize_t written) {
-  int            iovcnt = *iovcnt_ptr;
+*/
+
+static void iovec_update_after_incomplete_operation(struct iovec **iov_ptr, size_t *iovcnt_ptr, ssize_t written) {
+  size_t         iovcnt = *iovcnt_ptr;
   size_t         remaining = written;
   struct iovec  *iov = *iov_ptr;
-  for(int i=0; i<iovcnt; i++) {
+  for(size_t i=0; i<iovcnt; i++) {
     if(remaining < iov[i].iov_len) {
       *iov_ptr = &iov[i];
       iov[i].iov_len -= remaining;
@@ -211,12 +216,31 @@ static void retry_ev_operation(shuso_io_t *io) {
   io_watch_update(io);
 }
 
+static void io_update_incomplete_op_data(shuso_io_t *io, ssize_t result_sz) {
+  assert(result_sz >= 0);
+  switch((shuso_io_opcode_t )io->op_code) {
+      case SHUSO_IO_OP_NONE:
+        return;
+        
+      case SHUSO_IO_OP_READ:
+      case SHUSO_IO_OP_WRITE:
+        io->buf = &io->buf[result_sz];
+        io->len -= result_sz;
+        return;
+        
+      case SHUSO_IO_OP_READV:
+      case SHUSO_IO_OP_WRITEV:
+        iovec_update_after_incomplete_operation(&io->iov, &io->iovcnt, result_sz);
+        return;
+        
+      case SHUSO_IO_OP_RECVMSG:
+      case SHUSO_IO_OP_SENDMSG:
+        iovec_update_after_incomplete_operation(&io->msg->msg_iov, &io->msg->msg_iovlen, result_sz);
+        return;
+    }
+}
+
 static void shuso_io_ev_operation(shuso_io_t *io) {
-  ssize_t required_sz = 0;
-  bool op_repeat_to_completion = io->op_repeat_to_completion;
-  if(op_repeat_to_completion) {
-    required_sz = io->op_io_vector ? iovec_size(io->iov, io->iovcnt) : io->len;
-  }
   ssize_t result_sz;
   do {
     switch((shuso_io_opcode_t )io->op_code) {
@@ -229,6 +253,7 @@ static void shuso_io_ev_operation(shuso_io_t *io) {
         result_sz = read(io->fd, io->buf, io->len);
         break;
       case SHUSO_IO_OP_WRITE:
+        assert(io->len > 0);
         result_sz = write(io->fd, io->buf, io->len);
         break;
       case SHUSO_IO_OP_READV:
@@ -243,19 +268,21 @@ static void shuso_io_ev_operation(shuso_io_t *io) {
       case SHUSO_IO_OP_SENDMSG:
         result_sz = sendmsg(io->fd, io->msg, io->flags);
         break;
-      
     }
   } while(result_sz == -1 && errno == EINTR);
-  
-  io->result += result_sz;
-  
-  if(result_sz == -1 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
-    //try again later
+  if(result_sz == -1 && (errno == EAGAIN || errno == EWOULDBLOCK) && io->op_repeat_to_completion) {
+    if(result_sz == -1) {
+      result_sz = 0; //-1 means zero bytes processed, in case of EAGAIN, right?
+    }
+    io->result += result_sz;
+    io_update_incomplete_op_data(io, result_sz);
+    assert(io->len > 0);
     retry_ev_operation(io);
     return;
   }
   
   if(result_sz == -1) {
+    io->result = -1;
     //legit error happened
     io->result = -1;
     io->error = errno;
@@ -264,19 +291,7 @@ static void shuso_io_ev_operation(shuso_io_t *io) {
     return;
   }
   
-  if(op_repeat_to_completion && result_sz < required_sz) {
-    if(io->op_io_vector) {
-      iovec_update_after_incomplete_write(&io->iov, &io->iovcnt, result_sz);
-    }
-    else {
-      io->buf = &io->buf[result_sz];
-      io->len -= result_sz;
-    }
-    
-    retry_ev_operation(io);
-    return;
-  }
-  
+  io->result += result_sz;
   io->op_code = SHUSO_IO_OP_NONE;
   io_coro_run(io);
 }
@@ -361,6 +376,8 @@ void shuso_io_wait(shuso_io_t *io, int evflags) {
       io->watch_type = SHUSO_IO_WATCH_POLL_WRITE;
       break;
   }
+  io->error = 0;
+  io->result = 0;
   io_watch_update(io);
 }
 
