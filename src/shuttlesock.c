@@ -385,6 +385,7 @@ bool shuso_stop_manager(shuso_t *S, shuso_stop_t forcefulness) {
   }
   if(*S->process->state == SHUSO_STATE_STOPPING) {
     bool all_stopped = true;
+    int all_dead = true;
     if(forcefulness >= SHUSO_STOP_FORCE) {
       //kill all threads
       SHUSO_EACH_WORKER(S, worker) {
@@ -393,10 +394,20 @@ bool shuso_stop_manager(shuso_t *S, shuso_stop_t forcefulness) {
     }
     
     SHUSO_EACH_WORKER(S, worker) {
-      //shuso_log_debug(S, "worker %i state: %s", worker->procnum, shuso_runstate_as_string(*worker->state));
-      all_stopped = all_stopped && (*worker->state == SHUSO_STATE_DEAD);
+      shuso_log_debug(S, "worker tid %i %i state: %s", worker->tid, worker->procnum, shuso_runstate_as_string(*worker->state));
+      if(*worker->state == SHUSO_STATE_DEAD) {
+        if(pthread_kill(worker->tid, 0) != ESRCH) {
+        all_dead = false;
+        }
+        else {
+          pthread_join(worker->tid, NULL);
+        }
+      }
+      else {
+        all_stopped = false;
+      }
     }
-    if(all_stopped) {
+    if(all_stopped && all_dead) {
       shuso_core_module_event_publish(S, "manager.stop", SHUSO_OK, NULL);
       //TODO: deferred stopping
       ev_break(S->ev.loop, EVBREAK_ALL);
@@ -677,7 +688,6 @@ static bool shuso_spawn_worker(shuso_t *S, shuso_t *wS) {
     err = "pthread_attr_init() failed";
     goto fail;
   }
-  pthread_attr_setdetachstate(&pthread_attr, PTHREAD_CREATE_DETACHED);
   
   if(pthread_create(&wS->process->tid, &pthread_attr, shuso_run_worker, wS) != 0) {
     pthread_attr_destroy(&pthread_attr);
