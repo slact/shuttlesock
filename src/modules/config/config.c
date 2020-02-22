@@ -310,7 +310,6 @@ bool shuso_config_system_generate(shuso_t *S) {
     lua_getfield(L, -1, "name");
     setting->name = lua_tostring(L, -1);
     lua_pop(L, 1);
-    shuso_log_debug(S, "Setting named %s", setting->name);
     
     lua_getfield(L, -1, "raw_name");
     setting->raw_name = lua_tostring(L, -1);
