@@ -163,7 +163,7 @@ bool luaS_pcall(lua_State *L, int nargs, int nresults) {
 }
 
 void luaS_call(lua_State *L, int nargs, int nresults) {
-#ifdef SHUTTLESOCK_DEBUG_CRASH_ON_LUA_ERROR
+#ifndef SHUTTLESOCK_DEBUG_CRASH_ON_LUA_ERROR
   luaS_pcall(L, nargs, nresults);
 #else
   if(!luaS_pcall(L, nargs, nresults)) {
