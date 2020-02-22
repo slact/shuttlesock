@@ -7,9 +7,10 @@
 
 bool set_test_options(int *argc, char **argv) {
   snow_set_extra_help(""
-    "    --verbose:             Verbose test output.\n"
-    "    --data-path=[path]:    Path to test data directory.\n"
-    "    --multiplier=[number]: Scale looping tests by this number.\n"
+    "    --verbose              Verbose test output.\n"
+    "    --data-path=[path]     Path to test data directory.\n"
+    "    --multiplier=[number]  Scale looping tests by this number.\n"
+    "    --workers=[number]     Number of workers (defaults to number of CPU cores)\n"
   );
   int i = 1;
   while(i < *argc) {
@@ -22,6 +23,9 @@ bool set_test_options(int *argc, char **argv) {
     }
     if((strstr(arg, "--multiplier=") - arg) == 0) {
       test_config.multiplier=atof(&arg[strlen("--multiplier=")]);
+    }
+    if((strstr(arg, "--workers=") - arg) == 0) {
+      test_config.workers=atoi(&arg[strlen("--workers=")]);
     }
     i++;
   }
@@ -47,7 +51,10 @@ describe(init_and_shutdown) {
   test("lua stack doesn't grow") {  
     assert(lua_gettop(S->lua.state) == 0);
     shuso_configure_finish(S);
-    assert(lua_gettop(S->lua.state) == 0);
+    if(lua_gettop(S->lua.state) != 0) {
+      luaS_printstack(S->lua.state, "too much stuff on the stack");
+      assert(lua_gettop(S->lua.state) == 0);
+    }
   }
   test("run loop, stop from manager") {
     shuso_configure_finish(S);
@@ -81,9 +88,7 @@ describe(modules) {
       assert(test_module.publish == NULL);
       assert(test_module.subscribe == NULL);
       S = shuso_create(NULL);
-      if(!test_config.verbose) {
-        shuso_set_log_fd(S, dev_null);
-      }
+      
     }
     after_each() {
       if(S) shuso_destroy(S);
@@ -134,10 +139,7 @@ describe(modules) {
   }
   subdesc(lua) {
     before_each() {
-      S = shuso_create(NULL);
-      if(!test_config.verbose) {
-        shuso_set_log_fd(S, dev_null);
-      }
+      S = shuso_createst();
     }
     after_each() {
       if(S) shuso_destroy(S);
@@ -242,8 +244,8 @@ describe(lua_bridge) {
     static lua_State *Ls;
     static lua_State *Ld;
     before_each() {
-      Ss = shuso_create(NULL);
-      Sd = shuso_create(NULL);
+      Ss = shuso_createst();
+      Sd = shuso_createst();
       Ls = Ss->lua.state;
       Ld = Sd->lua.state;
       
@@ -497,11 +499,8 @@ describe(lua_bridge) {
     static shuso_t   *S;
     static lua_State *L; 
     before_each() {
-      S = shuso_create(NULL);
+      S = shuso_createst();
       L = S->lua.state;
-      if(!test_config.verbose) {
-        shuso_set_log_fd(S, dev_null);
-      }
     }
     after_each() {
       if(S) shuso_destroy(S);
@@ -1261,7 +1260,8 @@ int main(int argc, char **argv) {
   test_config = (test_config_t) {
     .verbose = false,
     .data_path="test/data",
-    .multiplier = 1.0
+    .multiplier = 1.0,
+    .workers = 0,
   };
   dev_null = open("/dev/null", O_WRONLY);
   if(!set_test_options(&argc, argv)) {

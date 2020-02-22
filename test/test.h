@@ -20,6 +20,8 @@ typedef struct {
   bool        verbose;
   const char *data_path;
   double      multiplier;
+  int         max_workers;
+  int         workers;
 } test_config_t;
 
 test_config_t test_config;
@@ -99,6 +101,8 @@ typedef struct {
 } test_runcheck_t;
 
 int dev_null;
+
+shuso_t *shuso_createst(void);
 
 shuso_t *shusoT_create(test_runcheck_t **external_ptr, double test_timeout);
 test_runcheck_t *shusoT_get_runcheck(shuso_t *S);

@@ -245,6 +245,28 @@ static bool runcheck_module_initialize(shuso_t *S, shuso_module_t *self) {
   return true;
 }
 
+shuso_t *shuso_createst(void) {
+  const char *errmsg;
+  shuso_t *S = shuso_create(&errmsg);
+  
+  if(!S) {
+    fail("shuso_create failed: %s", errmsg);
+    return NULL;
+  }
+  
+  if(!test_config.verbose) {
+    shuso_set_log_fd(S, dev_null);
+  }
+  char conf[256];
+  sprintf(conf, "%s workers %d;\n", test_config.workers == 0 ? "#" : "", test_config.workers);
+  
+  if(!shuso_configure_string(S, "test_config", conf)) {
+    fail("shuso_configure_string failed: %s", shuso_last_error(S));
+  }
+  
+  return S;
+}
+
 shuso_t *shusoT_create(test_runcheck_t **external_ptr, double test_timeout) {
   test_runcheck_t     *chk = shmalloc(chk);
   if(!chk) {
@@ -254,14 +276,9 @@ shuso_t *shusoT_create(test_runcheck_t **external_ptr, double test_timeout) {
   if(external_ptr) {
     *external_ptr = chk;
   }
-  const char          *errmsg;
-  shuso_t             *S = shuso_create(&errmsg);
+  shuso_t             *S = shuso_createst();
   if(!S) {
-    fail("shuso_create failed: %s", errmsg);
-    return NULL;
-  }
-  if(!test_config.verbose) {
-    shuso_set_log_fd(S, dev_null);
+    return NULL;    
   }
   chk->runcheck_module = (shuso_module_t ) {
     .name = "runcheck",
