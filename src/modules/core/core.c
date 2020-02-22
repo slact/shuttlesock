@@ -74,24 +74,26 @@ static bool core_module_initialize_config(shuso_t *S, shuso_module_t *module, sh
   if(!workers) {
     return true;
   }
-  if(shuso_setting_string(S, workers, 1, NULL)) {
-    if(!shuso_setting_string_matches(S, workers, 1, "^auto$")) {
-      return shuso_config_error(S, workers, "invalid value");
-    }
-    S->common->config.workers = 0;
-  }
-  else if(shuso_setting_integer(S, workers, 1, &nworkers)) {
+  
+  if(shuso_setting_integer(S, workers, 0, &nworkers)) {
     if(nworkers < 0) {
-      return shuso_config_error(S, workers, "invalid value");
+      return shuso_config_error(S, workers, "invalid value %d", nworkers);
     }
     else if(nworkers > SHUTTLESOCK_MAX_WORKERS) {
       return shuso_config_error(S, workers, "value cannot exceed %d", SHUTTLESOCK_MAX_WORKERS);
     }
     S->common->config.workers = nworkers;
   }
+  else if(shuso_setting_string(S, workers, 0, NULL)) {
+    if(!shuso_setting_string_matches(S, workers, 0, "^auto$")) {
+      return shuso_config_error(S, workers, "invalid value");
+    }
+    S->common->config.workers = 0;
+  }
   else {
     return shuso_config_error(S, workers, "invalid value");
   }
+  
   return true;
 }
 
