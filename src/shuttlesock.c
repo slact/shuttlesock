@@ -384,7 +384,6 @@ bool shuso_stop_manager(shuso_t *S, shuso_stop_t forcefulness) {
     shuso_add_timer_watcher(S, 0, 0.1, stop_manager_timer_cb, S);
   }
   if(*S->process->state == SHUSO_STATE_STOPPING) {
-    bool all_stopped = true;
     int all_dead = true;
     if(forcefulness >= SHUSO_STOP_FORCE) {
       //kill all threads
@@ -394,20 +393,18 @@ bool shuso_stop_manager(shuso_t *S, shuso_stop_t forcefulness) {
     }
     
     SHUSO_EACH_WORKER(S, worker) {
-      shuso_log_debug(S, "worker tid %i %i state: %s", worker->tid, worker->procnum, shuso_runstate_as_string(*worker->state));
-      if(*worker->state == SHUSO_STATE_DEAD) {
-        if(pthread_kill(worker->tid, 0) != ESRCH) {
-        all_dead = false;
-        }
-        else {
-          pthread_join(worker->tid, NULL);
-        }
+      if(*worker->state == SHUSO_STATE_STOPPED) {
+#ifndef SHUTTLESOCK_DEBUG_NO_WORKER_THREADS
+        //worker is done running or is about to finish running (within a short, bounded time)
+        pthread_join(worker->tid, NULL);
+#endif
+        *worker->state = SHUSO_STATE_DEAD;
       }
-      else {
-        all_stopped = false;
+      if (*worker->state != SHUSO_STATE_DEAD) {
+        all_dead = false;
       }
     }
-    if(all_stopped && all_dead) {
+    if(all_dead) {
       shuso_core_module_event_publish(S, "manager.stop", SHUSO_OK, NULL);
       //TODO: deferred stopping
       ev_break(S->ev.loop, EVBREAK_ALL);
@@ -545,7 +542,6 @@ static void shuso_worker_shutdown(shuso_t *S) {
   shuso_cleanup_loop(S);
   _Atomic(shuso_runstate_t) *worker_state = S->process->state;
   assert(*worker_state == SHUSO_STATE_STOPPING);
-  *worker_state = SHUSO_STATE_STOPPED;
 #ifndef SHUTTLESOCK_DEBUG_NO_WORKER_THREADS
   ev_loop_destroy(S->ev.loop);
 #endif
@@ -555,7 +551,7 @@ static void shuso_worker_shutdown(shuso_t *S) {
   shuso_resolver_cleanup(&S->resolver);
   shuso_stalloc_empty(&S->stalloc);
   free(S);
-  *worker_state = SHUSO_STATE_DEAD;
+  *worker_state = SHUSO_STATE_STOPPED;
 }
 
  static void *shuso_run_worker(void *arg) {
