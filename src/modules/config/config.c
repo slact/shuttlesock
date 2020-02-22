@@ -228,7 +228,6 @@ bool shuso_config_system_generate(shuso_t *S) {
       return false;
     }
   }
-  lua_pop(L, 1);
   if(!luaS_pcall_config_method(L, "handle", 0, false)) {
     lua_settop(L, top);
     return false;
