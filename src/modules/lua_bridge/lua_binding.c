@@ -1435,11 +1435,11 @@ static bool lua_module_initialize_config(shuso_t *S, shuso_module_t *module, shu
   lua_pushlightuserdata(L, block);
   if (!luaS_function_call_result_ok(L, 1, true)) {
     lua_settop(L, top);
-    return shuso_set_error(S, "failed to wrap config block for Lua shuttlesock module'%s'", module->name);
+    return shuso_set_error(S, "failed to wrap config block for Lua shuttlesock module '%s'", module->name);
   }
   
   if(!luaS_call_noerror(L, 2, LUA_MULTRET)) {
-    shuso_set_error(S, "failed run initialize_config for Lua shuttlesock module'%s': %s", module->name, lua_tostring(L, -1));
+    shuso_set_error(S, "failed run initialize_config for Lua shuttlesock module '%s': %s", module->name, lua_tostring(L, -1));
     lua_settop(L, top);
     return false;
   }
