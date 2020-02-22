@@ -478,6 +478,10 @@ bool shuso_config_system_generate(shuso_t *S) {
   }
   lua_pop(L, 1);
   
+  if(lua_gettop(L) != top) {
+    shuso_log_warning(S, "Lua stack grew by %d after shuso_config_system_generate", top - lua_gettop(L));
+    lua_settop(L, top);
+  }
   return true;
 }
 
