@@ -104,7 +104,7 @@ shuso_t *shuso_create_with_lua(lua_State *lua, const char **err) {
   }
   
   *S = (shuso_t ){
-    .procnum = SHUTTLESOCK_NOPROCESS,
+    .procnum = SHUTTLESOCK_MASTER,
     .ev.loop = NULL,
     .ev.flags = EVFLAG_AUTO,
     .config.ready = false,
@@ -418,7 +418,6 @@ bool shuso_run(shuso_t *S) {
   if(!shuso_runstate_check(S, SHUSO_STATE_CONFIGURED, "run")) {
     return false;
   }
-  S->procnum = SHUTTLESOCK_MASTER;
   S->process = &S->common->process.master;
   S->process->pid = getpid();
   *S->process->state = SHUSO_STATE_STARTING;
