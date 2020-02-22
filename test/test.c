@@ -87,7 +87,7 @@ describe(modules) {
       };
       assert(test_module.publish == NULL);
       assert(test_module.subscribe == NULL);
-      S = shuso_create(NULL);
+      S = shuso_createst();
       
     }
     after_each() {
