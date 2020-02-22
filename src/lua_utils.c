@@ -133,7 +133,7 @@ int luaS_traceback_error_handler(lua_State *L) {
 }
 
 int luaS_passthru_error_handler(lua_State *L) {
-  printf("ERRO: %s\n", lua_tostring(L, 1));
+  //printf("ERRO: %s\n", lua_tostring(L, 1));
   if(lua_gettop(L) == 0) {
     lua_checkstack(L, 1);
     lua_pushnil(L);
