@@ -87,4 +87,7 @@ bool shuso_config_block_error(shuso_t *S, shuso_setting_block_t *b, const char *
     shuso_setting_block_t * : shuso_config_block_error \
   )(S, thing, __VA_ARGS__)
 
+bool shuso_configure_string(shuso_t *S, const char *title, const char *str);
+bool shuso_configure_file(shuso_t *S, const char *path);
+  
 #endif //SHUTTLESOCK_CONFIG_MODULE_H

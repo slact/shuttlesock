@@ -204,7 +204,7 @@ describe(config) {
       SHUTTLESOCK_SETTINGS_END
     };
     shuso_add_module(S, &test_module);
-    shuso_configure_string(S, " \
+    shuso_configure_string(S, "a string", " \
       foobar 10 11 12 13 \"14\"; \n\
       blorp { \n\
         shmoo { \n\
@@ -215,7 +215,7 @@ describe(config) {
           }\n\
         }\n\
       }\n\
-    ", "a string");
+    ");
     shuso_configure_finish(S);
     shusoT_run_test(S, SHUTTLESOCK_MANAGER, stop_shuttlesock, NULL, (void *)(intptr_t)SHUTTLESOCK_MANAGER);
     assert_shuso_ran_ok(S);

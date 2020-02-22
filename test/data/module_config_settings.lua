@@ -53,7 +53,7 @@ function testmod:initialize_config(block)
     assert(block.path == "/", block.path)
     assert(block:match_path("/"))
     assert(not block:match_path("/blarg"))
-    local setting = block:setting("root_config")
+    local setting = assert(block:setting("root_config"))
     assert(setting.name == "root_config")
     assert(setting:value() == "yeep")
     assert(setting:value("local") == "yeep")
@@ -113,5 +113,5 @@ local config =
   }
 ]]
 
-assert(Shuso.configure_string(config, "test.conf"))
+assert(Shuso.configure_string("test_conf", config))
 assert(Shuso:configure_finish())

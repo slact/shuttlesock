@@ -210,8 +210,6 @@ shuso_t *shuso_create(const char **err);
 shuso_t *shuso_create_with_lua(lua_State *lua, const char **err);
 
 bool shuso_runstate_check(shuso_t *S, shuso_runstate_t allowed_state, const char *whatcha_doing);
-bool shuso_configure_file(shuso_t *S, const char *path);
-bool shuso_configure_string(shuso_t *S, const char *str_title, const char *str);
 bool shuso_configure_finish(shuso_t *S);
 
 

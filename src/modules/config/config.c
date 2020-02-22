@@ -223,7 +223,7 @@ bool shuso_config_system_generate(shuso_t *S) {
   luaS_push_config_field(L, "parsed");
   if(!lua_toboolean(L, -1)) {
     lua_pop(L, 1);
-    if(!shuso_configure_string(S, "", "empty default")) {
+    if(!shuso_configure_string(S, "empty default", "")) {
       lua_settop(L, top);
       return false;
     }
@@ -584,7 +584,7 @@ bool shuso_configure_file(shuso_t *S, const char *path) {
   return true;
 }
 
-bool shuso_configure_string(shuso_t *S,  const char *str, const char *str_title) {
+bool shuso_configure_string(shuso_t *S,  const char *str_title, const char *str) {
     lua_State                   *L = S->lua.state;
   shuso_config_module_ctx_t   *ctx = S->common->module_ctx.config;
   
@@ -594,11 +594,13 @@ bool shuso_configure_string(shuso_t *S,  const char *str, const char *str_title)
   luaS_get_config_pointer_ref(L, ctx);
   lua_getfield(L, -1, "parse");
   lua_insert(L, -2);
+  lua_pushstring(L, str);
+  lua_newtable(L);
   if(str_title) {
     lua_pushstring(L, str_title);
+    lua_setfield(L, -2, "name");
   }
-  lua_pushstring(L, str);
-  int ret = lua_pcall(L, str_title ? 3 : 2, 0, errhandler_index);
+  int ret = lua_pcall(L, 3, 0, errhandler_index);
   lua_remove(L, errhandler_index);
   if(ret != LUA_OK) {
     shuso_set_error(S, "%s", lua_tostring(L, -1));
