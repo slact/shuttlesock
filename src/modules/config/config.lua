@@ -68,7 +68,6 @@ local config_settings = {
     description = "sets path for the 'include' setting",
     nargs = 1,
     handler = function(setting)
-      setting.parent.config_include_path = setting.values[1]
       return true
     end
   },
@@ -105,8 +104,6 @@ local config_settings = {
         included_config.config_include_stack = config.config_include_stack
         assert(included_config:load())
         assert(included_config:parse())
-        assert(included_config:handle("config.include_path"))
-        assert(included_config:handle("config.include"))
         
         table.insert(tokens, {type="comment", value = "# included file " .. p ..";"})
         
@@ -146,10 +143,11 @@ function Parser.new(string, opt)
   setmetatable(self, parser_mt)
   if not opt.root then
     self:push_setting("::ROOT", "config", true)
+    self:push_block("::ROOT")
   else
     self:push_setting(opt.root, nil, true)
+    self:push_block(opt.root.block)
   end
-  self:push_block("::ROOT")
   if opt.file then
     self.is_file = true
   end
@@ -218,7 +216,7 @@ do --parser
     local setting
     if type(setting_name) == "table" and not module_name then
       setting = setting_name
-    else
+    elseif type(setting_name) == "string" then
       setting = {
         type = "setting",
         name = setting_name,
@@ -242,11 +240,13 @@ do --parser
       else
         setting.parent = self.stack[#self.stack - 1]
       end
+    else
+      error("tried pushing invalid setting onto parser stack")
     end
     
     table.insert(self.stack, setting)
     self.top = setting
-    return true
+    return setting
   end
   
   function parser:pop_setting()
@@ -266,8 +266,9 @@ do --parser
   end
   
   function parser:add_newline(pos)
-    table.insert(self.top.tokens, {type="newline", position = pos, value = ""})
-    return self.top
+    local newline = {type="newline", position = pos, value = ""}
+    table.insert(self.top.tokens, newline)
+    return newline
   end
   
   function parser:add_comment(comment, pos)
@@ -277,14 +278,14 @@ do --parser
     local cmt = {type="comment", position = pos, value = comment}
     table.insert(chunk.comments, cmt)
     table.insert(chunk.tokens, cmt)
-    return chunk
+    return cmt
   end
   
   function parser:add_semicolon(pos)
     local setting = assert(self:in_setting())
     local semi = {type="semicolon", position = pos}
     table.insert(setting.tokens, semi)
-    return setting
+    return semi
   end
   
   function parser:add_value_to_setting(value_type, val, opt)
@@ -331,55 +332,69 @@ do --parser
     setting.position.values_last = value.position.last
     table.insert(setting.values, value)
     table.insert(setting.tokens, value)
-    return true
+    return value
   end
   
   function parser:push_block(block_name)
-    local block = {
-      type = "block",
-      name = block_name,
-      position = {
-        first = self.cur,
-        last = self.cur,
-        settings_first = nil,
-        settings_last = nil
-      },
-      settings = {},
-      comments = {},
-      tokens = {},
-      source_setting = assert(self:in_setting())
-    }
+    local block
+    if type(block_name) == "string" or not block_name then
+      block = {
+        type = "block",
+        name = block_name,
+        position = {
+          first = self.cur,
+          last = self.cur,
+          settings_first = nil,
+          settings_last = nil
+        },
+        settings = {},
+        comments = {},
+        tokens = {},
+        source_setting = assert(self:in_setting())
+      }
+    elseif type(block_name) == "table" and block_name.type == "block" then
+      block = block_name
+    else
+      error("tried pushing an invalid block onto the parser stack")
+    end
     table.insert(self.stack, block)
     self.top = block
-    return true
+    return block
   end
   
   function parser:pop_block()
-    assert(self:in_block())
+    assert(self:in_block(), "tried popping a block while not in block")
     local block = self.top
     table.remove(self.stack)
     self.top = self.stack[#self.stack]
-    local setting = assert(self:in_setting())
-    assert(not setting.block)
-    setting.block = block
-    block.setting = setting
+    local setting = assert(self:in_setting(), "popped a block and ended not not in setting")
+    if not setting.block then
+      setting.block = block
+      block.setting = setting
+    else
+      assert(setting.block == block, "setting.block doesn't match block")
+      assert(block.setting == setting, "block.setting doesn't match setting")
+    end
     --finishing a block means we are also finishing the setting it belongs to
     self:pop_setting()
-    return true
+    return block
   end
 
   function parser:parse()
+    local root_top = self.top
     local token_count = 0
     for _ in self:parse_each_token() do
       token_count = token_count + 1
     end
-    
+    self.token_count = token_count
+  
     if self:error() then
       return nil, self:error()
     end
-    
     local unexpected_end
-    if self.top.source_setting ~= self.root then
+    
+    if self.top ~= root_top then
+      require "shuttlesock.core".raise_SIGABRT()
       if self:in_setting() then
         unexpected_end = ";"
       elseif self:in_block()then
@@ -388,11 +403,10 @@ do --parser
     end
     
     if unexpected_end then
-      return nil, self:error(("unexpected end of config %s, expected \"%s\""):format(self.is_file and "file" or "string", unexpected_end))
-    else
-      self:pop_block()
+      return nil, self:error(("unexpected end of config %s, expected \"%s\""):format(self.is_file and "file" or "string", unexpected_end), self.top)
     end
-      
+    
+    self:pop_block() --pop root block
     return self.root
   end
   
@@ -519,16 +533,16 @@ do --parser
         return nil, "invalid config setting name \""..self:match().."\""
       end
     end
-    self:push_setting(name, module_name)
-    return true
+    return self:push_setting(name, module_name)
   end
   
   function parser:match_semicolon()
     assert(self:match("^;"))
-    self:add_semicolon(self.cur - 1)
+    local semi = self:add_semicolon(self.cur - 1)
     self:skip_space(" \t")
     self:skip_comment()
-    return self:pop_setting()
+    assert(self:pop_setting())
+    return semi
   end
   
   function parser:print_stack()
@@ -547,12 +561,12 @@ do --parser
       if self:match("^}") then
         return self:pop_block()
       else
-        local ok, err = self:match_setting_name()
-        if not ok then
+        local setting, err = self:match_setting_name()
+        if not setting then
           return nil, err
         end
+        return setting
       end
-      return true
     end
     
     assert(self:in_setting())
@@ -576,7 +590,7 @@ do --parser
     if not ok then
       return nil, err
     end
-    return true
+    return ok
   end
   
   function parser:location(pos)
@@ -589,7 +603,7 @@ do --parser
       end
     end
     if type(pos) ~= "number" then
-      error("unknown position "..tostring(pos))
+      error("unknown position " .. tostring(pos))
     end
     local line = 1
     local cur = 1
@@ -779,30 +793,35 @@ do --config
     end
   }
   
-  function config:parse(str, name)
+  function config:parse(str, opt)
     assert(type(str) == "string")
-    assert(name == nil or type(name) == "string")
-    self.name = name
-    
-    if self.parsed then
-      error("parsing more than one root config is not supported yet")
+    opt = opt or {}
+    assert(type(opt) == "table")
+    if opt.name then
+      assert(type(opt.name) == "string")
     end
+    self.name = opt.name
     
-    local parser = Parser.new(str, {name = self.name})
+    local parser = assert(Parser.new(str, {name = self.name, root = self.root}))
     local ok, err = parser:parse()
-    assert(ok, err)
+    assert(ok, err or "parser failed for unknown reasons")
+    
     self.root = parser.root
     table.insert(self.parsers, parser)
     for setting in self:each_setting() do
-      setting.parser_index = #self.parsers
-      if setting.block then
-        setting.block.parser_index = #self.parsers
+      if not setting.parser_index then
+        setting.parser_index = #self.parsers
+        if setting.block then
+          setting.block.parser_index = #self.parsers
+        end
       end
     end
     
     --now handle includes
     assert(self:handle("config:include_path"))
     assert(self:handle("config:include"))
+    
+    
     self.parsed = true
     return self
   end
@@ -994,8 +1013,8 @@ do --config
     error("not yet implemented")
   end
   
-  function config:handle(handler_name)
-    for setting in self:each_setting() do
+  function config:handle(handler_name, context)
+    for setting in self:each_setting(context) do
       local ok, handler, err
       handler, err = self:find_handler_for_setting(setting)
       
