@@ -130,10 +130,12 @@ local config_settings = {
   }
 }
 
-function Parser.new(name, string, opt)
+function Parser.new(string, opt)
   opt = opt or {}
+  assert(type(string) == "string")
+  assert(type(opt) == "table")
   local self = {
-    name = name,
+    name = opt.name or "(unnamed)",
     str = string,
     cur = 1,
     blocklevel = 0,
@@ -182,10 +184,8 @@ do --parser
     if err then
       local line, column = self:location(offset)
       self.errmsg = ("%s in %s:%d:%d"):format(err, self.name or "config", line, column)
-      return err
-    else
-      return self.errmsg
     end
+    return self.errmsg
   end
   function parser:last_error()
     return self.errmsg
@@ -370,19 +370,25 @@ do --parser
 
   function parser:parse()
     local token_count = 0
-    for _ in self:each_token() do
+    for _ in self:parse_each_token() do
       token_count = token_count + 1
     end
     
+    if self:error() then
+      return nil, self:error()
+    end
+    
     local unexpected_end
-    if self:in_setting() then
-      unexpected_end = ";"
-    elseif self:in_block() and self.top.source_setting ~= self.root then
-      unexpected_end = "}"
+    if self.top.source_setting ~= self.root then
+      if self:in_setting() then
+        unexpected_end = ";"
+      elseif self:in_block()then
+        unexpected_end = "}"
+      end
     end
     
     if unexpected_end then
-      return nil, self:error(("unexpected end of %s, expected \"%s\""):format(self.is_file and "file" or "string", unexpected_end))
+      return nil, self:error(("unexpected end of config %s, expected \"%s\""):format(self.is_file and "file" or "string", unexpected_end))
     else
       self:pop_block()
     end
@@ -416,11 +422,15 @@ do --parser
     return self.str:find(pattern, self.cur + (offset or 0), simple)
   end
   
-  function parser:each_token()
+  function parser:parse_each_token()
     --for loop iterator
     return function()
       repeat until not (self:skip_space() or self:skip_comment())
-      local token = self:next_token()
+      local token, err = self:next_token()
+      if not token then
+        self:error(err)
+        return nil
+      end
       return token
     end
   end
@@ -475,17 +485,17 @@ do --parser
     end
     
     if self:match("^%$[^%s;]+") then
-      return nil, self:error("invalid variable name " .. self:match())
+      return nil, "invalid variable name " .. self:match()
     elseif self:match("^%$") then
-      return nil, self:error("empty variable name")
+      return nil, "empty variable name"
     else
-      return nil, self:error("invalid variable")
+      return nil, "invalid variable"
     end
   end
   
   function parser:match_value()
     if not self:match("^[^%s%;]+") then
-      return nil, self:error("invalid value")
+      return nil, "invalid value"
     end
     return self:add_value_to_setting("value")
   end
@@ -493,21 +503,20 @@ do --parser
   function parser:match_setting_name()
     if not self:match("^[^%s]+") then
       if self:match("^;") then
-        self:error("unexpected \";\"")
+        return nil, "unexpected \";\""
       elseif self:match("^{") then
-        self:error("unexpected \"{\"")
+        return nil, "unexpected \"{\""
       elseif self:match("^%S+") then
-        self:error("invalid config setting name \"" .. self:match() .. "\"")
+        return nil, "invalid config setting name \"" .. self:match() .. "\""
       else
-        self:error("expected config setting")
+        return nil, "expected config setting name"
       end
-      return nil, self:last_error()
     end
     local module_name, name = nil, self:match()
     if name:match("%:") then
       module_name, name = name:match("^([^%:%.]+):([^%s]+)$")
-      if not module_name then
-        return nil, self:error("invalid config setting name \""..name.."\"")
+      if not name or not module_name then -- "foo:" or ":foo"
+        return nil, "invalid config setting name \""..self:match().."\""
       end
     end
     self:push_setting(name, module_name)
@@ -540,7 +549,7 @@ do --parser
       else
         local ok, err = self:match_setting_name()
         if not ok then
-          return nil, self:error(err)
+          return nil, err
         end
       end
       return true
@@ -565,12 +574,23 @@ do --parser
     end
     
     if not ok then
-      return nil, self:error(err)
+      return nil, err
     end
     return true
   end
   
   function parser:location(pos)
+    --
+    if type(pos) == "table" then
+      if pos.position then
+        pos = pos.position.first
+      elseif type(pos.first) == "number" then
+        pos = pos.first
+      end
+    end
+    if type(pos) ~= "number" then
+      error("unknown position "..tostring(pos))
+    end
     local line = 1
     local cur = 1
     pos = pos or self.cur
@@ -761,20 +781,23 @@ do --config
   
   function config:parse(str, name)
     assert(type(str) == "string")
-    if name then
-      self.name = name
-    end
+    assert(name == nil or type(name) == "string")
+    self.name = name
     
     if self.parsed then
       error("parsing more than one root config is not supported yet")
     end
     
-    local parser = Parser.new(self.name, str)
-    assert(parser:parse())
+    local parser = Parser.new(str, {name = self.name})
+    local ok, err = parser:parse()
+    assert(ok, err)
     self.root = parser.root
     table.insert(self.parsers, parser)
     for setting in self:each_setting() do
       setting.parser_index = #self.parsers
+      if setting.block then
+        setting.block.parser_index = #self.parsers
+      end
     end
     
     --now handle includes
@@ -844,14 +867,6 @@ do --config
     return false
   end
 
-  function config:location(block_or_setting)
-    local parser = self.parsers[block_or_setting.setting.parser_index]
-    if not parser then
-      return "unknown location"
-    end
-    return parser:location(block_or_setting.position.start)
-  end
-
   function config:find_handler_for_setting(setting)
     if setting.full_name then
       local handler = self.handlers[setting.full_name]
@@ -897,7 +912,7 @@ do --config
     end
     if block_or_setting.type == "block" then
       local setting = block_or_setting.setting
-      local setting_path = config:get_path(setting)
+      local setting_path = self:get_path(setting)
       local setting_path_part = is_root(setting) and "" or (setting.full_name or setting.name)
       local slash = setting_path:match("/$") and "" or "/"
       block_or_setting.path = setting_path..slash..setting_path_part
@@ -911,21 +926,39 @@ do --config
         elseif is_root(setting.parent) then
           setting.path = "/"
         else
-          local parent_path = config:get_path(setting.parent)
+          local parent_path = self:get_path(setting.parent)
           local slash = parent_path:match("/$") and "" or "/"
           local parent_path_part = (setting.parent.full_name or setting.parent.name)
-          setting.path = ("%s%s%s"):format(config:get_setting_path(setting.parent), slash, parent_path_part)
+          setting.path = ("%s%s%s"):format(self:get_setting_path(setting.parent), slash, parent_path_part)
         end
       end
       return setting.path
     end
   end
 
+  function config:ptr_lookup(ptr)
+    assert(type(ptr)=="userdata")
+    local reftable = debug.getregistry()["shuttlesock.config.pointer_ref_table"]
+    if reftable then
+      return reftable[ptr]
+    end
+  end
+  
   function config:error(block_or_setting, message, ...)
+    if type(block_or_setting) == "userdata" then
+      block_or_setting = self:ptr_lookup(block_or_setting)
+    end
     if select("#", ...) > 0 then
       message = message:format(...)
     end
-    return ("%s in %s"):format(message, config:location(block_or_setting))
+    
+    message = ('%s for %s "%s"'):format(message, block_or_setting.type or "(?)", block_or_setting.name or "")
+    
+    local parser = self.parsers[block_or_setting.parser_index]
+    if not parser then
+      return message .. " in unknown location"
+    end
+    return parser:error(message, block_or_setting)
   end
   
   function config:get_setting_path(setting)
@@ -938,10 +971,10 @@ do --config
       elseif is_root(setting.parent) then
         setting.path = "/"
       else
-        local parent_path = config:get_setting_path(setting.parent)
+        local parent_path = self:get_setting_path(setting.parent)
         local slash = parent_path:match("/$") and "" or "/"
         local parent_path_part = (setting.parent.full_name or setting.parent.name)
-        setting.path = ("%s%s%s"):format(config:get_setting_path(setting.parent), slash, parent_path_part)
+        setting.path = ("%s%s%s"):format(self:get_setting_path(setting.parent), slash, parent_path_part)
       end
     end
     return setting.path
@@ -1121,7 +1154,7 @@ do --config
     
     if setting.default then
       ensure_type("default", "string")
-      local default_value_parser = Parser.new(setting.name .. " default value", ("%s %s;"):format(setting.name, setting.default))
+      local default_value_parser = Parser.new(("%s %s;"):format(setting.name, setting.default), {name = setting.name .. " default value"})
       local default_parsed, err = default_value_parser:parse()
       ensure(default_parsed, "default string invalid: %s", err)
       default_setting = default_parsed.block.settings[1]
@@ -1250,7 +1283,7 @@ do --config
     end
     local handler = self.handlers[setting.handled_by]
     if not handler then
-      return nil, ("can't find handler for setting %s handled by %s"):format(setting.full_name, setting.handled_by)
+      return nil, ("can't find handler for setting \"%s\" handled by %s"):format(setting.full_name, setting.handled_by)
     end
     return handler.default_values or {}
   end

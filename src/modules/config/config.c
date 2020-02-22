@@ -591,10 +591,10 @@ bool shuso_configure_string(shuso_t *S,  const char *str, const char *str_title)
   luaS_get_config_pointer_ref(L, ctx);
   lua_getfield(L, -1, "parse");
   lua_insert(L, -2);
-  lua_pushstring(L, str);
   if(str_title) {
     lua_pushstring(L, str_title);
   }
+  lua_pushstring(L, str);
   int ret = lua_pcall(L, str_title ? 3 : 2, 0, errhandler_index);
   lua_remove(L, errhandler_index);
   if(ret != LUA_OK) {
@@ -627,22 +627,20 @@ bool shuso_config_match_block_path(shuso_t *S, const shuso_setting_block_t *bloc
 
 static bool shuso_config_error_va(shuso_t *S, const void *ptr, const char *fmt, va_list args) {
   lua_State *L = S->lua.state;
+  int top = lua_gettop(L);
   lua_pushlightuserdata(L, (void *)ptr);
   va_list args_again;
   va_copy(args_again, args);
   int errlen = vsnprintf(NULL, 0, fmt, args);
   luaL_Buffer buf;
-  vsnprintf(luaL_buffinitsize(L, &buf, errlen), errlen, fmt, args_again);
+  vsnprintf(luaL_buffinitsize(L, &buf, errlen + 1), errlen + 1, fmt, args_again);
   va_end(args_again);
   luaL_pushresultsize(&buf, errlen);
-  
   luaS_pcall_config_method(L, "error", 2, 1);
-  size_t sz;
-  const char *lerr = lua_tolstring(L, -1, &sz);
-  char *err = shuso_stalloc(&S->stalloc, sz + 1);
-  strcpy(err, lerr);
-  lua_pop(L, 1);
-  return lerr;
+  const char *lerr = lua_tostring(L, -1);
+  shuso_set_error(S, lerr);
+  lua_settop(L, top);
+  return false;
 }
 
 bool shuso_config_setting_error(shuso_t *S, shuso_setting_t *s, const char *fmt, ...) {
