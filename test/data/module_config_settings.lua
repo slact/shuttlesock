@@ -28,7 +28,7 @@ testmod.settings = {
   { name="foo",
     path="block3/",
     description="inside block3",
-    nargs="1-3",
+    nargs="1-4",
     default_value="10 20"
   },
   { name="bar",
@@ -37,7 +37,15 @@ testmod.settings = {
     nargs="1-10",
     default_value="11 22 33 44",
     block=false
+  },
+  { name="ookay",
+    path="**",
+    description="anything goes",
+    nargs="1-10",
+    default_value="1 2 3 4",
+    block=false
   }
+
 }
 
 testmod:subscribe("core:manager.workers_started", function()
@@ -76,6 +84,13 @@ function testmod:initialize_config(block)
     assert(block:setting_value("bar", 1)=="block1_1")
     assert(block:setting_value("bar", 1, "inherited")=="block1_1")
     assert(block:setting_value("bar", 1, "local")==nil)
+    assert(block:setting_value("ookay", 1) == "one")
+    assert(block:setting_value("ookay", 2) == "hello i am\n  two")
+    assert(block:setting_value("ookay", 3) == "three")
+    assert(block:setting_value("ookay", 4) == 
+        "        yes this,\n        is\";~athing")
+    assert(block:setting_value("ookay", 5) == 
+        "        and one more\n        more")
     testmod.test_initcfg_times = testmod.test_initcfg_times + 1
   elseif block.name == "block3" then
     assert(block.path == "/block1/block2/block3")
@@ -102,9 +117,20 @@ assert(testmod:add())
 local config = 
 [[
   root_config "yeep";
+  #beeep
   block1 {
     bar block1_1 block1_2;
     block2 {
+      ookay one <<~TWO three <<-FOUR_THING <<FIVE; #comment
+        hello i am
+          two
+        TWO
+        yes this,
+        is";~athing
+        FOUR_THING
+        and one more
+        more
+FIVE
       block3 {
         bar block3_1 block3_2;
         foo 100 150;

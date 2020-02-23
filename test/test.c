@@ -791,7 +791,7 @@ typedef struct {
 } ipc_one_to_many_check_t;
 
 
-#define check_ipc(test, S, chk, ...) \
+#define check_ipc(test,S,chk,...) \
 do { \
   if(!(test)) { \
     if(!chk->failure) { \

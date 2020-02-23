@@ -137,6 +137,7 @@ function Parser.new(string, opt)
     cur = 1,
     blocklevel = 0,
     stack = {},
+    heredoc={},
     top = nil,
     root = nil
   }
@@ -293,17 +294,28 @@ do --parser
       val = self:match() --last match
     end
     
-    local value = {
-      type = value_type,
-      position = {
-        first = self.cur - #val,
-        last = self.cur
-      },
-      value = {
-        raw = val,
-      }
+    opt = opt or {}
+    
+    local value
+    
+    if opt.replace then
+      value = opt.replace
+      for k, _ in pairs(value) do
+        value[k]=nil
+      end
+    else
+      value = {}
+    end
+    value.type = value_type
+    value.position = {
+      first = self.cur - #val,
+      last = self.cur
     }
-    if type(val) == "string" and opt and opt.quote_char then
+    value.value = {
+      raw = val
+    }
+    
+    if type(val) == "string" and opt.quote_char then
       --unquote value
       val = val:match(("^%s(.*)%s$"):format(opt.quote_char, opt.quote_char))
     end
@@ -325,13 +337,21 @@ do --parser
     }
     value.value.boolean = boolies[val]
     
-    local setting = assert(self:in_setting())
-    if not setting.position.values_first then
-      setting.position.values_first = value.position.first
+    local setting = opt.setting or assert(self:in_setting())
+    if not opt.non_contiguous then
+      if not setting.position.values_first then
+        setting.position.values_first = value.position.first
+      end
+      setting.position.values_last = value.position.last
     end
-    setting.position.values_last = value.position.last
-    table.insert(setting.values, value)
-    table.insert(setting.tokens, value)
+    
+    if not opt.replace then
+      table.insert(setting.values, value)
+      if not opt.not_a_token then
+        table.insert(setting.tokens, value)
+      end
+    end
+    
     return value
   end
   
@@ -436,6 +456,15 @@ do --parser
     return self.str:find(pattern, self.cur + (offset or 0), simple)
   end
   
+  function parser:last_token()
+    local tokens = self.top.tokens
+    return tokens[#tokens]
+  end
+  
+  function parser:last_token_type()
+    return (self:last_token() or {}).type
+  end
+  
   function parser:parse_each_token()
     --for loop iterator
     return function()
@@ -451,8 +480,19 @@ do --parser
   
   function parser:skip_space(spacechars)
     spacechars = spacechars or " \t\r\n"
-    local m = self:match("^["..spacechars.."]+", "last_space")
-    if m and self:in_setting() then
+    
+    local pattern
+    if spacechars:match("\n") and #self.heredoc > 0 then
+      if self:last_token_type() == "newline" then
+        return nil
+      end
+      pattern = "^["..spacechars:gsub("\n", "").."]*["..spacechars.."]"
+    else
+      pattern = "^["..spacechars.."]+"
+    end
+    
+    local m = self:match(pattern, "last_space")
+    if m then
       local nl = nil
       repeat
         nl = m:find("\n", nl)
@@ -473,8 +513,11 @@ do --parser
     return m
   end
   
-  function parser:match_string()
+  function parser:match_string(opt)
     local quote_char = self.str:sub(self.cur, self.cur)
+    if not quote_char:match("['\"]") then
+      return false
+    end
     local unquote
     local offset = 1
     repeat
@@ -483,17 +526,35 @@ do --parser
         offset = unquote - self.cur + 1
         if count_slashes_reverse(self.str, self.cur, unquote - 1) % 2 == 0 then
           --string end found
-          self.last_match = self.str:sub(self.cur, unquote)
+          if opt and opt.unquote then
+            self.last_match = self.str:sub(self.cur + 1, unquote - 1)
+          else
+            self.last_match = self.str:sub(self.cur, unquote)
+          end
           self.cur = unquote + 1
-          return self:add_value_to_setting("string", self.last_match, {quote_char=quote_char})
+          return self.last_match, quote_char
         end
       end
     until not unquote
-    return nil, "unterminated string"
+    return nil, nil, "unterminated string"
+  end
+  
+  function parser:match_string_value()
+    local str, quote_char, err = self:match_string()
+    if not str then
+      return str, err
+    end
+    return self:add_value_to_setting("string", str, {quote_char=quote_char})
   end
   
   function parser:match_variable()
-    local var = self:match("^%$([%w%.%_]+)")
+    local var = self:match("^%$([%w%.%_]*)")
+    if not var then
+      return false
+    end
+    if #var == 1 then
+      return nil, "empty variable name"
+    end
     if var then
       return self:add_value_to_setting("variable")
     end
@@ -537,12 +598,139 @@ do --parser
   end
   
   function parser:match_semicolon()
-    assert(self:match("^;"))
+    if not self:match("^;") then
+      return false
+    end
     local semi = self:add_semicolon(self.cur - 1)
     self:skip_space(" \t")
     self:skip_comment()
-    assert(self:pop_setting())
+    if self:in_setting() then
+      assert(self:pop_setting())
+    end
     return semi
+  end
+  
+  function parser:match_block_start()
+    if not self:match("^%{") then
+      return false
+    end
+    return self:push_block()
+  end
+  
+  function parser:match_block_end()
+    if not self:match("^%}") then
+      return false
+    end
+    if self:in_setting() then
+      return nil, "unexpected \"}\""
+    elseif self:in_block() then
+      return self:pop_block()
+    else
+      return nil, "really weird place to see \"}\""
+    end
+  end
+  
+  function parser:match_heredoc_start()
+    local startpos = self.cur
+    
+    local heredoc_type = self:match("^%<%<[%-%~]?")
+    if not heredoc_type then
+      return false
+    end
+    
+    local label, quotechar, err = self:match_string({unquote=true})
+    
+    if err then
+      return nil, "invalid heredoc label string"
+    end
+    
+    label = label or self:match("^[^%s%;]*")
+    if not label then
+      return nil, "invalid heredoc label"
+    end
+    if #label == 0 then
+      return nil, "invalid heredoc with empty label"
+    end
+    
+    --add the token
+    local token_val
+    if quotechar then
+      token_val = heredoc_type .. quotechar .. label .. quotechar
+    else
+      token_val = heredoc_type .. label
+    end
+    
+    local heredoc_start_token = {type="heredoc_start", position = startpos, value = token_val}
+    table.insert(self.top.tokens, heredoc_start_token)
+    
+    --add the value to be replaced when the heredoc body is processed
+    local strval = self:add_value_to_setting("string", nil, {not_a_token = true}) --will be replaced later
+    
+    local heredoc = {
+      type = heredoc_type,
+      label = label,
+      heredoc_start_pos = self.cur,
+      string_value = strval,
+      setting = self:in_setting()
+    }
+    
+    table.insert(self.heredoc, heredoc)
+    
+    return heredoc
+  end
+  
+  function parser:match_heredoc()
+    local pos = self.cur
+    
+    if #self.heredoc == 0 then
+      return false
+    end
+    if self:last_token_type() ~= "newline" then
+      return false
+    end
+    
+    local heredoc = self.heredoc[1]
+    table.remove(self.heredoc, 1)
+    
+    local endspaces = ""
+    if heredoc.type == "<<-" or heredoc.type == "<<~" then
+      endspaces = "[\t ]*"
+    end
+    
+    local body_close_pattern = "^.*\n"..endspaces..heredoc.label:gsub("([^%w])", "%%%1")
+    
+    local body_with_end = self:match(body_close_pattern)
+    if not body_close_pattern then
+      return nil, "unterminated heredoc " .. heredoc.label
+    end
+    
+    --insert the token
+    local token = {type="heredoc_body", position = pos, value=body_with_end}
+    table.insert(self.top.tokens, token)
+    
+    local body = body_with_end:match("^(.*)\n[^\n]*$")
+    assert(body)
+    
+    if heredoc.type == "<<~" then
+      body = "\n"..body
+      --remove minimum leading whitespace
+      local minspace = math.huge
+      for count in string.gmatch(body, "\n([\t ]*)") do
+        if #count < minspace then
+          minspace = #count
+        end
+      end
+      local spacepattern = "\n([\t ]*)"..("[\t ]"):rep(minspace)
+      body = body:gsub(spacepattern, "\n%1")
+      body = body:sub(2, -1)
+    end
+    local ok, err = self:add_value_to_setting("string", body, {
+      replace = heredoc.string_value,
+      non_contiguous = true,
+      setting = heredoc.setting
+    })
+    
+    return ok, err
   end
   
   function parser:print_stack()
@@ -557,40 +745,48 @@ do --parser
       return nil --we're done
     end
     
-    if self:in_block() then
-      if self:match("^}") then
-        return self:pop_block()
-      else
-        local setting, err = self:match_setting_name()
-        if not setting then
-          return nil, err
-        end
-        return setting
+    do
+      local heredoc, err = self:match_heredoc()
+      if heredoc or err then
+        return heredoc, err
       end
     end
     
-    assert(self:in_setting())
-    local char = self.str:sub(self.cur, self.cur)
-    local ok, err
-    if char == "\"" or char == "'" then
-      ok, err = self:match_string()
-    elseif char == "$" then
-      ok, err = self:match_variable()
-    elseif char == "{" then
-      self.cur = self.cur + 1
-      ok, err = self:push_block()
-    elseif char == "}" then
-      err = "unexpected \"}\""
-    elseif char == ";" then
-      ok, err = self:match_semicolon()
-    else
-      ok, err = self:match_value()
-    end
     
-    if not ok then
-      return nil, err
+    if self:in_block() then
+      do
+        local block, err = self:match_block_end()
+        if block or err then
+          return block, err
+        end
+      end
+      
+      local setting, err = self:match_setting_name()
+      if not setting then
+        return nil, err
+      end
+      return setting
     end
-    return ok
+    assert(self:in_setting())
+    
+    local matchers = {
+      self.match_heredoc_start,
+      self.match_string_value,
+      self.match_variable,
+      self.match_block_start,
+      self.match_block_end,
+      self.match_semicolon,
+      self.match_value
+    }
+    
+    for _, matcher in ipairs(matchers) do
+      local token, err = matcher(self)
+      if token then
+        return token
+      elseif err then
+        return nil, err
+      end
+    end
   end
   
   function parser:location(pos)
@@ -601,9 +797,6 @@ do --parser
       elseif type(pos.first) == "number" then
         pos = pos.first
       end
-    end
-    if type(pos) ~= "number" then
-      error("unknown position " .. tostring(pos))
     end
     local line = 1
     local cur = 1
@@ -821,8 +1014,8 @@ do --config
     assert(self:handle("config:include_path"))
     assert(self:handle("config:include"))
     
-    
     self.parsed = true
+    
     return self
   end
   
@@ -1232,7 +1425,7 @@ do --config
     local buf = {}
     if cur.type == "block" then
       for _, v in ipairs(cur.tokens) do
-        table.insert(buf, self:config_string(v, lvl))
+        table.insert(buf, (self:config_string(v, lvl)))
       end
       if cur == self.root.block then
         return table.concat(buf, "\n")
@@ -1242,6 +1435,9 @@ do --config
     elseif cur.type == "setting" then
       local str = indent(lvl) .. (cur.full_name or cur.name)
       local prev_type = "none"
+      for _, token in ipairs(cur.tokens) do
+        print("TOKEN:", token.type)
+      end
       for _, token in ipairs(cur.tokens) do
         local pre = prev_type == "newline" and indent(lvl+1) or " "
         
@@ -1253,6 +1449,9 @@ do --config
           str = str .. pre .. token.value.raw
         elseif token.type == "semicolon" then
           str = str .. (prev_type == "newline" and indent(lvl) or "")..";"
+        elseif token.type == "heredoc_start" then
+          print("startval", str, token.value)
+          str = str .. pre .. token.value
         else
           error("unexpected token type " .. token.type)
         end
@@ -1268,7 +1467,9 @@ do --config
       end
     elseif cur.type == "comment" then
       return indent(lvl)..cur.value
-    else
+    elseif cur.type == "heredoc_body" then
+      return cur.value
+    elseif cur.type ~= "newline" then
       error("unexpected chunk type " .. cur.type)
     end
   end
