@@ -66,6 +66,8 @@ function(shuttlesock_link_c_ares STATIC_BUILD)
       set(maybe_ccache "-DCMAKE_C_COMPILER_LAUNCHER=${CMAKE_C_COMPILER_LAUNCHER}" "-DCMAKE_CXX_COMPILER_LAUNCHER=${CMAKE_CXX_COMPILER_LAUNCHER}")
     endif()
     
+    #message(FATAL_ERROR "SHUTTLESOCK_SHARED_LDFLAGS: ${SHUTTLESOCK_SHARED_LDFLAGS}")
+    
     set(C_ARES_PREFIX ${CMAKE_CURRENT_BINARY_DIR}/c_ares)
     ExternalProject_Add(c_ares
       URL "https://c-ares.haxx.se/download/c-ares-${C_ARES_RELEASE_VERSION}.tar.gz"
@@ -73,6 +75,7 @@ function(shuttlesock_link_c_ares STATIC_BUILD)
       PREFIX "${C_ARES_PREFIX}"
       DOWNLOAD_DIR "${THIRDPARTY_DOWNLOAD}"
       CMAKE_ARGS
+        "-DCMAKE_C_FLAGS=${SHUTTLESOCK_SHARED_CFLAGS}"
         -DCARES_STATIC=ON
         -DCARES_SHARED=OFF
         -DCMAKE_POSITION_INDEPENDENT_CODE=ON

@@ -51,6 +51,7 @@ function(shuttlesock_link_hyperscan STATIC_BUILD)
       PREFIX "${HYPERSCAN_PREFIX}"
       DOWNLOAD_DIR "${THIRDPARTY_DOWNLOAD}"
       CMAKE_ARGS
+        "-DCMAKE_C_FLAGS=${SHUTTLESOCK_SHARED_CFLAGS}"
         -DBUILD_SHARED_LIBS=OFF
         "-DCMAKE_INSTALL_PREFIX=${THIRDPARTY_PREFIX}"
         ${maybe_ccache}
