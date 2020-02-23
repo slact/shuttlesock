@@ -10,8 +10,6 @@
 
 extern shuso_module_t shuso_lua_bridge_module;
 
-typedef struct shuso_lua_ev_watcher_s shuso_lua_ev_watcher_t;
-
 bool shuso_lua_create(shuso_t *S);
 bool shuso_lua_initialize(shuso_t *S);
 bool shuso_lua_destroy(shuso_t *S);
