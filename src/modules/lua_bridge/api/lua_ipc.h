@@ -18,7 +18,7 @@ typedef struct {
   int nrec;
 } ipc_lua_table_t;
 
-struct shuso_ipc_lua_field_s {
+typedef struct shuso_ipc_lua_field_s {
   uint8_t                type;
   uint8_t                is_integer;
   union {
@@ -29,7 +29,7 @@ struct shuso_ipc_lua_field_s {
     void                       *pointer;
     ipc_lua_table_t            *table;
   };
-}; // shuso_ipc_lua_field_t
+} shuso_ipc_lua_field_t;
 
 typedef struct {
   shuso_ipc_lua_field_t field;

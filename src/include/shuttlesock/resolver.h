@@ -8,7 +8,7 @@
 typedef struct shuso_resolver_s shuso_resolver_t;
 typedef struct shuso_resolver_socket_s shuso_resolver_socket_t;
 
-struct shuso_resolver_socket_s {
+typedef struct shuso_resolver_socket_s {
   shuso_resolver_socket_t       *next;
   int                            fd;
   struct {
@@ -16,16 +16,16 @@ struct shuso_resolver_socket_s {
     //shuso_ev_timer               timer;
   }                              ev;
   shuso_resolver_t              *resolver;
-};
+} shuso_resolver_socket_t;
 
-struct shuso_resolver_s {
+typedef struct shuso_resolver_s {
   int                    options_mask;
   struct ares_options    options;
   ares_channel           channel;
   shuso_t               *ctx;
   shuso_config_t        *cf;
   shuso_resolver_socket_t *socket_head;
-};
+} shuso_resolver_t;
 
 typedef enum {
   SHUSO_RESOLVER_SUCCESS = 0,

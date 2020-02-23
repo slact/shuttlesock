@@ -901,7 +901,7 @@ fail:
   return shuso_set_error(S, "failed to create mutex for shared memory slab");
 }
 
-bool shuso_shared_slab_destroy(struct shuso_s *S, shuso_shared_slab_t *shm) {
+bool shuso_shared_slab_destroy(shuso_t *S, shuso_shared_slab_t *shm) {
   return munmap(shm->ptr, shm->size) == 0;
 }
 

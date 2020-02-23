@@ -26,7 +26,7 @@ typedef enum {
 typedef struct shuso_buffer_link_s shuso_buffer_link_t;
 typedef struct shuso_buffer_link_cleanup_s shuso_buffer_link_cleanup_t;
 
-struct shuso_buffer_link_s {
+typedef struct shuso_buffer_link_s {
   union {
     struct msghdr  *msg;
     struct iovec   *iov;
@@ -42,7 +42,7 @@ struct shuso_buffer_link_s {
   uint8_t   memory_type;
   unsigned  have_cleanup:1;
   shuso_buffer_link_t *next;
-};// shuso_buffer_link_t
+} shuso_buffer_link_t;
 
 typedef struct {
   shuso_buffer_link_t        *first;
@@ -58,10 +58,10 @@ typedef struct {
 
 typedef void shuso_buffer_link_cleanup_fn(shuso_t *, shuso_buffer_t *, shuso_buffer_link_t *, void *);
 
-struct shuso_buffer_link_cleanup_s {
+typedef struct shuso_buffer_link_cleanup_s {
   void                         *cleanup_privdata;
   shuso_buffer_link_cleanup_fn *cleanup;
-};// shuso_buffer_link_cleanup_t
+} shuso_buffer_link_cleanup_t;
 
 typedef struct {
   shuso_buffer_link_t           link;

@@ -10,7 +10,7 @@ typedef struct {
 #endif
 } shuso_module_event_listener_t;
 
-struct shuso_module_event_s {
+typedef struct shuso_module_event_s {
 #ifdef SHUTTLESOCK_DEBUG_MODULE_SYSTEM
   size_t             count;
   _Atomic uint64_t   fired_count;
@@ -20,7 +20,7 @@ struct shuso_module_event_s {
   bool               firing;
   bool               cancelable;
   shuso_module_event_listener_t *listeners;
-}; //shuso_module_event_t
+} shuso_module_event_t;
 
 typedef struct {
   const char           *name;
@@ -29,12 +29,13 @@ typedef struct {
   bool                  cancelable;
 } shuso_event_init_t;
 
-struct shuso_event_state_s {
+typedef struct shuso_event_state_s {
   const shuso_module_t *publisher;
   const shuso_module_t *module;
   const char           *name;
   const char           *data_type;
-}; //shuso_event_state_t
+} shuso_event_state_t;
+
 //event stuff
 bool shuso_events_initialize(shuso_t *S, shuso_module_t *module, shuso_event_init_t *events_init);
 bool shuso_event_initialize(shuso_t *S, shuso_module_t *mod, shuso_module_event_t *mev, const char *name, const char *data_type, bool cancelable);

@@ -28,17 +28,17 @@
 #include <shuttlesock/core_modules.h>
 #include <shuttlesock/buffer.h>
 
-struct shuso_process_s {
+typedef struct shuso_process_s {
   pid_t                             pid;
   pthread_t                         tid;
   int                               procnum;
   _Atomic(shuso_runstate_t)        *state;
   uint16_t                          generation;
   shuso_ipc_channel_shared_t        ipc;
-}; // shuso_process_t
+} shuso_process_t;
 
 //params for setsockopt()
-struct shuso_sockopt_s {
+typedef struct shuso_sockopt_s {
   int           level;
   int           name;
   union {
@@ -47,15 +47,15 @@ struct shuso_sockopt_s {
     struct timeval timeval;
     struct linger linger;
   }             value;
-}; //shuso_sockopt_t
+} shuso_sockopt_t;
 
-struct shuso_sockopts_s {
+typedef struct shuso_sockopts_s {
   size_t           count;
   shuso_sockopt_t *array;
-}; //shuso_sockopts_t
+} shuso_sockopts_t;
 
 
-struct shuso_hostinfo_s {
+typedef struct shuso_hostinfo_s {
   const char        *name;
   union {
 #ifdef SHUTTLESOCK_HAVE_IPV6
@@ -67,18 +67,18 @@ struct shuso_hostinfo_s {
   uint16_t          addr_family; //address family: AF_INET/AF_INET6/AF_UNIX
   uint16_t          port; //CPU-native port
   unsigned          udp:1; //TCP or UDP?
-}; //shuso_hostinfo_t
+} shuso_hostinfo_t;
 
-struct shuso_socket_s {
+typedef struct shuso_socket_s {
   shuso_hostinfo_t  host;
   int               fd;
   shuso_socket_fn  *handler;
   shuso_socket_fn  *cleanup;
   void              *data;
-}; //shuso_socket_t;
+} shuso_socket_t;
 
 //the shuso_config struct is designed to be zeroed on initialization
-struct shuso_config_s {
+typedef struct shuso_config_s {
   struct {
     const char         *string;
     const char         *filename;
@@ -104,7 +104,7 @@ struct shuso_config_s {
   uid_t               uid;
   gid_t               gid;
   int                 workers;
-}; // shuso_config_t
+} shuso_config_t;
 
 typedef struct {
   pid_t           pid;
@@ -121,7 +121,7 @@ typedef struct {
   int             waitpid_status;
 } shuso_sigchild_info_t;
 
-struct shuso_common_s {
+typedef struct shuso_common_s {
   shuso_runstate_t    state;
   shuso_ipc_handler_t ipc_handlers[256];
   struct {
@@ -155,14 +155,14 @@ struct shuso_common_s {
   }                   features;
   shuso_shared_slab_t shm;
   bool                master_has_root;
-}; //shuso_common_t
+} shuso_common_t;
 
 _Static_assert(offsetof(shuso_common_t, process.worker)+sizeof(shuso_process_t)*SHUTTLESOCK_MASTER == offsetof(shuso_common_t, process.master), "master process offset does not match value of SHUTTLESOCK_MASTER");
 _Static_assert(offsetof(shuso_common_t, process.worker)+sizeof(shuso_process_t)*SHUTTLESOCK_MANAGER == offsetof(shuso_common_t, process.manager), "manager process offset does not match value of SHUTTLESOCK_MANAGER");
 
 LLIST_TYPEDEF_LINK_STRUCT(shuso_ev_timer);
 
-struct shuso_s {
+typedef struct shuso_s {
   int                         procnum;
   shuso_process_t            *process;
   shuso_ipc_channel_local_t   ipc;
@@ -203,7 +203,7 @@ struct shuso_s {
     bool                        do_not_publish_event;
   }                           error;
   char                        logbuf[1024];
-}; //shuso_t;
+} shuso_t;
 
 //shuso_t *shuso_create(unsigned int ev_loop_flags, shuso_runtime_handlers_t *handlers, shuso_config_t *config, const char **err);
 shuso_t *shuso_create(const char **err);
@@ -240,11 +240,11 @@ bool shuso_processes_share_heap(shuso_t *S, int procnum1, int procnum2);
 const char *shuso_process_as_string(int procnum);
 const char *shuso_runstate_as_string(shuso_runstate_t state);
 
-struct shuso_fn_debug_info_s {
+typedef struct shuso_fn_debug_info_s {
   const char *name;
   const char *file;
   int         line;
-};
+} shuso_fn_debug_info_t;
 
 #define SHUSO_EACH_WORKER(S, cur) \
   for(shuso_process_t *cur = &S->common->process.worker[*S->common->process.workers_start], *___worker_end = &S->common->process.worker[*S->common->process.workers_end]; cur < ___worker_end; cur++)
@@ -291,4 +291,5 @@ void shuso_listen(shuso_t *S, shuso_hostinfo_t *bind, shuso_handler_fn handler, 
   
 //network utilities
 bool shuso_setsockopt(shuso_t *S, int fd, shuso_sockopt_t *opt);
+
 #endif //SHUTTLESOCK_H

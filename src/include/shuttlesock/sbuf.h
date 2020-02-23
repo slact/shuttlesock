@@ -16,12 +16,12 @@ typedef struct sbuf_s sbuf_t;
   } \
   buf->next = NULL;
 
-struct sbuf_s {
+typedef struct sbuf_s {
   char           *start;
   char           *cur;
   char           *end;
   sbuf_t         *next;
-};
+} sbuf_t;
 typedef struct {
   sbuf_t         *head;
   sbuf_t         *tail;

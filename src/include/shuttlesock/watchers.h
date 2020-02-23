@@ -3,7 +3,7 @@
 #include <shuttlesock/common.h>
 #include <ev.h>
 
-struct shuso_ev_io_s {
+typedef struct shuso_ev_io_s {
 #ifndef  SHUTTLESOCK_DEBUG_NO_WORKER_THREADS
   ev_io          ev;
 #else
@@ -13,9 +13,9 @@ struct shuso_ev_io_s {
   };
   shuso_t       *state;
 #endif
-}; //shuso_ev_io
+} shuso_ev_io;
 
-struct shuso_ev_timer_s {
+typedef struct shuso_ev_timer_s {
 #ifndef SHUTTLESOCK_DEBUG_NO_WORKER_THREADS
   ev_timer       ev;
 #else
@@ -25,9 +25,9 @@ struct shuso_ev_timer_s {
   };
   shuso_t       *state;
 #endif
-}; //shuso_ev_timer
+} shuso_ev_timer;
 
-struct shuso_ev_child_s {
+typedef struct shuso_ev_child_s {
 #ifndef SHUTTLESOCK_DEBUG_NO_WORKER_THREADS
   ev_child       ev;
 #else
@@ -37,9 +37,9 @@ struct shuso_ev_child_s {
   };
   shuso_t       *state;
 #endif
-}; //shuso_ev_child
+} shuso_ev_child;
 
-struct shuso_ev_signal_s {
+typedef struct shuso_ev_signal_s {
 #ifndef SHUTTLESOCK_DEBUG_NO_WORKER_THREADS
   ev_signal      ev;
 #else
@@ -49,19 +49,19 @@ struct shuso_ev_signal_s {
   };
   shuso_t       *state;
 #endif
-}; //shuso_ev_signal
+} shuso_ev_signal;
 
-union shuso_ev_any_u {
+typedef union shuso_ev_any_u {
   struct shuso_ev_io_s      io;
   struct shuso_ev_timer_s   timer;
   struct shuso_ev_child_s   child;
   struct shuso_ev_signal_s  signal;
   ev_watcher                watcher;
-};
+} shuso_ev_any_t;
 
 #ifdef SHUTTLESOCK_DEBUG_NO_WORKER_THREADS
 #define SHUTTLESOCK_WATCHER_STATE_OFFSET offsetof(shuso_ev_io, state)
-_Static_assert(offsetof(union shuso_ev_any_u, watcher) == offsetof(union shuso_ev_any_u, io.ev), "ok...");
+_Static_assert(offsetof(shuso_ev_any_t, watcher) == offsetof(shuso_ev_any_t, io.ev), "ok...");
 _Static_assert(offsetof(shuso_ev_io, state) == offsetof(shuso_ev_io, state) - offsetof(shuso_ev_io, ev), "nonzero shuso_ev_* watcher offset");
 _Static_assert(offsetof(shuso_ev_io, state) == offsetof(shuso_ev_timer, state), "mismatching shuso_ev_* state offset");
 _Static_assert(offsetof(shuso_ev_io, state) == offsetof(shuso_ev_child, state), "mismatching shuso_ev_* state offset");

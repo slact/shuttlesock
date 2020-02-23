@@ -18,7 +18,8 @@ typedef enum {
   LUA_EV_WATCHER_SIGNAL =   3
 } shuso_lua_ev_watcher_type_t;
 
-struct shuso_lua_ev_watcher_s {
+
+typedef struct shuso_lua_ev_watcher_s {
   shuso_ev_any      watcher;
   struct {
     int               self;
@@ -26,7 +27,7 @@ struct shuso_lua_ev_watcher_s {
   }                 ref;
   unsigned          type:4;
   lua_State        *coroutine_thread;
-}; // shuso_lua_ev_watcher_t
+} shuso_lua_ev_watcher_t;
 
 typedef struct {
   struct {

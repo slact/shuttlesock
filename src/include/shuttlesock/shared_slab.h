@@ -18,11 +18,11 @@
 
 typedef struct shuso_slab_page_s  shuso_slab_page_t;
 
-struct shuso_slab_page_s {
+typedef struct shuso_slab_page_s {
     uintptr_t         slab;
     shuso_slab_page_t  *next;
     uintptr_t         prev;
-};
+} shuso_slab_page_t;
 
 typedef struct {
     unsigned            total;

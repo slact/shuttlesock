@@ -7,11 +7,11 @@ extern shuso_module_t shuso_config_module;
 
 #define SHUSO_SETTING_BLOCK_OPTIONAL 2
 
-struct shuso_setting_block_s {
+typedef struct shuso_setting_block_s {
   shuso_setting_t             *setting;
   const char                  *path;
   shuso_module_context_list_t context_list;
-}; // shuso_setting_block_t
+} shuso_setting_block_t;
 
 typedef struct {
   struct {
@@ -21,7 +21,7 @@ typedef struct {
   }                blocks;
 } shuso_config_module_ctx_t;
 
-struct shuso_setting_value_s {
+typedef struct shuso_setting_value_s {
   struct {
     unsigned    boolean:1;
     unsigned    integer:1;
@@ -36,15 +36,15 @@ struct shuso_setting_value_s {
   const char *raw;
   size_t      raw_len;
   
-}; //shuso_setting_value_t
+} shuso_setting_value_t;
 
 
-struct shuso_setting_values_s {
+typedef struct shuso_setting_values_s {
   uint16_t              count;
   shuso_setting_value_t array[];
-};// shuso_setting_values_t
+} shuso_setting_values_t;
 
-struct shuso_setting_s {
+typedef struct shuso_setting_s {
   const char             *name;
   const char             *module;
   const char             *raw_name;
@@ -56,7 +56,7 @@ struct shuso_setting_s {
     shuso_setting_values_t *defaults;
   }                       values;
   shuso_setting_block_t  *block;
-}; // shuso_setting_t
+} shuso_setting_t;
 
 #define SHUTTLESOCK_SETTINGS_END (shuso_module_setting_t ){.name = NULL}
 
