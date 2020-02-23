@@ -772,7 +772,10 @@ static void shuso_set_error_vararg(shuso_t *S, const char *fmt, va_list args) {
     S->error.msg = "failed to set error: out of memory";
     S->error.static_memory = true;
   }
-  vsnprintf(S->error.msg, errlen+1, fmt, args_again);
+  else {
+    vsnprintf(S->error.msg, errlen+1, fmt, args_again);
+    S->error.static_memory = false;
+  }
   va_end(args_again);
   if(S->common->state == SHUSO_STATE_CONFIGURING) {
     const char *last_err = shuso_last_error(S);
