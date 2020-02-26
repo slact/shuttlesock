@@ -130,17 +130,20 @@ do
     return listener
   end
   
-  function event:initialize(init_ptr, data_type, cancelable)
+  function event:initialize(opts)
     local Module = require "shuttlesock.core.module"
-    assert(type(init_ptr) == "userdata")
     if self.initialized then
       return nil, "module "..self.module_name.." has already registered event "..self.name.." with a different event struct"
     end
+    
+    assert(type(opts.ptr) == "userdata", "event ptr must be a userdata")
+    
     self.module = assert(Module.find(self.module_name))
     self.initialized = true
-    self.ptr = init_ptr
-    self.data_type = data_type
-    self.cancelable = cancelable or false
+    self.ptr = opts.ptr
+    self.data_type = opts.data_type
+    self.cancelable = opts.cancelable or false
+    self.pausable = opts.pausable or false
     return self
   end
 end

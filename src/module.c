@@ -318,6 +318,8 @@ static bool shuso_module_finalize(shuso_t *S, shuso_module_t *mod) {
     assert(event != NULL);
     lua_pop(L, 1);
     
+    event->module_index = mod->index;
+    
     lua_getfield(L, -1, "name");
     event->name = lua_tostring(L, -1);
     lua_pop(L, 1);
@@ -328,6 +330,10 @@ static bool shuso_module_finalize(shuso_t *S, shuso_module_t *mod) {
     
     lua_getfield(L, -1, "cancelable");
     event->cancelable = lua_toboolean(L, -1);
+    lua_pop(L, 1);
+    
+    lua_getfield(L, -1, "pausable");
+    event->pausable = lua_toboolean(L, -1);
     lua_pop(L, 1);
     
     lua_getfield(L, -1, "listeners");

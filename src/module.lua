@@ -270,15 +270,19 @@ function Module.new_core_module(name, ...)
   return module
 end
 
-function Module.initialize_event(module_id, event_name, event_ptr, event_data_type, cancelable)
+function Module.initialize_event(module_id, event_init_options)
   local module, event, err
+  assert(type(module_id) == "string" or type(module_id) == "userdata")
+  assert(type(event_init_options) == "table")
+  assert(type(event_init_options.name) == "string")
+  
   module, err = Module.find(module_id)
   if not module then return nil, err end
   
-  event, err = module:event(event_name)
+  event, err = module:event(event_init_options.name)
   if not event then return nil, err end
   
-  return event:initialize(event_ptr, event_data_type, cancelable)
+  return event:initialize(event_init_options)
 end
 
 do

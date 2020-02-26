@@ -9,7 +9,7 @@ bool shuso_core_module_event_publish(shuso_t *S, const char *name, intptr_t code
   for(int i = 0; i < n; i++) {
     cur = &ev[i];
     if(strcmp(cur->name, name) == 0) {
-      return shuso_event_publish(S, &shuso_core_module, cur, code, data);
+      return shuso_event_publish(S, cur, code, data);
     }
   }
   return shuso_set_error(S, "failed to publish core event %s: no such event", name);
@@ -32,26 +32,26 @@ static bool core_module_initialize(shuso_t *S, shuso_module_t *self) {
   assert(ctx);
   
   shuso_events_initialize(S, self, (shuso_event_init_t[]){
-    {"configure",       &ctx->events.configure,         NULL, false},
-    {"configure.after", &ctx->events.configure_after,   NULL, false},
+    {"configure",       &ctx->events.configure,         NULL, false, false},
+    {"configure.after", &ctx->events.configure_after,   NULL, false, false},
     
-    {"master.start",    &ctx->events.start_master,      NULL, false},
-    {"manager.start",   &ctx->events.start_manager,     NULL, false},
-    {"worker.start",    &ctx->events.start_worker,      NULL, false},
-    {"worker.start.before.lua_gxcopy",&ctx->events.start_worker_before_lua_gxcopy, "shuttlesock_state", false},
-    {"worker.start.before",&ctx->events.start_worker_before, "shuttlesock_state", false},
+    {"master.start",    &ctx->events.start_master,      NULL, false, false},
+    {"manager.start",   &ctx->events.start_manager,     NULL, false, false},
+    {"worker.start",    &ctx->events.start_worker,      NULL, false, false},
+    {"worker.start.before.lua_gxcopy",&ctx->events.start_worker_before_lua_gxcopy, "shuttlesock_state", false, false},
+    {"worker.start.before",&ctx->events.start_worker_before, "shuttlesock_state", false, false},
     
-    {"master.stop",     &ctx->events.stop_master,       NULL, false},
-    {"manager.stop",    &ctx->events.stop_manager,      NULL, false},
-    {"worker.stop",     &ctx->events.stop_worker,       NULL, false},
+    {"master.stop",     &ctx->events.stop_master,       NULL, false, false},
+    {"manager.stop",    &ctx->events.stop_manager,      NULL, false, false},
+    {"worker.stop",     &ctx->events.stop_worker,       NULL, false, false},
     
-    {"manager.workers_started",   &ctx->events.manager_all_workers_started, NULL, false},
-    {"master.workers_started",    &ctx->events.master_all_workers_started,  NULL, false},
-    {"worker.workers_started",    &ctx->events.worker_all_workers_started,  NULL, false},
-    {"manager.worker_exited",     &ctx->events.worker_exited,               NULL, false},
-    {"master.manager_exited",     &ctx->events.manager_exited,              NULL, false},
+    {"manager.workers_started",   &ctx->events.manager_all_workers_started, NULL, false, false},
+    {"master.workers_started",    &ctx->events.master_all_workers_started,  NULL, false, false},
+    {"worker.workers_started",    &ctx->events.worker_all_workers_started,  NULL, false, false},
+    {"manager.worker_exited",     &ctx->events.worker_exited,               NULL, false, false},
+    {"master.manager_exited",     &ctx->events.manager_exited,              NULL, false, false},
     
-    {"error",                     &ctx->events.error,              "string", false},
+    {"error",                     &ctx->events.error,              "string", false, false},
     {.name=NULL}
   });
   

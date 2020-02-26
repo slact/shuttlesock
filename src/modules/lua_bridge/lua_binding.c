@@ -1586,21 +1586,25 @@ static bool lua_module_initialize(shuso_t *S, shuso_module_t *module) {
     lua_pushnil(L);
     int i = 0;
     while(lua_next(L, -2)) {
-      const char   *pub_event_name = lua_tostring(L, -2);
-      bool          cancelable = false;
       assert(lua_istable(L, -1));
+      
+      shuso_event_init_t evinit = {0};
+
+      evinit.name = lua_tostring(L, -2);
+      
       lua_getfield(L, -1, "cancelable");
-      cancelable = lua_toboolean(L, -1);
+      evinit.cancelable = lua_toboolean(L, -1);
       lua_pop(L, 1);
+      
       lua_getfield(L, -1, "cancellable"); //throw the brits a bone
-      cancelable = cancelable || lua_toboolean(L, -1);
+      evinit.cancelable = evinit.cancelable || lua_toboolean(L, -1);
       lua_pop(L, 1);
       
       lua_getfield(L, -1, "data_type");
-      const char *data_type = lua_tostring(L, -1);
+      evinit.data_type = lua_tostring(L, -1);
       lua_pop(L, 1);
       
-      if(!shuso_event_initialize(S, module, &events[i], pub_event_name, data_type, cancelable)) {
+      if(!shuso_event_initialize(S, module, &events[i], &evinit)) {
         lua_pushboolean(L, 1);
         lua_setfield(L, -2, "initialization_failed");
       }
@@ -1861,6 +1865,48 @@ static int Lua_shuso_module_event_cancel(lua_State *L) {
   }
 }
 
+static int Lua_shuso_module_event_pause(lua_State *L) {
+  shuso_t *S = shuso_state(L);
+  luaL_checktype(L, 1, LUA_TLIGHTUSERDATA);
+  shuso_event_state_t *evstate = (void *)lua_topointer(L, 1);
+  
+  shuso_module_paused_event_t *paused;
+  
+  if(lua_gettop(L) >= 2) {
+    paused = luaL_checkudata(L, 2, "paused_event");
+    lua_pushvalue(L, 2);
+  }
+  else {
+    paused = lua_newuserdata(L, sizeof(*paused));
+    if(!paused) {
+      lua_pushnil(L);
+      lua_pushliteral(L, "event could not be paused because we're out of memory");
+      return 2;
+    }
+    luaL_newmetatable(L, "paused_event");
+    lua_setmetatable(L, -2);
+  }
+  
+  if(shuso_event_pause(S, evstate, paused)) {
+    //return the userdata on the stack
+    return 1;
+  }
+  else {
+    lua_pushnil(L);
+    lua_pushliteral(L, "event cannot be paused");
+    return 2;
+  }
+}
+
+static int Lua_shuso_module_event_resume(lua_State *L) {
+  shuso_t *S = shuso_state(L);
+  shuso_module_paused_event_t *paused = luaL_checkudata(L, 1, "paused_event");
+  
+  bool ok = shuso_event_resume(S, paused);
+  lua_pushboolean(L, ok);
+  return 1;
+}
+
 static int Lua_shuso_module_event_publish(lua_State *L) {
   shuso_t                 *S = shuso_state(L);
   int                      nargs = lua_gettop(L);
@@ -1942,7 +1988,7 @@ static int Lua_shuso_module_event_publish(lua_State *L) {
     data = NULL;
   }
   
-  bool ok = shuso_event_publish(S, module, &ctx->events[evindex], code, data);
+  bool ok = shuso_event_publish(S, &ctx->events[evindex], code, data);
   
   if(nargs >= 4) {
     luaS_unwrap_event_data_cleanup(L, datatype, unwrapref, data);
@@ -2465,6 +2511,8 @@ luaL_Reg shuttlesock_core_module_methods[] = {
   {"module_version", Lua_shuso_module_version},
   {"module_event_publish", Lua_shuso_module_event_publish},
   {"module_event_cancel", Lua_shuso_module_event_cancel},
+  {"module_event_pause", Lua_shuso_module_event_pause},
+  {"module_event_resume", Lua_shuso_module_event_resume},
   
 //ipc
   {"send_file", Lua_shuso_ipc_send_fd},

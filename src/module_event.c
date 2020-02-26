@@ -4,28 +4,38 @@ void *shuso_events(shuso_t *S, shuso_module_t *module) {
   return S->common->modules.events[module->index];
 }
 
-bool shuso_event_initialize(shuso_t *S, shuso_module_t *mod, shuso_module_event_t *mev, const char *name, const char *data_type, bool cancelable) {
+bool shuso_event_initialize(shuso_t *S, shuso_module_t *mod, shuso_module_event_t *mev, shuso_event_init_t *event_init) {
   lua_State       *L = S->lua.state;
   if(mod == NULL) {
     return shuso_set_error(S, "can't initialize event from outside a shuttlesock module");
   }
   luaS_push_lua_module_field(L, "shuttlesock.core.module", "initialize_event");
   lua_pushlightuserdata(L, mod);
-  lua_pushstring(L, name);
+  
+  lua_newtable(L);
+  lua_pushstring(L, event_init->name);
+  lua_setfield(L, -2, "name");
+  
   lua_pushlightuserdata(L, mev);
-  if(data_type) {
-    lua_pushstring(L, data_type);
+  lua_setfield(L, -2, "ptr");
+  
+  if(event_init->data_type) {
+    lua_pushstring(L, event_init->data_type);
+    lua_setfield(L, -2, "data_type");
   }
-  else {
-    lua_pushnil(L);
-  }
-  lua_pushboolean(L, cancelable);
-  return luaS_function_call_result_ok(L, 5, false);
+  
+  lua_pushboolean(L, event_init->cancelable);
+  lua_setfield(L, -2, "cancelable");
+  
+  lua_pushboolean(L, event_init->pausable);
+  lua_setfield(L, -2, "pausable");
+  
+  return luaS_function_call_result_ok(L, 2, false);
 }
 
 bool shuso_events_initialize(shuso_t *S, shuso_module_t *module, shuso_event_init_t *event_init) {
   for(shuso_event_init_t *cur = event_init; cur && cur->name && cur->event; cur++) {
-    if(!shuso_event_initialize(S, module, cur->event, cur->name, cur->data_type, cur->cancelable)) {
+    if(!shuso_event_initialize(S, module, cur->event, cur)) {
       return false;
     }
   }
@@ -98,38 +108,52 @@ bool shuso_event_listen_with_priority(shuso_t *S, const char *name, shuso_module
 typedef struct {
   shuso_module_event_t  *event;
   shuso_event_state_t    state;
-  bool                   canceled;
+  int                    current_listener_index;
+  intptr_t               code;
+  void                  *data;
+  shuso_module_event_listener_t *cur;
+  bool                   stopped;
 } complete_evstate_t;
 
-bool shuso_event_publish(shuso_t *S, shuso_module_t *publisher_module, shuso_module_event_t *event, intptr_t code, void *data) {
+static bool fire_event(shuso_t *S, shuso_module_event_t *event, int listener_start_index, intptr_t code, void *data) {
   complete_evstate_t cev = {
     .event = event,
     .state = {
-      .publisher = publisher_module,
+      .publisher = shuso_get_module(S, event->module_index),
       .name = event->name,
       .data_type = event->data_type,
     },
-    .canceled = false
+    .stopped = false
   };
-  if(!event->cancelable) {
-    for(shuso_module_event_listener_t *cur = &event->listeners[0]; cur->fn != NULL; cur++) {
-      cev.state.module = cur->module;
-      cur->fn(S, &cev.state, code, data, cur->pd);
+  
+  bool pausable = event->pausable;
+  
+  if(!event->cancelable && !event->pausable) {
+    for(cev.cur = &event->listeners[listener_start_index]; cev.cur->fn != NULL; cev.cur++) {
+      cev.state.module = cev.cur->module;
+      cev.cur->fn(S, &cev.state, code, data, cev.cur->pd);
     }
   }
   else {
-    for(shuso_module_event_listener_t *cur = &event->listeners[0]; cur->fn != NULL; cur++) {
-      if(cev.canceled) {
-        break;
-      }
-      cev.state.module = cur->module;
-      cur->fn(S, &cev.state, code, data, cur->pd);
+    if(pausable) {
+      cev.code = code;
+      cev.data = data;
+    }
+    for(cev.cur = &event->listeners[listener_start_index]; !cev.stopped && cev.cur->fn != NULL; cev.cur++) {
+      cev.state.module = cev.cur->module;
+      cev.cur->fn(S, &cev.state, code, data, cev.cur->pd);
     }
   }
 #ifdef SHUTTLESOCK_DEBUG_MODULE_SYSTEM
-  event->fired_count++;
+  if(!resume) {
+    event->fired_count++;
+  }
 #endif
-  return true;
+  return !cev.stopped;
+}
+
+bool shuso_event_publish(shuso_t *S, shuso_module_event_t *event, intptr_t code, void *data) {
+  return fire_event(S, event, 0, code, data);
 }
 
 bool shuso_event_cancel(shuso_t *S, shuso_event_state_t *evstate) {
@@ -141,8 +165,32 @@ bool shuso_event_cancel(shuso_t *S, shuso_event_state_t *evstate) {
 #endif
     return false;
   }
-  cev->canceled = true;
+  cev->stopped = true;
   return true;
+}
+
+bool shuso_event_pause(shuso_t *S, shuso_event_state_t *evstate, shuso_module_paused_event_t *paused) {
+  complete_evstate_t *cev = container_of(evstate, complete_evstate_t, state);
+  if(!cev->event->pausable) {
+    shuso_set_error(S, "event %s:%s cannot be canceled", cev->state.publisher->name, cev->state);
+#ifdef SHUTTLESOCK_DEBUG_MODULE_SYSTEM
+    raise(SIGABRT);
+#endif
+    return false;
+  }
+  cev->stopped = true;
+  
+  *paused = (shuso_module_paused_event_t) {
+    .event = cev->event,
+    .code = cev->code,
+    .data =cev->data,
+    .next_listener_index = cev->cur - &cev->event->listeners[0] + 1
+  };
+  
+  return true;
+}
+bool shuso_event_resume(shuso_t *S, shuso_module_paused_event_t *paused) {
+  return fire_event(S, paused->event, paused->next_listener_index, paused->code, paused->data);
 }
 
 /*
