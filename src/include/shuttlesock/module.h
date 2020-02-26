@@ -52,7 +52,23 @@ bool shuso_load_module(shuso_t *S, const char *filename);
 bool shuso_initialize_added_modules(shuso_t *S);
 
 //for module developers:
-shuso_module_t *shuso_get_module(shuso_t *S, const char *name);
+shuso_module_t *shuso_get_module_by_name(shuso_t *S, const char *name);
+shuso_module_t *shuso_get_module_by_index(shuso_t *S, int index);
+#define shuso_get_module(S, search) \
+  _Generic((search), \
+    char *         : shuso_get_module_by_name, \
+    const char *   : shuso_get_module_by_name, \
+    uint8_t        : shuso_get_module_by_index, \
+    uint16_t       : shuso_get_module_by_index, \
+    uint32_t       : shuso_get_module_by_index, \
+    uint64_t       : shuso_get_module_by_index, \
+    int8_t         : shuso_get_module_by_index, \
+    int16_t        : shuso_get_module_by_index, \
+    int32_t        : shuso_get_module_by_index, \
+    int64_t        : shuso_get_module_by_index \
+  )(S, search)
+
+
 bool shuso_context_list_initialize(shuso_t *S, shuso_module_t *parent, shuso_module_context_list_t *context_list, shuso_stalloc_t *stalloc);
 
 void *shuso_context(shuso_t *S, shuso_module_t *parent, shuso_module_t *module, shuso_module_context_list_t *context_list);

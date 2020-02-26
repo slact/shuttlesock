@@ -449,7 +449,7 @@ bool shuso_set_context(shuso_t *S, shuso_module_t *parent, shuso_module_t *modul
   return true;
 }
 
-shuso_module_t *shuso_get_module(shuso_t *S, const char *name) {
+shuso_module_t *shuso_get_module_by_name(shuso_t *S, const char *name) {
   lua_State         *L = S->lua.state;
   shuso_module_t    *module;
   luaS_push_lua_module_field(L, "shuttlesock.core.module", "find");
@@ -466,4 +466,11 @@ shuso_module_t *shuso_get_module(shuso_t *S, const char *name) {
   return module;
 }
 
+shuso_module_t *shuso_get_module_by_index(shuso_t *S, int index) {
+#ifdef SHUTTLESOCK_DEBUG_MODULE_SYSTEM
+  assert(index>=0);
+  assert(index < S->common->modules.count);
+#endif
+  return S->common->modules.array[index];
+}
 
