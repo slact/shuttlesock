@@ -70,11 +70,8 @@ typedef struct shuso_hostinfo_s {
 } shuso_hostinfo_t;
 
 typedef struct shuso_socket_s {
-  shuso_hostinfo_t  host;
   int               fd;
-  shuso_socket_fn  *handler;
-  shuso_socket_fn  *cleanup;
-  void              *data;
+  shuso_hostinfo_t  host;
 } shuso_socket_t;
 
 //the shuso_config struct is designed to be zeroed on initialization
