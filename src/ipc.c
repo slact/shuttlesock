@@ -132,10 +132,10 @@ static void ipc_channel_local_send_coroutines_init(shuso_t *S, int procnum) {
   
   assert(dstproc);
   
-  shuso_io_coro_init(S, &send->notice, dstproc->ipc.fd[1], SHUSO_IO_WRITE, ipc_send_ipc_notice_coroutine, NULL);
+  shuso_io_init(S, &send->notice, dstproc->ipc.fd[1], SHUSO_IO_WRITE, ipc_send_ipc_notice_coroutine, NULL);
   
   shuso_buffer_init(S, &send->fd_msg_buf, SHUSO_BUF_HEAP, NULL); //TODO use a more efficient buffer memory model
-  shuso_io_coro_init(S, &send->fd, dstproc->ipc.socket_transfer_fd[1], SHUSO_IO_WRITE, ipc_send_fd_coroutine, &send->fd_msg_buf);
+  shuso_io_init(S, &send->fd, dstproc->ipc.socket_transfer_fd[1], SHUSO_IO_WRITE, ipc_send_fd_coroutine, &send->fd_msg_buf);
 }
 
 void ipc_receive_notice_coroutine(shuso_t *S, shuso_io_t *io) {
@@ -326,8 +326,8 @@ int               recv_notice_fd;
   //receiving end of the pipe
   recv_notice_fd = proc->ipc.fd[0];
 #endif
-  shuso_io_coro_init(S, &S->ipc.io.receive.notice, recv_notice_fd, SHUSO_IO_READ, ipc_receive_notice_coroutine, &S->ipc.io.receive);
-  shuso_io_coro_init(S, &S->ipc.io.receive.fd, proc->ipc.socket_transfer_fd[0], SHUSO_IO_READ, ipc_receive_msg_fd_coroutine, NULL);
+  shuso_io_init(S, &S->ipc.io.receive.notice, recv_notice_fd, SHUSO_IO_READ, ipc_receive_notice_coroutine, &S->ipc.io.receive);
+  shuso_io_init(S, &S->ipc.io.receive.fd, proc->ipc.socket_transfer_fd[0], SHUSO_IO_READ, ipc_receive_msg_fd_coroutine, NULL);
   
   int out_count;
   if(S->procnum == SHUTTLESOCK_MASTER) {
@@ -357,16 +357,16 @@ int               recv_notice_fd;
 }
 
 bool shuso_ipc_channel_local_start(shuso_t *S) {
-  shuso_io_coro_start(&S->ipc.io.receive.notice);
-  shuso_io_coro_start(&S->ipc.io.receive.fd);
+  shuso_io_start(&S->ipc.io.receive.notice);
+  shuso_io_start(&S->ipc.io.receive.fd);
 #ifdef SHUTTLESOCK_DEBUG_IPC_RECEIVE_CHECK_TIMER
   shuso_ev_timer_start(S, &S->ipc.receive_check);
 #endif
   return true;
 }
 bool shuso_ipc_channel_local_stop(shuso_t *S) {
-  shuso_io_coro_stop(&S->ipc.io.receive.notice);
-  shuso_io_coro_stop(&S->ipc.io.receive.fd);
+  shuso_io_stop(&S->ipc.io.receive.notice);
+  shuso_io_stop(&S->ipc.io.receive.fd);
 #ifdef SHUTTLESOCK_DEBUG_IPC_RECEIVE_CHECK_TIMER
   shuso_ev_timer_stop(S, &S->ipc.receive_check);
 #endif
@@ -455,7 +455,7 @@ static bool ipc_send_direct(shuso_t *S, shuso_process_t *src, shuso_process_t *d
   buf->code[next] = code;
   ipc_release_write_index(S, buf);
   //shuso_log_debug(S, "ipc_send_direct %p %d fd %d %d", &S->ipc.io.send[dst->procnum].notice, dst->procnum, S->ipc.io.send[dst->procnum].notice.fd, dst->procnum, S->ipc.io.send[dst->procnum].notice.watcher.ev.fd);
-  shuso_io_coro_resume(&S->ipc.io.send[dst->procnum].notice);
+  shuso_io_resume(&S->ipc.io.send[dst->procnum].notice);
 /*
   ssize_t written;
 #ifdef SHUTTLESOCK_HAVE_EVENTFD
@@ -666,7 +666,7 @@ bool shuso_ipc_send_fd(shuso_t *S, shuso_process_t *dst_proc, int fd, uintptr_t 
   }
   memcpy(iov_bufspace, buf, sizeof(buf));
   
-  shuso_io_coro_resume(&send->fd);
+  shuso_io_resume(&send->fd);
   
   return true;
 }
