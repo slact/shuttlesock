@@ -14,13 +14,16 @@ typedef void shuso_io_fn(shuso_t *S, shuso_io_t *io);
 #define SHUSO_IO_WRITE 2
 
 typedef enum {
-  SHUSO_IO_OP_NONE,
+  SHUSO_IO_OP_NONE = 0,
   SHUSO_IO_OP_READV,
   SHUSO_IO_OP_WRITEV,
   SHUSO_IO_OP_READ,
   SHUSO_IO_OP_WRITE,
   SHUSO_IO_OP_SENDMSG,
-  SHUSO_IO_OP_RECVMSG
+  SHUSO_IO_OP_RECVMSG,
+  SHUSO_IO_OP_ACCEPT,
+  SHUSO_IO_OP_CONNECT,
+  SHUSO_IO_OP_CLOSE
 } shuso_io_opcode_t;
 
 typedef enum {
@@ -33,27 +36,37 @@ typedef enum {
 } shuso_io_watch_type_t;
 
 struct shuso_io_s {
-  int               fd;
+  shuso_t          *S;
+  shuso_socket_t    io_socket;
+  
   union {
-    struct msghdr  *msg;
-    struct iovec   *iov;
-    char           *buf;
+    struct msghdr    *msg;
+    struct iovec     *iov;
+    char             *buf;
+    shuso_socket_t   *socket;
+    shuso_hostinfo_t *hostinfo; 
   };
   union {
-    size_t  iovcnt;
-    size_t  len;
-    int     flags;
+    size_t            iovcnt;
+    size_t            len;
+    int               flags;
+    socklen_t         address_len;
   };
   
-  ssize_t           result;
+  union {
+    ssize_t           result;
+    int               result_fd;
+  };
   int               error;
   shuso_io_fn      *handler;
   void             *privdata;
   uint16_t          handler_stage;
   
   //everything else is private, more or less
-  shuso_io_opcode_t op_code;
-  shuso_io_watch_type_t watch_type;
+  shuso_ev_io       watcher;
+  
+  uint8_t           opcode;
+  uint8_t           watch_type;
   unsigned          readwrite:2;
   unsigned          use_io_uring:1;
   
@@ -64,10 +77,6 @@ struct shuso_io_s {
   shuso_fn_debug_info_t runner;
   shuso_fn_debug_info_t op_caller;
 #endif
-  
-  shuso_t          *S;
-  
-  shuso_ev_io       watcher;
 };
 
 #ifdef SHUTTLESOCK_DEBUG_IO
@@ -130,7 +139,6 @@ void shuso_io_read_partial(shuso_io_t *io, void *buf, size_t len);
 
 void shuso_io_connect(shuso_io_t *io, shuso_socket_t *socket);
 void shuso_io_accept(shuso_io_t *io, shuso_socket_t *socket);
-void shuso_io_listen(shuso_io_t *io, shuso_socket_t *socket);
 
 void shuso_io_sendmsg(shuso_io_t *io, struct msghdr *msg, int flags);
 void shuso_io_recvmsg(shuso_io_t *io, struct msghdr *msg, int flags);

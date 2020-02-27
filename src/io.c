@@ -9,7 +9,7 @@
 #endif
 
 #define log_io_debug(io, fmt, ...) \
-  shuso_log_debug(io->S, "io %p fd %d op %s w %s: " fmt, (void *)(io), (io)->fd, io_op_str((io)->op_code), io_watch_type_str((io)->watch_type), __VA_ARGS__)
+  shuso_log_debug(io->S, "io %p fd %d op %s w %s: " fmt, (void *)(io), (io)->io_socket.fd, io_op_str((io)->opcode), io_watch_type_str((io)->watch_type), __VA_ARGS__)
 
 static void shuso_io_ev_operation(shuso_io_t *io);
 static void io_run(shuso_io_t *io);
@@ -59,7 +59,7 @@ void __shuso_io_init(shuso_t *S, shuso_io_t *io, int fd, int readwrite, shuso_io
     .privdata = privdata,
     .handler_stage = 0,
     .handler = coro,
-    .fd = fd,
+    .io_socket.fd = fd,
     .watch_type = SHUSO_IO_WATCH_NONE,
     .error = 0,
     .readwrite = readwrite
@@ -76,7 +76,7 @@ void __shuso_io_init(shuso_t *S, shuso_io_t *io, int fd, int readwrite, shuso_io
     if(io->readwrite & SHUSO_IO_WRITE) {
       events |= SHUSO_IO_WRITE;
     }
-    shuso_ev_init(io->S, &io->watcher, io->fd, events, io_ev_watcher_handler, io);
+    shuso_ev_init(io->S, &io->watcher, io->io_socket.fd, events, io_ev_watcher_handler, io);
   }
 }
 
@@ -86,7 +86,7 @@ static bool ev_opcode_match_event_type(shuso_io_opcode_t opcode, int evflags) {
       //should not happen
       raise(SIGABRT);
       return false;
-      
+    
     case SHUSO_IO_OP_READV:
     case SHUSO_IO_OP_READ:
     case SHUSO_IO_OP_RECVMSG:
@@ -96,6 +96,11 @@ static bool ev_opcode_match_event_type(shuso_io_opcode_t opcode, int evflags) {
     case SHUSO_IO_OP_WRITE:
     case SHUSO_IO_OP_SENDMSG:
       return evflags & EV_WRITE;
+      
+    case SHUSO_IO_OP_ACCEPT:
+    case SHUSO_IO_OP_CONNECT:
+    case SHUSO_IO_OP_CLOSE:
+      return true;
   }
   return false;
 }
@@ -113,7 +118,7 @@ static bool ev_watch_poll_match_event_type(shuso_io_watch_type_t watchtype, int 
 static void io_ev_watcher_handler(shuso_loop *loop, shuso_ev_io *ev, int evflags) {
   shuso_io_t *io = shuso_ev_data(ev);
   
-  switch(io->watch_type) {    
+  switch((shuso_io_watch_type_t )io->watch_type) {    
     case SHUSO_IO_WATCH_NONE:
       //should never happer
       raise(SIGABRT);
@@ -124,9 +129,9 @@ static void io_ev_watcher_handler(shuso_loop *loop, shuso_ev_io *ev, int evflags
       break;
       
     case SHUSO_IO_WATCH_OP_RETRY:
-      if(ev_opcode_match_event_type(io->op_code, evflags)) {
+      if(ev_opcode_match_event_type(io->opcode, evflags)) {
         io->watch_type = SHUSO_IO_WATCH_NONE;
-        assert(io->op_code != SHUSO_IO_OP_NONE);
+        assert(io->opcode != SHUSO_IO_OP_NONE);
         shuso_io_operation(io);
       }
       break;
@@ -215,8 +220,11 @@ static void retry_ev_operation(shuso_io_t *io) {
 
 static void io_update_incomplete_op_data(shuso_io_t *io, ssize_t result_sz) {
   assert(result_sz >= 0);
-  switch((shuso_io_opcode_t )io->op_code) {
+  switch((shuso_io_opcode_t )io->opcode) {
       case SHUSO_IO_OP_NONE:
+      case SHUSO_IO_OP_CONNECT:
+      case SHUSO_IO_OP_ACCEPT:
+      case SHUSO_IO_OP_CLOSE:
         return;
         
       case SHUSO_IO_OP_READ:
@@ -238,64 +246,73 @@ static void io_update_incomplete_op_data(shuso_io_t *io, ssize_t result_sz) {
 }
 
 static void shuso_io_ev_operation(shuso_io_t *io) {
-  ssize_t result_sz;
+  ssize_t result;
   do {
-    switch((shuso_io_opcode_t )io->op_code) {
+    switch((shuso_io_opcode_t )io->opcode) {
       case SHUSO_IO_OP_NONE:
         //should never happen
         raise(SIGABRT);
         break;
         
       case SHUSO_IO_OP_READ:
-        result_sz = read(io->fd, io->buf, io->len);
+        result = read(io->io_socket.fd, io->buf, io->len);
         break;
       case SHUSO_IO_OP_WRITE:
         assert(io->len > 0);
-        result_sz = write(io->fd, io->buf, io->len);
+        result = write(io->io_socket.fd, io->buf, io->len);
         break;
       case SHUSO_IO_OP_READV:
-        result_sz = readv(io->fd, io->iov, io->iovcnt);
+        result = readv(io->io_socket.fd, io->iov, io->iovcnt);
         break;
       case SHUSO_IO_OP_WRITEV:
-        result_sz = writev(io->fd, io->iov, io->iovcnt);
+        result = writev(io->io_socket.fd, io->iov, io->iovcnt);
         break;
       case SHUSO_IO_OP_RECVMSG:
-        result_sz = recvmsg(io->fd, io->msg, io->flags);
+        result = recvmsg(io->io_socket.fd, io->msg, io->flags);
         break;
       case SHUSO_IO_OP_SENDMSG:
-        result_sz = sendmsg(io->fd, io->msg, io->flags);
+        result = sendmsg(io->io_socket.fd, io->msg, io->flags);
+        break;
+      case SHUSO_IO_OP_CONNECT:
+        //result = connect(io->io_socket.fd, io->msg, io->flags);
+        break;
+      case SHUSO_IO_OP_ACCEPT:
+        //TODO
+        break;
+      case SHUSO_IO_OP_CLOSE:
+        result = close(io->io_socket.fd);
         break;
     }
-  } while(result_sz == -1 && errno == EINTR);
-  if(result_sz == -1 && (errno == EAGAIN || errno == EWOULDBLOCK) && io->op_repeat_to_completion) {
-    if(result_sz == -1) {
-      result_sz = 0; //-1 means zero bytes processed, in case of EAGAIN, right?
+  } while(result == -1 && errno == EINTR);
+  if(result == -1 && (errno == EAGAIN || errno == EWOULDBLOCK) && io->op_repeat_to_completion) {
+    if(result == -1) {
+      result = 0; //-1 means zero bytes processed, in case of EAGAIN, right?
     }
-    io->result += result_sz;
-    io_update_incomplete_op_data(io, result_sz);
+    io->result += result;
+    io_update_incomplete_op_data(io, result);
     assert(io->len > 0);
     retry_ev_operation(io);
     return;
   }
   
-  if(result_sz == -1) {
+  if(result == -1) {
     io->result = -1;
     //legit error happened
     io->result = -1;
     io->error = errno;
-    io->op_code = SHUSO_IO_OP_NONE;
+    io->opcode = SHUSO_IO_OP_NONE;
     io_run(io);
     return;
   }
   
-  io->result += result_sz;
-  io->op_code = SHUSO_IO_OP_NONE;
+  io->result += result;
+  io->opcode = SHUSO_IO_OP_NONE;
   io_run(io);
 }
 
 static void shuso_io_operation(shuso_io_t *io) {
 #ifdef SHUTTLESOCK_DEBUG_IO
-  switch((shuso_io_opcode_t )io->op_code) {
+  switch((shuso_io_opcode_t )io->opcode) {
     case SHUSO_IO_OP_READV:
     case SHUSO_IO_OP_READ:
     case SHUSO_IO_OP_RECVMSG:
@@ -319,7 +336,7 @@ static void shuso_io_operation(shuso_io_t *io) {
 static void io_op_run_new(shuso_io_t *io, int opcode, void *init_buf, ssize_t init_len, bool partial, bool registered) {
   io->result = 0;
   io->error = 0;
-  io->op_code = opcode;
+  io->opcode = opcode;
   if(opcode == SHUSO_IO_OP_READV || opcode == SHUSO_IO_OP_WRITEV) {
     io->iov = init_buf;
     io->iovcnt = init_len;
@@ -335,7 +352,7 @@ static void io_op_run_new(shuso_io_t *io, int opcode, void *init_buf, ssize_t in
 }
 
 void shuso_io_stop(shuso_io_t *io) {
-  switch(io->watch_type) {
+  switch((shuso_io_watch_type_t )io->watch_type) {
     case SHUSO_IO_WATCH_NONE:
       break;
     case SHUSO_IO_WATCH_OP_FINISH:

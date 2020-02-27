@@ -2,6 +2,7 @@
 #define SHUTTLESOCK_COMMON_H
 #include <stdbool.h>
 #include <stdint.h>
+#include <netinet/in.h>
 #include <shuttlesock/build_config.h>
 
 #ifndef container_of
@@ -93,10 +94,26 @@ typedef struct shuso_module_context_list_s shuso_module_context_list_t;
 typedef struct shuso_module_setting_s shuso_module_setting_t;
 typedef struct shuso_event_state_s shuso_event_state_t;
 
-typedef struct shuso_hostinfo_s shuso_hostinfo_t;
 typedef struct shuso_sockopts_s shuso_sockopts_t;
-typedef struct shuso_sockopt_s shuso_sockopt_t;
-typedef struct shuso_socket_s shuso_socket_t;
+typedef struct shuso_hostinfo_s {
+  const char        *name;
+  union {
+#ifdef SHUTTLESOCK_HAVE_IPV6
+    struct in6_addr addr6;
+#endif
+    struct in_addr  addr;
+    const char     *path;
+  };
+  sa_family_t       addr_family; //address family: AF_INET/AF_INET6/AF_UNIX
+  uint16_t          port; //CPU-native port
+  int               udp:1; //TCP or UDP?
+  struct sockaddr  *sockaddr;
+} shuso_hostinfo_t;
+
+typedef struct shuso_socket_s {
+  int               fd;
+  shuso_hostinfo_t  host;
+} shuso_socket_t;
 
 typedef void shuso_socket_fn(shuso_t *S, shuso_socket_t *socket);
 typedef void shuso_socket_listener_fn(shuso_t *S, shuso_socket_t *socket, void *pd);

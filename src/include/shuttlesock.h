@@ -12,6 +12,7 @@
 #include <sys/time.h>
 #include <shuttlesock/common.h>
 #include <shuttlesock/watchers.h>
+#include <shuttlesock/io.h>
 #include <shuttlesock/sbuf.h>
 #include <shuttlesock/llist.h>
 #include <shuttlesock/ipc.h>
@@ -20,7 +21,6 @@
 #include <shuttlesock/shared_slab.h>
 #include <shuttlesock/log.h>
 #include <shuttlesock/buffer.h>
-#include <shuttlesock/io.h>
 #include <shuttlesock/module.h>
 #include <shuttlesock/lua_utils.h>
 #include <shuttlesock/sysutil.h>
@@ -54,25 +54,6 @@ typedef struct shuso_sockopts_s {
   shuso_sockopt_t *array;
 } shuso_sockopts_t;
 
-
-typedef struct shuso_hostinfo_s {
-  const char        *name;
-  union {
-#ifdef SHUTTLESOCK_HAVE_IPV6
-    struct in6_addr addr6;
-#endif
-    struct in_addr  addr;
-    const char     *path;
-  };
-  uint16_t          addr_family; //address family: AF_INET/AF_INET6/AF_UNIX
-  uint16_t          port; //CPU-native port
-  unsigned          udp:1; //TCP or UDP?
-} shuso_hostinfo_t;
-
-typedef struct shuso_socket_s {
-  int               fd;
-  shuso_hostinfo_t  host;
-} shuso_socket_t;
 
 //the shuso_config struct is designed to be zeroed on initialization
 typedef struct shuso_config_s {
