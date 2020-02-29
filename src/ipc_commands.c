@@ -125,95 +125,64 @@ static bool command_open_listener_sockets_from_manager(shuso_t *S, shuso_hostinf
 static bool command_open_listener_sockets_from_worker(shuso_t *S, shuso_hostinfo_t *hostinfo, int count, shuso_sockopts_t *sockopts, shuso_ipc_open_sockets_fn callback, void *pd);
 
 bool shuso_ipc_command_open_listener_sockets(shuso_t *S, shuso_hostinfo_t *hostinfo, int count, shuso_sockopts_t *sockopts, shuso_ipc_open_sockets_fn callback, void *pd) {
+  if(S->procnum == SHUTTLESOCK_MANAGER) {
+    return command_open_listener_sockets_from_manager(S, hostinfo, count, sockopts, callback, pd);
+  }
+  if(S->procnum >= SHUTTLESOCK_WORKER) {
+    return command_open_listener_sockets_from_worker(S, hostinfo, count, sockopts, callback, pd);
+  }
+  
+  assert(S->procnum == SHUTTLESOCK_MASTER);
   
   int                  *opened = NULL;
   int                   i = 0;
   int                   socktype;
-  size_t                path_len = 0;
-  struct sockaddr      *sa = NULL;
-  struct sockaddr_un    sa_unix;
-  struct sockaddr_in    sa_inet;
-  struct sockaddr_in6   sa_inet6;
-  size_t                addr_len = 0;
+  union {
+    struct sockaddr        sa;
+    struct sockaddr_un     sa_unix;
+    struct sockaddr_in     sa_inet;
+    struct sockaddr_in6    sa_inet6;
+  }                     sockaddr;
+  size_t                sockaddr_len = sizeof(sockaddr);
   assert(count > 0);
+  
   //shuso_log_debug(S, "opening listener sockets...");
-  if(S->procnum == SHUTTLESOCK_MASTER) {
-    if((opened = calloc(count, sizeof(*opened))) == NULL) {
-      shuso_set_error(S, "failed to allocate memory for opening listening sockets");
+  if((opened = calloc(count, sizeof(*opened))) == NULL) {
+    shuso_set_error(S, "failed to allocate memory for opening listening sockets");
+    goto fail;
+  }
+  
+  socktype = hostinfo->udp ? SOCK_DGRAM : SOCK_STREAM;
+  
+  if(!shuso_hostinfo_to_sockaddr(S, hostinfo, &sockaddr.sa, &sockaddr_len)) {
+    goto fail;
+  }
+  
+  for(i=0; i < count; i++) {
+    //shuso_log_debug(S, "open socket #%d", i);
+    opened[i]=socket(hostinfo->addr_family, socktype, 0);
+    if(opened[i] == -1) {
+      shuso_set_error_errno(S, "failed to create listener socket: %s", strerror(errno));
       goto fail;
     }
-    if(hostinfo->addr_family == AF_UNIX) {
-      socktype = SOCK_STREAM;
-      memset(&sa_unix, 0, sizeof(sa_unix));
-      sa_unix.sun_family = AF_UNIX;
-      path_len = strlen(hostinfo->path);
-      if((path_len+1) > sizeof(sa_unix.sun_path)) {
-        shuso_set_error(S, "unix socket path is too long");
-        goto fail;
-      }
-      memcpy(&sa_unix.sun_path, hostinfo->path, path_len);
-      sa = (struct sockaddr *)&sa_unix;
-      addr_len = sizeof(sa_unix);
-    }
-    else {
-      if(hostinfo->udp) {
-        socktype = SOCK_DGRAM;
-      }
-      else {
-        socktype = SOCK_STREAM;
-      }
-      if(hostinfo->addr_family == AF_INET) {
-        memset(&sa_inet, 0, sizeof(sa_inet));
-        sa_inet.sin_family = AF_INET;
-        sa_inet.sin_port = htons(hostinfo->port);
-        sa_inet.sin_addr = hostinfo->addr;
-        sa = (struct sockaddr *)&sa_inet;
-        addr_len = sizeof(sa_inet);
-      }
-      else if(hostinfo->addr_family == AF_INET6) {
-        memset(&sa_inet6, 0, sizeof(sa_inet6));
-        sa_inet6.sin6_family = AF_INET6;
-        sa_inet6.sin6_port = htons(hostinfo->port);
-        //TODO: flowinfo?
-        sa_inet6.sin6_addr = hostinfo->addr6;
-        //TODO: scope_id?
-        sa = (struct sockaddr *)&sa_inet6;
-        addr_len = sizeof(sa_inet6);
-      }
-    }
-    assert(sa);
-    for(i=0; i < count; i++) {
-      //shuso_log_debug(S, "open socket #%d", i);
-      opened[i]=socket(hostinfo->addr_family, socktype, 0);
-      if(opened[i] == -1) {
-        shuso_set_error_errno(S, "failed to create listener socket: %s", strerror(errno));
-        goto fail;
-      }
-      for(unsigned j=0; j < sockopts->count; j++) {
-        //shuso_log_debug(S, "setsockopt #%d opt #%d", i, j);
-        shuso_sockopt_t *opt = &sockopts->array[j];
-        if(!shuso_setsockopt(S, opened[i], opt)) {
-          goto fail;
-        }
-      }
-      
-      shuso_set_nonblocking(opened[i]);
-      //shuso_log_debug(S, "bind #%d", i);
-      if(bind(opened[i], sa, addr_len) == -1) {
-        shuso_set_error_errno(S, "failed to bind listener socket: %s", strerror(errno));
+    for(unsigned j=0; j < sockopts->count; j++) {
+      //shuso_log_debug(S, "setsockopt #%d opt #%d", i, j);
+      shuso_sockopt_t *opt = &sockopts->array[j];
+      if(!shuso_setsockopt(S, opened[i], opt)) {
         goto fail;
       }
     }
-    callback(S, SHUSO_OK, hostinfo, opened, count, pd);
-    free(opened);
-    return true;
+    
+    shuso_set_nonblocking(opened[i]);
+    //shuso_log_debug(S, "bind #%d", i);
+    if(bind(opened[i], &sockaddr.sa, sockaddr_len) == -1) {
+      shuso_set_error_errno(S, "failed to bind listener socket: %s", strerror(errno));
+      goto fail;
+    }
   }
-  else if(S->procnum == SHUTTLESOCK_MANAGER) {
-    return command_open_listener_sockets_from_manager(S, hostinfo, count, sockopts, callback, pd);
-  }
-  else if(S->procnum >= SHUTTLESOCK_WORKER) {
-    return command_open_listener_sockets_from_worker(S, hostinfo, count, sockopts, callback, pd);
-  }
+  callback(S, SHUSO_OK, hostinfo, opened, count, pd);
+  free(opened);
+  return true;
   
 fail:
   callback(S, SHUSO_FAIL, hostinfo, NULL, 0, pd);

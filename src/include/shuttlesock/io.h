@@ -45,6 +45,11 @@ struct shuso_io_s {
     char             *buf;
     shuso_socket_t   *socket;
     shuso_hostinfo_t *hostinfo; 
+    union {
+      struct sockaddr     any;
+      struct sockaddr_in  inet;
+      struct sockaddr_in6 inet6;
+    }                 sockaddr;
   };
   union {
     size_t            iovcnt;
@@ -155,11 +160,17 @@ shuso_io_t *___handler_io_struct = io; \
 switch(io->handler_stage) { \
   case 0:
 
-#define ___SHUSO_IO_CORO_YIELD(io_operation, ...) \
+#define ___SHUSO_IO_CORO_YIELD_OP(io_operation, ...) \
     ___handler_io_struct->handler_stage = __LINE__; \
     shuso_io_ ## io_operation (___handler_io_struct, __VA_ARGS__); \
     return; \
   case __LINE__:
+
+#define ___SHUSO_IO_CORO_YIELD() \
+    ___handler_io_struct->handler_stage = __LINE__; \
+    return; \
+  case __LINE__:
+
 
 #ifdef SHUTTLESOCK_DEBUG_IO
 
@@ -173,14 +184,14 @@ switch(io->handler_stage) { \
   ___handler_io_struct->op_caller.name = __FUNCTION__; \
   ___handler_io_struct->op_caller.file = __FILE__; \
   ___handler_io_struct->op_caller.line = __LINE__; \
-  ___SHUSO_IO_CORO_YIELD(io_operation, __VA_ARGS__)
+  ___SHUSO_IO_CORO_YIELD_OP(io_operation, __VA_ARGS__)
 #else
   
 #define SHUSO_IO_CORO_BEGIN(io) \
   ___SHUSO_IO_CORO_BEGIN(io)
   
 #define SHUSO_IO_CORO_YIELD(io_operation, ...) \
-  ___SHUSO_IO_CORO_YIELD(io_operation, __VA_ARGS__)
+  ___SHUSO_IO_CORO_YIELD_OP(io_operation, __VA_ARGS__)
 
 #endif
 

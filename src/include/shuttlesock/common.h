@@ -3,6 +3,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <netinet/in.h>
+#include <sys/un.h>
 #include <shuttlesock/build_config.h>
 
 #ifndef container_of
@@ -107,7 +108,12 @@ typedef struct shuso_hostinfo_s {
   sa_family_t       addr_family; //address family: AF_INET/AF_INET6/AF_UNIX
   uint16_t          port; //CPU-native port
   int               udp:1; //TCP or UDP?
-  struct sockaddr  *sockaddr;
+  union {
+    struct sockaddr     *sockaddr;
+    struct sockaddr_in  *sockaddr_in;
+    struct sockaddr_in  *sockaddr_in6;
+    struct sockaddr_un  *sockaddr_un;
+  };
 } shuso_hostinfo_t;
 
 typedef struct shuso_socket_s {

@@ -1,9 +1,16 @@
+#include <shuttlesock/build_config.h>
+#ifdef SHUTTLESOCK_HAVE_ACCEPT4
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE
+#endif
+#endif
+#include <sys/socket.h>
+#include <sys/un.h>
+#include <unistd.h>
+
 #include <shuttlesock.h>
 #include <errno.h>
 #include <sys/uio.h>
-#include <sys/socket.h>
-#include <unistd.h>
-
 #ifdef SHUTTLESOCK_HAVE_IO_URING
 #include <liburing.h>
 #endif
@@ -245,6 +252,44 @@ static void io_update_incomplete_op_data(shuso_io_t *io, ssize_t result_sz) {
     }
 }
 
+static int io_ev_connect(shuso_io_t *io) {
+  assert(io->hostinfo);
+  assert(io->io_socket.fd != -1);
+  struct sockaddr      *connect_sockaddr;
+  shuso_hostinfo_t     *host = io->hostinfo;
+  size_t                sockaddr_sz;
+  union {
+    struct sockaddr        sa;
+    struct sockaddr_un     sa_unix;
+    struct sockaddr_in     sa_inet;
+    struct sockaddr_in6    sa_inet6;
+  }                      sockaddr;
+  if(host->sockaddr) {
+    connect_sockaddr = host->sockaddr;
+    if(connect_sockaddr->sa_family == AF_INET) {
+      sockaddr_sz = sizeof(struct sockaddr_in);
+    }
+    else if(connect_sockaddr->sa_family == AF_INET6) {
+      sockaddr_sz = sizeof(struct sockaddr_in6);
+    }
+    else if(connect_sockaddr->sa_family == AF_UNIX) {
+      sockaddr_sz = sizeof(struct sockaddr_un);
+    }
+    else {
+      raise(SIGABRT);
+      return -1;
+    }
+  }
+  else {
+    if(!shuso_hostinfo_to_sockaddr(io->S, host, &sockaddr.sa, &sockaddr_sz)) {
+      return -1;
+    }
+    connect_sockaddr = &sockaddr.sa;
+  }
+  
+  return connect(io->io_socket.fd, &sockaddr.sa, sockaddr_sz);
+}
+
 static void shuso_io_ev_operation(shuso_io_t *io) {
   ssize_t result;
   do {
@@ -274,10 +319,18 @@ static void shuso_io_ev_operation(shuso_io_t *io) {
         result = sendmsg(io->io_socket.fd, io->msg, io->flags);
         break;
       case SHUSO_IO_OP_CONNECT:
-        //result = connect(io->io_socket.fd, io->msg, io->flags);
+        result = io_ev_connect(io);
         break;
       case SHUSO_IO_OP_ACCEPT:
-        //TODO
+        io->address_len = sizeof(io->sockaddr);
+#ifdef SHUTTLESOCK_HAVE_ACCEPT4
+        result = accept4(io->io_socket.fd, &io->sockaddr.any, &io->address_len, SOCK_NONBLOCK);
+#else
+        result = accept(io->io_socket.fd, &io->sockaddr.any, &io->address_len);
+        if(result != -1) {
+          fcntl(result, F_SETFL, O_NONBLOCK);
+        }
+#endif
         break;
       case SHUSO_IO_OP_CLOSE:
         result = close(io->io_socket.fd);

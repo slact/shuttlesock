@@ -1035,3 +1035,53 @@ void shuso_listen(shuso_t *S, shuso_hostinfo_t *bind, shuso_handler_fn handler, 
   assert(S->procnum == SHUTTLESOCK_MASTER);
   //TODO
 }
+
+
+bool shuso_hostinfo_to_sockaddr(shuso_t *S, shuso_hostinfo_t *hostinfo, struct sockaddr *sockaddr, size_t *sa_sz) {
+  if(hostinfo->addr_family == AF_INET) {
+    struct sockaddr_in *sa = (struct sockaddr_in *)sockaddr;
+    if(*sa_sz < sizeof(*sa)) {
+      raise(SIGABRT);
+      return shuso_set_error(S, "not enough space reserved to convert hostinfo to sockaddr_in");
+    }
+    *sa = (struct sockaddr_in ) {
+      .sin_family = AF_INET,
+      .sin_port = htons(hostinfo->port),
+      .sin_addr = hostinfo->addr
+    };
+    *sa_sz = sizeof(*sa);
+  }
+#ifdef SHUTTLESOCK_HAVE_IPV6
+  else if(hostinfo->addr_family == AF_INET6) {
+    struct sockaddr_in6 *sa = (struct sockaddr_in6 *)sockaddr;
+    if(*sa_sz < sizeof(*sa)) {
+      return shuso_set_error(S, "not enough space reserved to convert hostinfo to sockaddr_in");
+    }
+    *sa = (struct sockaddr_in6 ) {
+      .sin6_family = AF_INET6,
+      .sin6_port = htons(hostinfo->port),
+      .sin6_addr = hostinfo->addr6
+    };
+    *sa_sz = sizeof(*sa);
+  }
+#endif
+  else if(hostinfo->addr_family == AF_UNIX) {
+    struct sockaddr_un *sa = (struct sockaddr_un *)sockaddr;
+    if(*sa_sz < sizeof(*sa)) {
+      return shuso_set_error(S, "not enough space reserved to convert hostinfo to sockaddr_un");
+    }
+    sa->sun_family = AF_UNIX;
+    size_t len = strlen(hostinfo->path) + 1;
+    len = len < sizeof(sa->sun_path) ? len : sizeof(sa->sun_path);
+    memcpy(sa->sun_path, hostinfo->path, len);
+    if(len > sizeof(sa->sun_path)) {
+      return shuso_set_error(S, "not enough space reserved for unix socket path");
+    }
+    *sa_sz = sizeof(*sa);
+  }
+  else {
+    return shuso_set_error(S, "unsupported address family");
+  }
+  
+  return true;
+}

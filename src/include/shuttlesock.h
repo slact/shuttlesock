@@ -269,5 +269,6 @@ void shuso_listen(shuso_t *S, shuso_hostinfo_t *bind, shuso_handler_fn handler, 
   
 //network utilities
 bool shuso_setsockopt(shuso_t *S, int fd, shuso_sockopt_t *opt);
+bool shuso_hostinfo_to_sockaddr(shuso_t *S, shuso_hostinfo_t *host, struct sockaddr *sockaddr, size_t *sa_sz);
 
 #endif //SHUTTLESOCK_H
