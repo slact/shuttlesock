@@ -13,6 +13,7 @@ function(shuttlesock_test_features)
     PTHREAD_NP_REQUIRED
     SO_REUSEPORT
     IPV6
+    ACCEPT4
     STRSIGNAL
     HYPERSCAN
   )
@@ -132,6 +133,13 @@ function(shuttlesock_test_features)
     set(${RESULT_IPV6} ${have_ipv6} CACHE INTERNAL "system supports IPv6")
   endif()
 
+  #accept4()
+  if(NOT DEFINED ${RESULT_ACCEPT4})
+    include(TestAccept4)
+    test_accept4(have_accept4)
+    set(${RESULT_ACCEPT4} ${have_accept4} CACHE INTERNAL "system supports accept4")
+  endif()
+  
   #strsignal()
   if(NOT DEFINED ${RESULT_STRSIGNAL})
     include(TestStrsignal)
