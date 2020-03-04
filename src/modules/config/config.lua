@@ -1164,7 +1164,9 @@ do --config
       message = message:format(...)
     end
     
-    message = ('%s for %s "%s"'):format(message, block_or_setting.type or "(?)", block_or_setting.name or "")
+    local label = block_or_setting.name or block_or_setting.setting.name or "(?)"
+    
+    message = ('%s for %s "%s"'):format(message, block_or_setting.type or "(?)", label)
     
     local parser = self.parsers[block_or_setting.parser_index]
     if not parser then
