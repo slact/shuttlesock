@@ -367,6 +367,7 @@ static void watcher_callback(struct ev_loop *loop, ev_watcher *watcher, int even
   }
   
   lua_rawgeti(L, LUA_REGISTRYINDEX, w->ref.handler);
+  
   handler_is_coroutine = lua_isthread(L, -1);
   if(!handler_is_coroutine) {
     lua_rawgeti(L, LUA_REGISTRYINDEX, w->ref.self);
@@ -375,6 +376,7 @@ static void watcher_callback(struct ev_loop *loop, ev_watcher *watcher, int even
   }
   else {
     coro = lua_tothread(L, -1);
+    lua_pop(L, 1);
     lua_rawgeti(coro, LUA_REGISTRYINDEX, w->ref.self);
     rc = luaS_resume(coro, L, 1);
   }
@@ -384,10 +386,11 @@ static void watcher_callback(struct ev_loop *loop, ev_watcher *watcher, int even
     lua_pushcfunction(L, Lua_watcher_stop);
     lua_rawgeti(L, LUA_REGISTRYINDEX, w->ref.self);
     lua_call(L, 1, 0);
-    
+    /*
     if(rc == LUA_YIELD) {
       luaL_error(coro ? coro : L, "watcher is finished, but the coroutine isn't");
     }
+    */
   }
 }
 
@@ -569,6 +572,7 @@ static int Lua_watcher_stop(lua_State *L) {
 }
 
 static int Lua_watcher_yield(lua_State *L) {
+  int top = lua_gettop(L);
   shuso_lua_ev_watcher_t *w = luaL_checkudata(L, 1, "shuttlesock.watcher");
   if(w->coroutine_thread == L) {
     //yielding to the same coroutine as before
@@ -582,16 +586,16 @@ static int Lua_watcher_yield(lua_State *L) {
       return luaL_error(L, "can't yield to shuttlesock.watcher, its handler has already been set");
     }
   }
-  
   assert(w->ref.handler == LUA_NOREF);
   assert(w->coroutine_thread == NULL);
   w->ref.handler = lua_ref_handler_function_or_coroutine(L, 0, &w->coroutine_thread, true, false);
   assert(w->coroutine_thread);
   assert(w->ref.handler != LUA_NOREF);
-  
   lua_pushcfunction(w->coroutine_thread, Lua_watcher_start);
   lua_pushvalue(w->coroutine_thread, 1);
+  lua_remove(w->coroutine_thread, 1);
   lua_call(w->coroutine_thread, 1, 1);
+  assert(top == lua_gettop(L));
   return lua_yield(w->coroutine_thread, 1);
 }
 
