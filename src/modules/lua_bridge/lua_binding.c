@@ -10,6 +10,7 @@
 #include <pthread.h>
 #include "api/lua_ipc.h"
 #include <shuttlesock/modules/config/private.h>
+#include <ipv6.h>
 
 typedef enum {
   LUA_EV_WATCHER_IO =       0,
@@ -839,6 +840,12 @@ static int Lua_shuso_shared_slab_free_string(lua_State *L) {
 
 static void resolve_hostname_callback(shuso_t *, shuso_resolver_result_t, struct hostent *, void *);
 
+struct resolver_request_s {
+ bool             finished;
+ lua_reference_t  handler_ref;
+ int              nargs;
+};
+
 static int Lua_shuso_resolve_hostname(lua_State *L) {
   int         nargs = lua_gettop(L);
   const char *name = luaL_checkstring(L, 1);
@@ -863,14 +870,30 @@ static int Lua_shuso_resolve_hostname(lua_State *L) {
     return luaL_error(L, "shuttlesock.resolve unknown address family \"%s\"", addr_family_str);
   }
   
+  //the resolver might complete asynchronously or maybe it will return right away. That means we may not need to yield the coroutine (if given), but it also means we need to keep track of the completion status
+  
   shuso_t    *S = shuso_state(L);
   lua_State  *coro = NULL;
-  int         handler_ref = lua_ref_handler_function_or_coroutine(L, nargs, &coro, true, false);;
+  int         handler_ref = lua_ref_handler_function_or_coroutine(L, nargs, &coro, true, false);
+  struct resolver_request_s *req = malloc(sizeof(*req));
+  if(!req) {
+    return luaL_error(L, "unable to allocate resolver request");
+  }
+  *req = (struct resolver_request_s) {
+    .finished = false,
+    .handler_ref = handler_ref
+  };
+  
   assert(handler_ref != LUA_NOREF);
   
-  shuso_resolve_hostname(&S->resolver, name, addr_family, resolve_hostname_callback, (void *)(intptr_t)handler_ref);
+  shuso_resolve_hostname(&S->resolver, name, addr_family, resolve_hostname_callback, req);
   
-  if(coro) {
+  if(req->finished && coro) {
+    int nret = req->nargs;
+    free(req);
+    return nret;
+  }
+  else if(coro) {
     lua_pushboolean(coro, 1);
     return lua_yield(coro, 1);
   }
@@ -880,12 +903,29 @@ static int Lua_shuso_resolve_hostname(lua_State *L) {
   }
 }
 
+static void resolve_return_results(lua_State *L, struct resolver_request_s *req, int nret) {
+  
+  int         state_or_func_index = -1 - nret;
+  lua_State  *coro = lua_tothread(L, state_or_func_index);
+  if(coro && lua_status(coro) == LUA_OK) {
+    //coroutine hasn't been suspended -- the resolve finished synchronoiusly
+    req->nargs = nret;
+    req->finished = true;
+    luaL_checkstack(coro, nret, NULL);
+    lua_xmove(L, coro, nret);
+    //will be returned in the Lua_shuso_resolve_hostname() call
+  }
+  else {
+    free(req);
+    luaS_call_or_resume(L, nret);
+  }
+}
+
 static void resolve_hostname_callback(shuso_t *S, shuso_resolver_result_t result, struct hostent *hostent, void *pd) {
   lua_State     *L = S->lua.state;
-  int            handler_ref = (intptr_t )pd;
-  
-  lua_rawgeti(L, LUA_REGISTRYINDEX, handler_ref);
-  luaL_unref(L, LUA_REGISTRYINDEX, handler_ref);
+  struct resolver_request_s *req = pd;
+  lua_rawgeti(L, LUA_REGISTRYINDEX, req->handler_ref);
+  luaL_unref(L, LUA_REGISTRYINDEX, req->handler_ref);
   if(result != SHUSO_RESOLVER_SUCCESS) {
     lua_pushnil(L);
     switch(result) {
@@ -918,7 +958,7 @@ static void resolve_hostname_callback(shuso_t *S, shuso_resolver_result_t result
         break;
     }
     lua_pushinteger(L, result);
-    luaS_call_or_resume(L, 3);
+    resolve_return_results(L, req, 3);
     return;
   }
   
@@ -926,12 +966,12 @@ static void resolve_hostname_callback(shuso_t *S, shuso_resolver_result_t result
     lua_pushnil(L);
     lua_pushliteral(L, "failed to resolve name: missing hostent struct");
     lua_pushinteger(L, SHUSO_RESOLVER_FAILURE);
-    luaS_call_or_resume(L, 3);
+    resolve_return_results(L, req, 3);
     return;
   }
   
   char  **pstr;
-#ifdef INET6_ADDRSTRLEN
+#ifdef SHUTTLESOCK_HAVE_IPV6
   char  address_str[INET6_ADDRSTRLEN];
 #else
   char  address_str[INET_ADDRSTRLEN];
@@ -953,52 +993,51 @@ static void resolve_hostname_callback(shuso_t *S, shuso_resolver_result_t result
   }
   lua_setfield(L, -2, "aliases");
   
+  const char *addrtype;
+  
   switch(hostent->h_addrtype) {
     case AF_INET:
-      lua_pushliteral(L, "IPv4");
+      addrtype = "IPv4";
       break;
-#ifdef AF_INET6
+#ifdef SHUTTLESOCK_HAVE_IPV6
     case AF_INET6:
-      lua_pushliteral(L, "IPv6");
+      addrtype = "IPv6";
       break;
 #endif
     default:
-      lua_pushliteral(L, "unknown");
+      addrtype = "unknown";
       break;
   }
-  lua_setfield(L, -2, "addrtype");
-  
-  lua_pushinteger(L, hostent->h_length);
-  lua_setfield(L, -2, "length");
   
   i=1;
-  lua_newtable(L); //binary addresses
   lua_newtable(L); //text addresses
   for(pstr = hostent->h_addr_list; *pstr != NULL; pstr++) {
+    lua_newtable(L); //address
+    
+    lua_pushstring(L, addrtype);
+    lua_setfield(L, -2, "family");
+    
+    lua_pushlstring(L, *pstr, hostent->h_length);
+    lua_setfield(L, -2, "address_binary");
+    
     if(inet_ntop(hostent->h_addrtype, *pstr, address_str, sizeof(address_str)) == NULL) {
       luaL_error(L, "inet_ntop failed on address in list. this is very weird");
       return;
     }
     lua_pushstring(L, address_str);
-    lua_rawseti(L, -2, i);
-    lua_pushlstring(L, *pstr, hostent->h_length);
-    lua_rawseti(L, -3, i);
+    lua_setfield(L, -2, "address");
+    
+    lua_seti(L, -2, i);
     i++;
   }
-  lua_setfield(L, -3, "addresses");
-  lua_setfield(L, -2, "addresses_binary");
+  lua_setfield(L, -2, "addresses");
   
-  if(inet_ntop(hostent->h_addrtype, hostent->h_addr, address_str, sizeof(address_str)) == NULL) {
-    luaL_error(L, "inet_ntop failed on address. this is very weird");
-    return;
-  }
-  lua_pushstring(L, address_str);
-  lua_setfield(L, -2, "address");
+  lua_getfield(L, -1, "addresses");
+  lua_geti(L, -1, 1);
+  lua_setfield(L, -3, "address");
+  lua_pop(L, 1);
   
-  lua_pushlstring(L, hostent->h_addr, hostent->h_length);
-  lua_setfield(L, -2, "address_binary");
-  
-  luaS_call_or_resume(L, 1);
+  resolve_return_results(L, req, 1);
 }
 
 //logger
