@@ -2063,6 +2063,13 @@ static void *lua_shared_allocator(void *ud, void *ptr, size_t osize, size_t nsiz
 }
 */
 
+static int Lua_shuso_config_object(lua_State *L) {
+  shuso_t *S = shuso_state(L);
+  shuso_config_module_ctx_t  *ctx = S->common->module_ctx.config;
+  luaS_get_config_pointer_ref(L, ctx);
+  return 1;
+}
+  
 static int Lua_shuso_block_parent_setting_pointer(lua_State *L) {
   luaL_checktype(L, 1, LUA_TLIGHTUSERDATA);
   const shuso_setting_block_t *block = lua_topointer(L, 1);
@@ -2515,6 +2522,7 @@ luaL_Reg shuttlesock_core_module_methods[] = {
   {"coroutine_resume", Lua_shuso_coroutine_resume},
 
 //config
+  {"config_object", Lua_shuso_config_object},
   {"config_block_parent_setting_pointer", Lua_shuso_block_parent_setting_pointer},
   {"config_block_setting_pointer", Lua_shuso_block_setting_pointer},
   {"config_block_path", Lua_shuso_block_path},
