@@ -2302,6 +2302,17 @@ static int Lua_shuso_raise_sigabrt(lua_State *L) {
   return 0;
 }
 
+static int Lua_shuso_print_stack(lua_State *L) {
+  shuso_t *S = shuso_state(L);
+  if(lua_gettop(L) == 0) {
+    luaS_printstack(S->lua.state);
+  }
+  else {
+      const char *str = lua_tostring(L, 1);
+    luaS_printstack(S->lua.state, str);
+  }
+}
+
 static int Lua_shuso_version(lua_State *L) {
   lua_pushstring(L, SHUTTLESOCK_VERSION_STRING);
   return 1;
@@ -2581,6 +2592,7 @@ luaL_Reg shuttlesock_core_module_methods[] = {
 //for debugging
   {"raise_signal", Lua_shuso_raise_signal},
   {"raise_SIGABRT", Lua_shuso_raise_sigabrt},
+  {"print_stack", Lua_shuso_print_stack},
 
   {"mutex_create", Lua_shuso_mutex_create},
   {"mutex_lock", Lua_shuso_mutex_lock},
