@@ -1323,7 +1323,7 @@ do --config
     
     ensure_type("path", "string")
     ensure(not setting.path:match("%/%/"), "path '%s' is invalid", setting.path)
-    ensure(setting.path:match("^[%w%:_%.%/%*]*$"), "path '%s' is invalid", setting.path)
+    ensure(setting.path:match("^[%w%:_%.%/%*%(%)%|]*$"), "path '%s' is invalid", setting.path)
     path = setting.path:match("^(.+)/$") or setting.path
     
     description = ensure(setting.description, "description is required, draconian as that may seem")
