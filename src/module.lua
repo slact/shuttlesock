@@ -19,16 +19,19 @@ local function split_subscribe_list_string(str)
     return nil, nil, "invalid character '"..badchar.."' in subscribe string"
   end
   for mevname in str:gmatch("%S+") do
+    if not mevname:match("^.+:.+$") then
+      return nil, nil, "invalid subscribe event name \"" .. mevname .. "\" , must be modulename:eventname"
+    end
     local optional, modname, evname = mevname:match("^(~?)([%w%_%.]+):([%w%_%.]+)$")
     optional = (optional == "~")
     if not modname or not evname then
-      return nil, nil, "invalid value \""..mevname.."\" in subscribe string"
+      return nil, nil, "invalid subscribe event name \""..mevname.."\""
     end
     if not modname:match("^[%w%_]+$") then
-      return nil, nil, "invalid module name \""..modname.."\" in value \""..mevname.."\" in subscribe string"
+      return nil, nil, "invalid module name \""..modname.."\" in subscribe event name \""..mevname.."\""
     end
     if events[mevname] then
-      return nil, nil, "duplicate value \""..mevname.."\" in subscribe string"
+      return nil, nil, "duplicate value \""..mevname.."\" in subscribe event name"
     end
     
     events[mevname] = Event.get(modname, evname)
