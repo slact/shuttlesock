@@ -179,6 +179,7 @@ add_core_module("lua_bridge"
     "shuttlesock.coroutine"       api/coroutine.lua
     "shuttlesock.ipc"             api/ipc.lua
     "shuttlesock.utils"           api/utils.lua
+    "shuttlesock.debug"           api/debug.lua
     "shuttlesock.debug.spinlock"  api/debug/spinlock.lua
     "shuttlesock.debug.mutex"     api/debug/mutex.lua
   LUA_SOURCES
