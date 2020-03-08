@@ -218,6 +218,8 @@ bool shuso_processes_share_heap(shuso_t *S, int procnum1, int procnum2);
 const char *shuso_process_as_string(int procnum);
 const char *shuso_runstate_as_string(shuso_runstate_t state);
 
+int shuso_workers_count(shuso_t *S);
+
 typedef struct shuso_fn_debug_info_s {
   const char *name;
   const char *file;

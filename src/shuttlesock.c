@@ -716,10 +716,14 @@ static shuso_t **shuso_initialize_workers(shuso_t *S) {
   return worker_State;
 }
 
+int shuso_workers_count(shuso_t *S) {
+  return *S->common->process.workers_end - *S->common->process.workers_start;
+}
+
 static bool shuso_spawn_workers(shuso_t *S, shuso_t **worker_state) {
   //initialize all workers before spawning then
   int failed_worker_spawns = 0;
-  int num_workers = *S->common->process.workers_end - *S->common->process.workers_start;
+  int num_workers = shuso_workers_count(S);
 
   for(int i = 0; i < num_workers; i++) {
     if(worker_state[i] && !shuso_spawn_worker(S, worker_state[i])) {
