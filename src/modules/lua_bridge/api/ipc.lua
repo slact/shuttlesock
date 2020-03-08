@@ -50,6 +50,9 @@ local function validate_process_direction(process, direction)
     else
       error("missing "..(direction or "").." procnum")
     end
+  elseif process == "any" and direction == "receive" then
+    process = "any"
+    many = true
   elseif process == "all" and direction == "send" then
     process = "all"
     many = true
@@ -174,7 +177,7 @@ function IPC.receive(name, src, receiver, timeout)
   if timeout then
     error("Timeouts for IPC receivers not yet implemented")
   end
-  src = src or "any"
+  src = validate_process_direction(src, "receive")
   if type(receiver) == "function" then
     assert(type(receiver) == "function", "expected receiver argument to be a function")
     receivers[name][receiver]=src
