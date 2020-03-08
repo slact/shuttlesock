@@ -587,7 +587,7 @@ int luaS_resume(lua_State *thread, lua_State *from, int nargs) {
   const char  *errmsg;
   //shuso_log_debug(shuso_state(thread), "resume coroutine %p from %p (main %p)", (void *)thread, (void *)from, (void *)S->lua.state);
   rc = lua_resume(thread, from, nargs);
-  //shuso_log_debug(shuso_state(thread), "done with coroutine %p from %p (main %p)", (void *)thread, (void *)from, (void *)S->lua.state);
+  //shuso_log_debug(shuso_state(thread), "done with coroutine %p from %p (main %p) rc %d", (void *)thread, (void *)from, (void *)(shuso_state(thread))->lua.state, rc);
   switch(rc) {
     case LUA_OK:
     case LUA_YIELD:
