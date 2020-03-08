@@ -53,7 +53,7 @@ static char *shuso_io_watch_type_str(shuso_io_watch_type_t watchtype) {
 
 static void io_ev_watcher_handler(shuso_loop *loop, shuso_ev_io *ev, int evflags);
 
-void __shuso_io_init(shuso_t *S, shuso_io_t *io, int fd, int readwrite, shuso_io_fn *coro, void *privdata) {
+void __shuso_io_init_socket(shuso_t *S, shuso_io_t *io, shuso_socket_t *sock, int readwrite, shuso_io_fn *coro, void *privdata) {
   assert(readwrite == SHUSO_IO_READ || readwrite == SHUSO_IO_WRITE || readwrite == (SHUSO_IO_READ | SHUSO_IO_WRITE));
   *io = (shuso_io_t ){
     .S = S,
@@ -66,11 +66,13 @@ void __shuso_io_init(shuso_t *S, shuso_io_t *io, int fd, int readwrite, shuso_io
     .privdata = privdata,
     .handler_stage = 0,
     .handler = coro,
-    .io_socket.fd = fd,
     .watch_type = SHUSO_IO_WATCH_NONE,
     .error = 0,
     .readwrite = readwrite
   };
+  if(sock) {
+    io->io_socket = *sock;
+  }
   
   if(io->use_io_uring) {
     //TODO: initialize io_uring fd watcher
@@ -86,6 +88,19 @@ void __shuso_io_init(shuso_t *S, shuso_io_t *io, int fd, int readwrite, shuso_io
     shuso_ev_init(io->S, &io->watcher, io->io_socket.fd, events, io_ev_watcher_handler, io);
   }
 }
+void __shuso_io_init_hostinfo(shuso_t *S, shuso_io_t *io, shuso_hostinfo_t *hostinfo, int readwrite, shuso_io_fn *coro, void *privdata) {
+  shuso_socket_t sock = { .fd = -1 };
+  if(hostinfo) {
+    sock.host = *hostinfo;
+  }
+  __shuso_io_init_socket(S, io, &sock, readwrite, coro, privdata);
+}
+
+void __shuso_io_init_fd(shuso_t *S, shuso_io_t *io, int fd, int readwrite, shuso_io_fn *coro, void *privdata) {
+  shuso_socket_t sock = { .fd = fd };
+  __shuso_io_init_socket(S, io, &sock, readwrite, coro, privdata);
+}
+
 
 static bool ev_opcode_match_event_type(shuso_io_opcode_t opcode, int evflags) {
   switch(opcode) {
@@ -173,8 +188,14 @@ static void io_watch_update(shuso_io_t *io) {
 }
 
 static void io_run(shuso_io_t *io) {
-  io->handler(io->S, io);
-  io_watch_update(io);
+  if(io->error_handler && io->result == -1) {
+    io->handler_stage = 0;
+    io->error_handler(io->S, io);
+  }
+  else {
+    io->handler(io->S, io);
+    io_watch_update(io);
+  }
 }
 
 void shuso_io_resume_buf(shuso_io_t *io, char *buf, size_t len) {
@@ -190,6 +211,12 @@ void shuso_io_resume_iovec(shuso_io_t *io, struct iovec *iov, int iovcnt) {
 void shuso_io_resume_msg(shuso_io_t *io, struct msghdr *msg, int flags) {
   io->msg = msg;
   io->flags = flags;
+  io_run(io);
+}
+
+void shuso_io_resume_data(shuso_io_t *io, void *data, int intdata) {
+  io->result_data = data;
+  io->result_intdata = intdata;
   io_run(io);
 }
 
@@ -429,6 +456,13 @@ void shuso_io_abort(shuso_io_t *io) {
   //stop it at once!
 }
 
+void shuso_io_suspend(shuso_io_t *io, void *meh) {
+  io->opcode = SHUSO_IO_OP_NONE;
+  io->watch_type = SHUSO_IO_WATCH_NONE;
+  io_watch_update(io);
+  return;
+}
+
 void shuso_io_wait(shuso_io_t *io, int evflags) {
   switch(evflags) {
     case SHUSO_IO_READ | SHUSO_IO_WRITE :
@@ -444,6 +478,13 @@ void shuso_io_wait(shuso_io_t *io, int evflags) {
   io->error = 0;
   io->result = 0;
   io_watch_update(io);
+}
+
+void shuso_io_accept(shuso_io_t *io) {
+  io->opcode = SHUSO_IO_OP_ACCEPT;
+  io->watch_type = SHUSO_IO_WATCH_NONE;
+  io_watch_update(io);
+  return;
 }
 
 void shuso_io_writev_partial(shuso_io_t *io, struct iovec *iov, int iovcnt) {
