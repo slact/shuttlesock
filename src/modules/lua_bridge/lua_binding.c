@@ -381,6 +381,7 @@ static void watcher_callback(struct ev_loop *loop, ev_watcher *watcher, int even
     lua_rawgeti(coro, LUA_REGISTRYINDEX, w->ref.self);
     rc = luaS_resume(coro, L, 1);
   }
+  
   if((handler_is_coroutine && rc == LUA_OK) /* coroutine is finished */
    ||(w->type == LUA_EV_WATCHER_TIMER && w->watcher.timer.ev.repeat == 0.0) /* timer is finished */
   ) {
@@ -1217,230 +1218,6 @@ int Lua_shuso_ipc_receive_fd_finish(lua_State *L) {
   return 1;
 }
 
-/*
-static int hostinfo_set_addr(lua_State *L, int tbl_index, const char *field_name, shuso_hostinfo_t *host, int addr_family) {
-  lua_getfield(L, tbl_index, field_name);
-  const char *addr = lua_tostring(L, -1);
-  if(!addr) {
-    return luaL_error(L, "missing %s", field_name);
-  }
-  if(addr_family == AF_UNIX) {
-    host->path = (char *)addr;
-  }
-  else {
-    int rc;
-    if(addr_family == AF_INET) {
-      rc = inet_pton(addr_family, addr, &host->addr);
-    }
-#ifdef SHUTTLESOCK_HAVE_IPV6
-    else if(addr_family == AF_INET6) {
-      rc = inet_pton(addr_family, addr, &host->addr);
-    }
-#endif
-    else {
-      return luaL_error(L, "invalid address family code %d", addr_family);
-    }
-    if(rc == 0) {
-      return luaL_error(L, "invalid address %s", addr);
-    }
-    else if(rc == -1) {
-      return luaL_error(L, "failed to parse address %s: %s", addr, strerror(errno));
-    }
-  }
-  host->addr_family = addr_family;
-  return 1;
-}
-
-static int shuso_lua_handle_sockopt(lua_State *L, int k, int v, shuso_sockopts_t *sockopts) {
-  bool is_flag = false;
-  const char *strname;
-  if(lua_type(L, k) == LUA_TNUMBER && lua_type(L, v) == LUA_TSTRING) {
-    strname = lua_tostring(L, v);
-    is_flag = true;
-  }
-  else if(lua_type(L, k) == LUA_TSTRING) {
-    strname = lua_tostring(L, k);
-  }
-  else {
-    return luaL_error(L, "invalid sockopts table key");
-  }
-  assert(strname != NULL);
-  
-  shuso_system_sockopts_t *found = NULL;
-  for(shuso_system_sockopts_t *known = &shuso_system_sockopts[0]; known->str != NULL; known++) {
-    if(strcmp(strname, known->str) == 0) {
-      found = known;
-      break;
-    }
-  }
-  if(!found) {
-    return luaL_error(L, "invalid sockopt %s", strname);
-  }
-  
-  if(is_flag) {
-    if(found->value_type != SHUSO_SYSTEM_SOCKOPT_VALUE_TYPE_FLAG) {
-      return luaL_error(L, "sockopt %s is not a flag", strname);
-    }
-    sockopts->array[sockopts->count++] = (shuso_sockopt_t ) {
-      .level = found->level,
-      .name = found->name,
-      .value.flag = 1
-    };
-  }
-  else {
-    sockopts->array[sockopts->count++] = (shuso_sockopt_t ) {
-      .level = found->level,
-      .name = found->name
-    };
-    switch(found->value_type) {
-      case SHUSO_SYSTEM_SOCKOPT_VALUE_TYPE_INT:
-        sockopts->array[sockopts->count].value.integer = luaL_checkinteger(L, v);
-        break;
-      case SHUSO_SYSTEM_SOCKOPT_VALUE_TYPE_FLAG:
-        sockopts->array[sockopts->count].value.integer = lua_toboolean(L, v);
-        break;
-      case SHUSO_SYSTEM_SOCKOPT_VALUE_TYPE_TIMEVAL:
-        if(lua_type(L, v) != LUA_TNUMBER) {
-          return luaL_error(L, "invalid timeval, must be a floating-point number");
-        }
-        else {
-          double          time = lua_tonumber(L, v);
-          struct timeval  tv;
-          tv.tv_sec = (time_t )time;
-          tv.tv_usec = (int )((time - (double )tv.tv_sec) * 1000.0);
-          sockopts->array[sockopts->count].value.timeval = tv;
-        }
-        break;
-      case SHUSO_SYSTEM_SOCKOPT_VALUE_TYPE_LINGER:
-        if(lua_type(L, v) == LUA_TNUMBER) {
-          sockopts->array[sockopts->count].value.linger.l_onoff = 1;
-          sockopts->array[sockopts->count].value.linger.l_linger = lua_tointeger(L, v);
-        }
-        else if(lua_type(L, v) == LUA_TTABLE) {
-          lua_getfield(L, v, "onoff");
-          sockopts->array[sockopts->count].value.linger.l_onoff = lua_toboolean(L, -1);
-          lua_pop(L, 1);
-          
-          lua_getfield(L, v, "linger");
-          if(lua_type(L, -1) != LUA_TNUMBER) {
-            return luaL_error(L, "invalid \"linger\" field in table, must be an integer");
-          }
-          sockopts->array[sockopts->count].value.linger.l_onoff = lua_tointeger(L, -1);
-          lua_pop(L, 1);
-        }
-        else {  
-          return luaL_error(L, "linger value must be a number or a table");
-        }
-        break;
-      default:
-        return luaL_error(L, "invalid value_type, this should never happen");
-    }
-  }
-  return 1;
-}
-
-shuso_ipc_open_sockets_fn open_listener_sockets_callback;
-#define OPEN_LISTENER_MAX_SOCKOPTS 20
-static int Lua_shuso_ipc_open_listener_sockets(lua_State *L) {
-  shuso_hostinfo_t host;
-  luaL_checktype(L, 1, LUA_TTABLE);
-  int nsocks = luaL_checkinteger(L, 2);
-  if(!lua_isyieldable(L)) {
-    return luaL_error(L, "must be called from yieldable coroutine");
-  }
-  int nargs = lua_gettop(L);
-  
-  host.name = NULL;
-  
-  lua_getfield(L, 1, "family");
-  const char *fam = luaL_checkstring(L, -1);
-  
-  if(strcasecmp(fam, "AF_INET") == 0 || strcasecmp(fam, "INET") == 0 || strcasecmp(fam, "ipv4") == 0) {
-    hostinfo_set_addr(L, 1, "address", &host, AF_INET);
-  }
-  else if(strcasecmp(fam, "AF_INET6") == 0 || strcasecmp(fam, "INET6") == 0 || strcasecmp(fam, "ipv6") == 0) {
-#ifndef SHUTTLESOCK_HAVE_IPV6
-    return luaL_argerror(L, 1, "can't use IPv6 address, this system isn't built with IPv6 support");
-#else
-    hostinfo_set_addr(L, 1, "address", &host, AF_INET6);
-#endif
-  }
-  else if(strcasecmp(fam, "AF_UNIX") == 0 || strcasecmp(fam, "UNIX")) {
-    hostinfo_set_addr(L, 1, "path", &host, AF_UNIX);
-  }
-  else {
-    return luaL_argerror(L, 1, "invalid address family");
-  }
-  
-  lua_getfield(L, 1, "port");
-  if(!lua_isinteger(L, -1)) {
-    return luaL_argerror(L, 1, "port is not an integer or nil");
-  }
-  host.port = lua_tointeger(L, -1);
-    
-  lua_getfield(L, 1, "protocol");
-  if(lua_isnil(L, -1)) {
-    //no "protocol" field, default to TCP
-    host.udp = 0;
-  }
-  else {
-    if(!lua_isstring(L, -1)) {
-      return luaL_argerror(L, 1, "protocol field is not a string or nil");
-    }
-    const char *protocol = lua_tostring(L, -1);
-    
-    if(strcasecmp(protocol, "tcp") == 0) {
-      host.udp = 0;
-    }
-    else if(strcasecmp(protocol, "udp") == 0) {
-      host.udp = 1;
-    }
-    else {
-      return luaL_argerror(L, 1, "invalid protocol, must be \"tcp\" or \"udp\"");
-    }
-  }
-  
-  shuso_sockopt_t  sockopt[OPEN_LISTENER_MAX_SOCKOPTS];
-  shuso_sockopts_t sockopts = {
-    .count = 0,
-    .array = sockopt
-  };
-  
-  if(nargs > 2 && lua_istable(L, 2)) {
-    lua_pushnil(L);
-    for(int n = 0; lua_next(L, 2); n++) {
-      if(n >= OPEN_LISTENER_MAX_SOCKOPTS) {
-        return luaL_argerror(L, 2, "too many socket options");
-      }
-      shuso_lua_handle_sockopt(L, -2, -1, &sockopts);  
-    }
-  }
-  else {
-    sockopts.count = 1;
-    sockopt[0] = (shuso_sockopt_t ) {
-      .level = SOL_SOCKET,
-      .name = SO_REUSEPORT,
-      .value.integer = 1
-    };
-  }
-  shuso_t *S = shuso_state(L);
-  
-  bool ok = shuso_ipc_command_open_listener_sockets(S, &host, nsocks, &sockopts, open_listener_sockets_callback, L);
-  if(!ok) {
-    lua_pushnil(L);
-    lua_pushfstring(L, "failed to open listener sockets: %s", shuso_last_error(S));
-    return 2;
-  }
-  lua_pushboolean(L, 1);
-  lua_yield(L, 1);
-  return 1;
-}
-
-static void open_listener_sockets_callback(shuso_t *S, shuso_status_t status, shuso_hostinfo_t *h, int *sockets, int socket_count, void *pd) {
-  lua_State *thread = pd;
-  
-}
-*/
 
 //lua modules
 /*
@@ -1583,7 +1360,6 @@ static void lua_module_event_listener(shuso_t *S, shuso_event_state_t *evs, intp
   luaS_push_wrapped_event_data(L, evs->data_type, data);
   
   lua_pushlightuserdata(L, evs);
-
   luaS_function_call_result_ok(L, 6, false);
   
   luaS_wrap_event_data_cleanup(L, evs->data_type, data);
@@ -2279,7 +2055,6 @@ static int Lua_shuso_coroutine_resume(lua_State *L) {
   lua_State *coro = lua_tothread(L, 1);
   lua_remove(L, 1);
   int top = lua_gettop(L);
-  
   int ret = luaS_coroutine_resume(L, coro, top);
   return ret;
 }

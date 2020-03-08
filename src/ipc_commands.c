@@ -122,14 +122,13 @@ static void received_proxied_message_handle(shuso_t *S, const uint8_t code, void
 }
 
 static bool command_open_listener_sockets_from_manager(shuso_t *S, shuso_hostinfo_t *hostinfo, int count, shuso_sockopts_t *sockopts, shuso_ipc_open_sockets_fn callback, void *pd);
-static bool command_open_listener_sockets_from_worker(shuso_t *S, shuso_hostinfo_t *hostinfo, int count, shuso_sockopts_t *sockopts, shuso_ipc_open_sockets_fn callback, void *pd);
 
 bool shuso_ipc_command_open_listener_sockets(shuso_t *S, shuso_hostinfo_t *hostinfo, int count, shuso_sockopts_t *sockopts, shuso_ipc_open_sockets_fn callback, void *pd) {
   if(S->procnum == SHUTTLESOCK_MANAGER) {
     return command_open_listener_sockets_from_manager(S, hostinfo, count, sockopts, callback, pd);
   }
   if(S->procnum >= SHUTTLESOCK_WORKER) {
-    return command_open_listener_sockets_from_worker(S, hostinfo, count, sockopts, callback, pd);
+    abort(); //not supported... yet
   }
   
   assert(S->procnum == SHUTTLESOCK_MASTER);
@@ -141,7 +140,9 @@ bool shuso_ipc_command_open_listener_sockets(shuso_t *S, shuso_hostinfo_t *hosti
     struct sockaddr        sa;
     struct sockaddr_un     sa_unix;
     struct sockaddr_in     sa_inet;
+#ifdef SHUTTLESOCK_HAVE_IPV6
     struct sockaddr_in6    sa_inet6;
+#endif
   }                     sockaddr;
   size_t                sockaddr_len = sizeof(sockaddr);
   assert(count > 0);
@@ -157,6 +158,8 @@ bool shuso_ipc_command_open_listener_sockets(shuso_t *S, shuso_hostinfo_t *hosti
   if(!shuso_hostinfo_to_sockaddr(S, hostinfo, &sockaddr.sa, &sockaddr_len)) {
     goto fail;
   }
+  
+  shuso_log_debug(S, "open listener socket %s", hostinfo->name ? hostinfo->name : "");
   
   for(i=0; i < count; i++) {
     //shuso_log_debug(S, "open socket #%d", i);
@@ -176,7 +179,7 @@ bool shuso_ipc_command_open_listener_sockets(shuso_t *S, shuso_hostinfo_t *hosti
     shuso_set_nonblocking(opened[i]);
     //shuso_log_debug(S, "bind #%d", i);
     if(bind(opened[i], &sockaddr.sa, sockaddr_len) == -1) {
-      shuso_set_error_errno(S, "failed to bind listener socket: %s", strerror(errno));
+      shuso_set_error_errno(S, "failed to bind listener socket %s: %s", hostinfo->name ? hostinfo->name : "", strerror(errno));
       goto fail;
     }
   }
@@ -247,7 +250,7 @@ static bool command_open_listener_sockets_from_manager(shuso_t *S, shuso_hostinf
   
   sockreq->hostinfo = *hostinfo;
   if(hostinfo->name && strlen(hostinfo->name) > 0) {
-    sockreq->hostinfo.name =  shuso_shared_slab_alloc(&S->common->shm, strlen(hostinfo->name)+1);
+    sockreq->hostinfo.name = shuso_shared_slab_alloc(&S->common->shm, strlen(hostinfo->name)+1);
     if(!sockreq->hostinfo.name) {
       err = "failed to allocate shared memory for listener socket request name";
       goto fail;
@@ -263,6 +266,38 @@ static bool command_open_listener_sockets_from_manager(shuso_t *S, shuso_hostinf
     }
     strcpy(sockreq->path, hostinfo->path);
     sockreq->hostinfo.path = sockreq->path;
+  }
+  
+  if(hostinfo->sockaddr) {
+    switch(hostinfo->addr_family) {
+      case AF_INET:
+        sockreq->hostinfo.sockaddr_in = shuso_shared_slab_alloc(&S->common->shm, sizeof(struct sockaddr_in));
+        if(!sockreq->hostinfo.sockaddr_in) {
+          err = "failed to allocate shared memory for listener sockaddr_in";
+          goto fail;
+        }
+        printf("host sockaddr2: %p %p\n", hostinfo->sockaddr_in, &hostinfo->sockaddr_in[1]);
+        *sockreq->hostinfo.sockaddr_in = *hostinfo->sockaddr_in;
+        break;
+#ifdef SHUTTLESOCK_HAVE_IPV6
+      case AF_INET6:
+        sockreq->hostinfo.sockaddr_in6 = shuso_shared_slab_alloc(&S->common->shm, sizeof(struct sockaddr_in6));
+        if(!sockreq->hostinfo.sockaddr_in6) {
+          err = "failed to allocate shared memory for listener sockaddr_in6";
+          goto fail;
+        }
+        *sockreq->hostinfo.sockaddr_in6 = *hostinfo->sockaddr_in6;
+        break;
+#endif
+      case AF_UNIX:
+        sockreq->hostinfo.sockaddr_un = shuso_shared_slab_alloc(&S->common->shm, sizeof(struct sockaddr_un));
+        if(!sockreq->hostinfo.sockaddr_un) {
+          err = "failed to allocate shared memory for listener sockaddr_un";
+          goto fail;
+        }
+        *sockreq->hostinfo.sockaddr_un = *hostinfo->sockaddr_un;
+        break;
+    }
   }
   
   sockreq->socket_count = count;
@@ -335,11 +370,6 @@ static void listener_socket_receiver(shuso_t *S, bool ok, uintptr_t ref, int fd,
 static void open_listener_sockets_response_handle(shuso_t *S, const uint8_t code, void *ptr) {
   //shuso_log_debug(S, "open_listener_sockets_response_handle");
   shuso_ipc_receive_fd_start(S, "open listener sockets response", 1.0, listener_socket_receiver, (uintptr_t) ptr, ptr);
-}
-
-static bool command_open_listener_sockets_from_worker(shuso_t *S, shuso_hostinfo_t *hostinfo, int count, shuso_sockopts_t *sockopts, shuso_ipc_open_sockets_fn callback, void *pd) {
-  
-  return true;
 }
 
 static void worker_started_handle(shuso_t *S, const uint8_t code, void *ptr) {

@@ -598,6 +598,14 @@ describe(lua_api) {
     }
   }
   
+  subdesc(listen) {
+    test("module with listening blocks") {
+      assert_luaL_dofile(S->lua.state, "module_config_listen.lua");
+      shuso_run(S);
+      assert_shuso_ran_ok(S);
+    }
+  }
+  
   test("lazy atomics") {
     lua_State *L = S->lua.state;
     assert_luaL_dofile(L, "lazy_atomics.lua");
