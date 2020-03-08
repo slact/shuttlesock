@@ -102,6 +102,17 @@ function block:setting(name)
   return setting
 end
 
+local function block_or_setting_error(self, ...)
+  local config = Core.config_object()
+  local err = config:error(config:ptr_lookup(self.ptr), ...)
+  Core.set_error(err)
+  return err
+end
+
+function block:error(...)
+  return block_or_setting_error(self, ...)
+end
+
 function block:context(module_name)
   if type(module_name) == "table" then
     module_name = module_name.name
@@ -219,6 +230,10 @@ function setting:value(n, data_type, value_type)
   end
   
   return val
+end
+
+function setting:error(...)
+  return block_or_setting_error(self, ...)
 end
 
 function block:match_path(match)
