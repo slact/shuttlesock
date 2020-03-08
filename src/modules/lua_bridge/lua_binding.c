@@ -2312,6 +2312,7 @@ static int Lua_shuso_print_stack(lua_State *L) {
       const char *str = lua_tostring(L, 1);
     luaS_printstack(S->lua.state, str);
   }
+  return 0;
 }
 
 static int Lua_shuso_version(lua_State *L) {
