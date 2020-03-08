@@ -2280,7 +2280,8 @@ static int Lua_shuso_coroutine_resume(lua_State *L) {
   lua_remove(L, 1);
   int top = lua_gettop(L);
   
-  return luaS_coroutine_resume(L, coro, top);
+  int ret = luaS_coroutine_resume(L, coro, top);
+  return ret;
 }
 
 static int Lua_shuso_master_has_root(lua_State *L) {

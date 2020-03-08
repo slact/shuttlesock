@@ -596,6 +596,7 @@ int luaS_resume(lua_State *thread, lua_State *from, int nargs) {
       luaL_checkstack(thread, 1, NULL);
       errmsg = lua_tostring(thread, -1);
       luaL_traceback(thread, thread, errmsg, 1);
+      shuso_set_error(shuso_state(thread), lua_tostring(thread, -1));
       break;
   }
   return rc;
@@ -639,8 +640,13 @@ int luaS_coroutine_resume(lua_State *L, lua_State *coro, int nargs) { //like cor
   //shuso_log_debug(shuso_state(L), "luaS_coroutine_resume coroutine %p from %p", (void *)coro, (void *)L);
   assert(lua_gettop(L) >= nargs);
   int r = auxresume(L, coro, nargs);
-  //shuso_log_debug(shuso_state(L), "finished luaS_coroutine_resume coroutine %p from %p", (void *)coro, (void *)L);
+  //shuso_log_debug(shuso_state(L), "finished luaS_coroutine_resume coroutine %p from %p ret: %d", (void *)coro, (void *)L, r);
   if (r < 0) {
+    
+    luaL_traceback(L, coro, lua_tostring(L, -1), 0);
+    lua_remove(L, -2);
+    shuso_set_error(shuso_state(L), lua_tostring(L, -1));
+    
     lua_pushboolean(L, 0);
     lua_insert(L, -2);
     return 2;  /* return false + error message */
