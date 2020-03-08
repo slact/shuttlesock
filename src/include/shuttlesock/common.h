@@ -111,7 +111,9 @@ typedef struct shuso_hostinfo_s {
   union {
     struct sockaddr     *sockaddr;
     struct sockaddr_in  *sockaddr_in;
-    struct sockaddr_in  *sockaddr_in6;
+#ifdef SHUTTLESOCK_HAVE_IPV6
+    struct sockaddr_in6 *sockaddr_in6;
+#endif
     struct sockaddr_un  *sockaddr_un;
   };
 } shuso_hostinfo_t;
