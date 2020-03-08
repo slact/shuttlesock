@@ -18,6 +18,19 @@ end
 function Process.all_procnums()
   return Core.procnums_active()
 end
+
+function Process.worker_procnums()
+  --this is not efficient, but whatever
+  local procnums = Process.all_procnums()
+  local worker_procnums = {}
+  for _, num in ipairs(procnums) do
+    if num >= Process.PROCNUM_WORKER then
+      table.insert(worker_procnums, num)
+    end
+  end
+  return worker_procnums
+end
+
 function Process.share_heap(procnum1, procnum2)
   local procnums
   if procnum1 and procnum2 then
