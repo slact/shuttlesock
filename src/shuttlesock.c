@@ -1045,14 +1045,19 @@ bool shuso_hostinfo_to_sockaddr(shuso_t *S, shuso_hostinfo_t *hostinfo, struct s
   if(hostinfo->addr_family == AF_INET) {
     struct sockaddr_in *sa = (struct sockaddr_in *)sockaddr;
     if(*sa_sz < sizeof(*sa)) {
-      raise(SIGABRT);
       return shuso_set_error(S, "not enough space reserved to convert hostinfo to sockaddr_in");
     }
-    *sa = (struct sockaddr_in ) {
-      .sin_family = AF_INET,
-      .sin_port = htons(hostinfo->port),
-      .sin_addr = hostinfo->addr
-    };
+    
+    if(hostinfo->sockaddr_in) {
+      *sa = *hostinfo->sockaddr_in;
+    }
+    else {
+      *sa = (struct sockaddr_in ) {
+        .sin_family = AF_INET,
+        .sin_port = htons(hostinfo->port),
+        .sin_addr = hostinfo->addr
+      };
+    }
     *sa_sz = sizeof(*sa);
   }
 #ifdef SHUTTLESOCK_HAVE_IPV6
@@ -1061,11 +1066,17 @@ bool shuso_hostinfo_to_sockaddr(shuso_t *S, shuso_hostinfo_t *hostinfo, struct s
     if(*sa_sz < sizeof(*sa)) {
       return shuso_set_error(S, "not enough space reserved to convert hostinfo to sockaddr_in");
     }
-    *sa = (struct sockaddr_in6 ) {
-      .sin6_family = AF_INET6,
-      .sin6_port = htons(hostinfo->port),
-      .sin6_addr = hostinfo->addr6
-    };
+    
+    if(hostinfo->sockaddr_in6) {
+      *sa = *hostinfo->sockaddr_in6;
+    }
+    else {
+      *sa = (struct sockaddr_in6 ) {
+        .sin6_family = AF_INET6,
+        .sin6_port = htons(hostinfo->port),
+        .sin6_addr = hostinfo->addr6
+      };
+    }
     *sa_sz = sizeof(*sa);
   }
 #endif
@@ -1074,12 +1085,18 @@ bool shuso_hostinfo_to_sockaddr(shuso_t *S, shuso_hostinfo_t *hostinfo, struct s
     if(*sa_sz < sizeof(*sa)) {
       return shuso_set_error(S, "not enough space reserved to convert hostinfo to sockaddr_un");
     }
-    sa->sun_family = AF_UNIX;
-    size_t len = strlen(hostinfo->path) + 1;
-    len = len < sizeof(sa->sun_path) ? len : sizeof(sa->sun_path);
-    memcpy(sa->sun_path, hostinfo->path, len);
-    if(len > sizeof(sa->sun_path)) {
-      return shuso_set_error(S, "not enough space reserved for unix socket path");
+    
+    if(hostinfo->sockaddr_un) {
+      *sa = *hostinfo->sockaddr_un;
+    }
+    else {
+      sa->sun_family = AF_UNIX;
+      size_t len = strlen(hostinfo->path) + 1;
+      len = len < sizeof(sa->sun_path) ? len : sizeof(sa->sun_path);
+      memcpy(sa->sun_path, hostinfo->path, len);
+      if(len > sizeof(sa->sun_path)) {
+        return shuso_set_error(S, "not enough space reserved for unix socket path");
+      }
     }
     *sa_sz = sizeof(*sa);
   }
