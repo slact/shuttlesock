@@ -7,7 +7,7 @@
 #include <glob.h>
 
 #if defined(SHUTTLESOCK_DEBUG_SANITIZE) || defined(SHUTTLESOCK_DEBUG_VALGRIND) || defined(__clang_analyzer__)
-//#define INIT_LUA_ALLOCS 1 //don't need this since we started building Lua statically when sanitizing
+#define INIT_LUA_ALLOCS 1 //don't need this since we started building Lua statically when sanitizing
 #endif
 
 static int luaS_libloader(lua_State *L) {
