@@ -372,7 +372,7 @@ static void watcher_callback(struct ev_loop *loop, ev_watcher *watcher, int even
   handler_is_coroutine = lua_isthread(L, -1);
   if(!handler_is_coroutine) {
     lua_rawgeti(L, LUA_REGISTRYINDEX, w->ref.self);
-    lua_call(L, 1, 0);
+    luaS_call(L, 1, 0);
     rc = LUA_OK;
   }
   else {
