@@ -60,9 +60,6 @@ static void set_log_fd_handle(shuso_t *S, const uint8_t code, void *ptr) {
   S->common->log.fd = (intptr_t )ptr;
 }
 
-static void open_listener_sockets_handle(shuso_t *S, const uint8_t code, void *ptr);
-static void open_listener_sockets_response_handle(shuso_t *S, const uint8_t code, void *ptr);
-
 static void worker_started_handle(shuso_t *S, const uint8_t code, void *ptr);
 static void worker_stopped_handle(shuso_t *S, const uint8_t code, void *ptr);
 static void all_worker_started_handle(shuso_t *S, const uint8_t code, void *ptr);
@@ -86,12 +83,6 @@ bool shuso_ipc_commands_init(shuso_t *S) {
     return false;
   }
   if(!shuso_ipc_add_handler(S, "receive_proxied_message", SHUTTLESOCK_IPC_CMD_RECEIVE_PROXIED_MESSAGE, received_proxied_message_handle, NULL)) {
-    return false;
-  }
-  if(!shuso_ipc_add_handler(S, "open_listener_sockets", SHUTTLESOCK_IPC_CMD_OPEN_LISTENER_SOCKETS, open_listener_sockets_handle, NULL)) {
-    return false;
-  }
-  if(!shuso_ipc_add_handler(S, "open_listener_sockets_response", SHUTTLESOCK_IPC_CMD_OPEN_LISTENER_SOCKETS_RESPONSE, open_listener_sockets_response_handle, NULL)) {
     return false;
   }
   if(!shuso_ipc_add_handler(S, "worker_started", SHUTTLESOCK_IPC_CMD_WORKER_STARTED, worker_started_handle, NULL)) {
@@ -330,11 +321,6 @@ static void listener_socket_receiver(shuso_t *S, bool ok, uintptr_t ref, int fd,
     sockreq->callback(S, false, &sockreq->hostinfo, NULL, 0, sockreq->pd);
     free_shared_open_sockets_struct(S, sockreq);
   }
-}
-
-static void open_listener_sockets_response_handle(shuso_t *S, const uint8_t code, void *ptr) {
-  //shuso_log_debug(S, "open_listener_sockets_response_handle");
-  shuso_ipc_receive_fd_start(S, "open listener sockets response", 1.0, listener_socket_receiver, (uintptr_t) ptr, ptr);
 }
 
 static bool command_open_listener_sockets_from_worker(shuso_t *S, shuso_hostinfo_t *hostinfo, int count, shuso_sockopts_t *sockopts, shuso_ipc_open_sockets_fn callback, void *pd) {

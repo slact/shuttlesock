@@ -116,7 +116,7 @@ describe(modules) {
       test_module.subscribe = "fakemodule:what:nothing another:malformed:event";
       shuso_add_module(S, &test_module);
       shuso_configure_finish(S);
-      assert_shuso_error(S, "invalid value \".+\" in subscribe string");
+      assert_shuso_error(S, "invalid subscribe event name \".+\"");
     }
     test("publish malformed event name") {
       test_module.publish = "no:this_is_wrong";
@@ -1243,7 +1243,7 @@ describe(listener_sockets) {
     shusoT_destroy(S, &chk);
     shmfree(pt);
   }
-  test("listen on port 34241") {
+  skip("listen on port 34241") {
     pt->port = 34241;
     shuso_configure_finish(S);
     shusoT_run_test(S, SHUTTLESOCK_MANAGER, listener_port_test, NULL, pt);

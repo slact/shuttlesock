@@ -175,53 +175,40 @@ void ipc_receive_notice_coroutine(shuso_t *S, shuso_io_t *io) {
   
 }
 
-static void ipc_handle_received_socket(shuso_t *S, int fd, uintptr_t ref, void *pd) {
-  shuso_ipc_fd_receiver_t *found = NULL;
-  for(unsigned i=0; i<S->ipc.fd_receiver.count; i++) {
-    if(S->ipc.fd_receiver.array[i].ref == ref) {
-      found = &S->ipc.fd_receiver.array[i];
-      break;
-    }
+static void ipc_handle_received_socket(shuso_t *S, int fd, int ref, void *pd) {
+  
+  lua_State *L = S->lua.state;
+  int top = lua_gettop(L);
+  luaL_getsubtable(L, LUA_REGISTRYINDEX, "shuttlesock.ipc.fd_receivers");
+  
+  lua_geti(L, -1, ref);
+  if(lua_isnil(L, -1)) {
+    lua_pop(L, 2);
+    shuso_log_error(S, "no handler with ref %d to received socket fd %d", ref, fd);
+    close(fd);
+    assert(lua_gettop(L) == top);
+    return;
   }
-  assert(fd != -1);
-  if(!found) {
-    shuso_ipc_fd_receiver_t *reallocd = realloc(S->ipc.fd_receiver.array, sizeof(*reallocd) * (S->ipc.fd_receiver.count+1));
-    if(!reallocd) {
-      shuso_log_error(S, "failed to receive file descriptor: no memory for realloc()");
-      if(fd != -1) {
-        close(fd);
-      }
-      return;
-    }
-    S->ipc.fd_receiver.array = reallocd;
-    found = &reallocd[S->ipc.fd_receiver.count];
-    *found = (shuso_ipc_fd_receiver_t) {
-      .ref = ref,
-      .callback = NULL,
-      .pd = NULL,
-      .buffered_fds.array = NULL,
-      .buffered_fds.count = 0,
-      .description = "buffered sockets waiting to be received"
-    };
-    S->ipc.fd_receiver.count++;
-  }
-  if(found->callback) {
-    found->callback(S, SHUSO_OK, found->ref, fd, pd, found->pd);
-  }
-  else {
-    shuso_ipc_buffered_fd_t  *reallocd = realloc(found->buffered_fds.array, sizeof(*reallocd) * (found->buffered_fds.count+1));
-    if(reallocd == NULL) {
-      shuso_log_error(S, "failed to receive file descriptor: no memory for buffered fd");
-      if(fd != -1) {
-        close(fd);
-      }
-      return;
-    }
-    
-    found->buffered_fds.array = reallocd;
-    reallocd[found->buffered_fds.count] = (shuso_ipc_buffered_fd_t ) {.fd = fd, .pd = pd};
-    found->buffered_fds.count++;
-  }
+  
+  union {
+    void                    *addr;
+    shuso_ipc_receive_fd_fn *func;
+  } cb;
+  void                      *receiver_pd;
+  
+  lua_getfield(L, -1, "callback");
+  cb.addr = (void *)lua_topointer(L, -1);
+  lua_pop(L, 1);
+  
+  lua_getfield(L, -1, "privdata");
+  receiver_pd = (void *)lua_topointer(L, -1);
+  lua_pop(L, 1);
+  
+  lua_pop(L, 1);
+  
+  assert(lua_gettop(L) == top);
+  
+  cb.func(S, true, ref, fd, receiver_pd, pd);
 }
 
 void ipc_receive_msg_fd_coroutine(shuso_t *S, shuso_io_t *io) {
@@ -316,9 +303,6 @@ bool shuso_ipc_channel_local_init(shuso_t *S) {
   shuso_ev_timer_init(S, &S->ipc.receive_check, 1.0, 1.0, ipc_receive_check_cb, S->process);
 #endif
   
-  S->ipc.fd_receiver.count = 0;
-  S->ipc.fd_receiver.array = NULL;
-  
 int               recv_notice_fd;
 #ifdef SHUTTLESOCK_HAVE_EVENTFD
   recv_notice_fd = proc->ipc.fd[1];
@@ -381,27 +365,35 @@ bool shuso_ipc_channel_local_stop(shuso_t *S) {
   if(shuso_ev_active(&(S->ipc.send_retry))) {
     shuso_ev_timer_stop(S, &S->ipc.send_retry);
   }
-  
-  
-  for(unsigned i=0; i<S->ipc.fd_receiver.count; i++) {
-    shuso_ipc_fd_receiver_t *cur = &S->ipc.fd_receiver.array[i];
-    if(cur->callback) {
-      cur->callback(S, SHUSO_FAIL, cur->ref, -1, NULL, cur->pd);
-    }
-    for(unsigned j=0; j<cur->buffered_fds.count; j++) {
-      if(cur->buffered_fds.array[j].fd != -1) {
-        close(cur->buffered_fds.array[j].fd);
-      }
-    }
-    if(cur->buffered_fds.array) {
-      free(cur->buffered_fds.array);
-    }
-  }
-  if(S->ipc.fd_receiver.array) {
-    free(S->ipc.fd_receiver.array);
-    S->ipc.fd_receiver.count = 0;
-  }
 
+
+  lua_State *L = S->lua.state;
+  int top = lua_gettop(L);
+  luaL_getsubtable(L, LUA_REGISTRYINDEX, "shuttlesock.ipc.fd_receivers");
+  
+  lua_pushnil(L);
+  while(lua_next(L, -2)) {
+    if(!lua_istable(L, -2)) {
+      lua_pop(L, 1);
+      continue;
+    }
+    
+    lua_getfield(L, -1, "callback");
+    if(lua_isnil(L, -1)) {
+      lua_pop(L, 2);
+      continue;
+    }
+    
+    lua_pop(L, 1);
+    
+    int ref = lua_tointeger(L, -1);
+    
+    shuso_ipc_receive_fd_cancel(S, ref);
+  }
+  lua_pop(L, 1);
+  
+  assert(lua_gettop(L) == top);
+  
   return true;
 }
 
@@ -646,14 +638,11 @@ static void ipc_receive_check_cb(shuso_loop *loop, shuso_ev_timer *w, int revent
 }
 #endif
 
-static void ipc_receive_timeout_cb(shuso_loop *loop, shuso_ev_timer *w, int revents) {
-  shuso_t                   *S = shuso_state(loop, w);
-  shuso_ipc_fd_receiver_t   *cur = shuso_ev_data(w);
+static void ipc_receive_fd_timeout_cb(shuso_loop *loop, shuso_ev_timer *w, int revents) {
+  shuso_t        *S = shuso_state(loop, w);
+  intptr_t        ref = (intptr_t )shuso_ev_data(w);
   
-  if(cur->callback) {
-    cur->callback(S, SHUSO_TIMEOUT, cur->ref, -1, NULL, cur->pd);
-  }
-  shuso_ipc_receive_fd_finish(S, cur->ref);
+  shuso_ipc_receive_fd_finish(S, ref);
 }
 
 bool shuso_ipc_send_fd(shuso_t *S, shuso_process_t *dst_proc, int fd, uintptr_t ref, void *pd) {
@@ -671,113 +660,95 @@ bool shuso_ipc_send_fd(shuso_t *S, shuso_process_t *dst_proc, int fd, uintptr_t 
   return true;
 }
 
-bool shuso_ipc_receive_fd_start(shuso_t *S, const char *description, float timeout_sec, shuso_ipc_receive_fd_fn *callback, uintptr_t ref, void *pd) {
-  shuso_ipc_fd_receiver_t   *found = NULL;
-  for(unsigned i = 0; i<S->ipc.fd_receiver.count; i++) {
-    shuso_ipc_fd_receiver_t *cur = &S->ipc.fd_receiver.array[i];
-    if(cur->ref == ref) {
-      found = cur;
-      break;
-    }
+int shuso_ipc_receive_fd_start(shuso_t *S, const char *description, float timeout_sec, shuso_ipc_receive_fd_fn *callback, void *pd) {
+  
+  union {
+    void                    *addr;
+    shuso_ipc_receive_fd_fn *func;
+  } cb;
+  
+  lua_State *L = S->lua.state;
+  luaL_getsubtable(L, LUA_REGISTRYINDEX, "shuttlesock.ipc.fd_receivers");
+  
+  cb.func = callback;
+  
+  lua_newtable(L);
+  lua_pushlightuserdata(L, cb.addr);
+  lua_setfield(L, -2, "callback");
+  
+  lua_pushlightuserdata(L, pd);
+  lua_setfield(L, -2, "privdata");
+  
+  lua_pushstring(L, description);
+  lua_setfield(L, -2, "description");
+  
+  
+  lua_pushvalue(L, -2);
+  int ref = luaL_ref(L, -2);
+  
+  if(timeout_sec > 0) {
+    shuso_ev_timer *timer = lua_newuserdata(L, sizeof(*timer));
+    assert(timer);
+    lua_setfield(L, -1, "timer");
+    shuso_ev_timer_init(S, timer, timeout_sec, 0, ipc_receive_fd_timeout_cb, (void *)(intptr_t)ref);
+    shuso_ev_timer_start(S, timer);
   }
-  if(found) {
-    if(found->callback != NULL) {
-      return shuso_set_error(S, "ipc_receive_fd_start ref already exists, has already been started");
-    }
-    found->callback = callback;
-    found->pd = pd;
-    found->description = description;
-    if(shuso_ev_active(&found->timeout)) {
-      shuso_ev_timer_stop(S, &found->timeout);
-    }
-    if(timeout_sec > 0) {
-      shuso_ev_timer_init(S, &found->timeout, timeout_sec, 0, ipc_receive_timeout_cb, found);
-      shuso_ev_timer_start(S, &found->timeout);
-    }
+  
+  lua_pop(L, 1);
+  return ref;
+}
+
+static bool shuso_ipc_receive_fd_stop_generic(shuso_t *S, int ref, bool run_callback) {
+  lua_State *L = S->lua.state;
+  int top = lua_gettop(L);
+  luaL_getsubtable(L, LUA_REGISTRYINDEX, "shuttlesock.ipc.fd_receivers");
+  
+  lua_geti(L, -1, ref);
+  if(lua_isnil(L, -1)) {
+    lua_pop(L, 2);
+    assert(lua_gettop(L) == top);
+    shuso_set_error(S, "no ipc fd receiver found with reference %d", ref);
+    return false;
+  }
+  lua_pop(L, 1);
+  
+  if(run_callback) {
+    union {
+      void                    *addr;
+      shuso_ipc_receive_fd_fn *func;
+    } cb;
+    void                      *receiver_pd;
+    lua_getfield(L, -1, "callback");
+    cb.addr = (void *)lua_topointer(L, -1);
+    lua_pop(L, 1);
     
-    found->in_use = true;
-    for(unsigned j=0; j < found->buffered_fds.count && !found->finished; j++) {
-      callback(S, SHUSO_OK, ref, found->buffered_fds.array[j].fd, found->buffered_fds.array[j].pd, pd);
-    }
-    found->in_use = false;
-    if(!found->finished) {
-      //got through these buffered fds, but the user expects more, so don't destroy the whole thing yet.
-      //just free the buffer
-      free(found->buffered_fds.array);
-      found->buffered_fds.array = NULL;
-      found->buffered_fds.count = 0;
-    }
-    else {
-      shuso_ipc_receive_fd_finish(S, found->ref);
+    lua_getfield(L, -1, "privdata");
+    receiver_pd = (void *)lua_topointer(L, -1);
+    lua_pop(L, 1);
+    
+    cb.func(S, false, ref, -1, receiver_pd, NULL);
+  }
+  
+  lua_getfield(L, -1, "timer");
+  if(!lua_isnil(L, -1)) {
+    shuso_ev_timer *timer = (void *)lua_topointer(L, -1);
+     if(shuso_ev_active(timer)) {
+      shuso_ev_timer_stop(S, timer);
     }
   }
-  else {
-    shuso_ipc_fd_receiver_t *reallocd = realloc(S->ipc.fd_receiver.array, sizeof(shuso_ipc_fd_receiver_t) * (S->ipc.fd_receiver.count + 1));
-    if(!reallocd) {
-      return shuso_set_error(S, "ipc_receive_fd_start ref failed, no memory for realloc()");
-    }
-    reallocd[S->ipc.fd_receiver.count] = (shuso_ipc_fd_receiver_t) {
-      .ref = ref,
-      .callback = callback,
-      .pd = pd,
-      .buffered_fds.array = NULL,
-      .buffered_fds.count = 0,
-      .description = description ? description : "?",
-      .in_use = false,
-      .finished = false
-    };
-    S->ipc.fd_receiver.array = reallocd;
-    S->ipc.fd_receiver.count++;
-  }
+  lua_pop(L, 1);
+  
+  luaL_unref(L, -1, ref);
+  lua_pop(L, 1);
+  
+  assert(lua_gettop(L) == top);
   return true;
 }
 
-bool shuso_ipc_receive_fd_finish(shuso_t *S, uintptr_t ref) {
-  shuso_ipc_fd_receiver_t *found = NULL;
-  for(unsigned i = 0; i<S->ipc.fd_receiver.count; i++) {
-    if(found) {
-      S->ipc.fd_receiver.array[i-1] = S->ipc.fd_receiver.array[i];
-    }
-    if(S->ipc.fd_receiver.array[i].ref == ref) {
-      found = &S->ipc.fd_receiver.array[i];
-      if(found->in_use) {
-        //mark it for later deallocation
-        found->finished = true;
-        return true;
-      }
-    }
-  }
-  if(!found) {
-    shuso_set_error(S, "no ipc fd receiver found with reference %p", (char *)ref);
-    return false;
-  }
-  
-  for(unsigned j = 0; j<found->buffered_fds.count; j++) {
-    close(found->buffered_fds.array[j].fd);
-  }
-  if(found->buffered_fds.array){
-    free(found->buffered_fds.array);
-    found->buffered_fds.array = NULL;
-    found->buffered_fds.count = 0;
-  }
-  if(shuso_ev_active(&found->timeout)) {
-    shuso_ev_timer_stop(S, &found->timeout);
-  }
-  if(S->ipc.fd_receiver.count == 1) {
-    free(S->ipc.fd_receiver.array);
-    S->ipc.fd_receiver.array = NULL;
-    S->ipc.fd_receiver.count = 0;
-  }
-  else {
-    shuso_ipc_fd_receiver_t *reallocd = realloc(S->ipc.fd_receiver.array, sizeof(shuso_ipc_fd_receiver_t) * (S->ipc.fd_receiver.count-1));
-    if(!reallocd) {
-      //this is not terrible, and will not lead to undefined behavior. don't error out, just make a note of it
-      shuso_log_error(S, "ipc_receive_fd_finish failed, no memory for shrinking realloc(). this isn't fatal, continue anyway.");
-    }
-    else {
-      S->ipc.fd_receiver.array = reallocd;
-    }
-    S->ipc.fd_receiver.count--;
-  }
-  return true;
+bool shuso_ipc_receive_fd_finish(shuso_t *S, int ref) {
+  return shuso_ipc_receive_fd_stop_generic(S, ref, false);
+}
+
+bool shuso_ipc_receive_fd_cancel(shuso_t *S, int ref) {
+  return shuso_ipc_receive_fd_stop_generic(S, ref, true);
 }
