@@ -76,19 +76,6 @@ typedef struct {
   int      fd;
   void    *pd;
 } shuso_ipc_buffered_fd_t;
-typedef struct {
-  uintptr_t                 ref;
-  shuso_ipc_receive_fd_fn  *callback;
-  void                     *pd;
-  struct {
-    shuso_ipc_buffered_fd_t  *array;
-    size_t                    count;
-  }                         buffered_fds;
-  const char               *description;
-  shuso_ev_timer            timeout;
-  bool                      in_use;
-  bool                      finished;
-} shuso_ipc_fd_receiver_t;
 
 typedef struct {
   shuso_io_t            notice;
@@ -119,10 +106,6 @@ typedef struct {
     shuso_ipc_outbuf_t   *first;
     shuso_ipc_outbuf_t   *last;
   }                     buf;
-  struct {
-    shuso_ipc_fd_receiver_t *array;
-    size_t                count;
-  }                     fd_receiver;
 } shuso_ipc_channel_local_t;
 
 
@@ -151,9 +134,9 @@ const shuso_ipc_handler_t *shuso_ipc_add_handler(shuso_t *S,  const char *name, 
 bool shuso_ipc_send_fd(shuso_t *, shuso_process_t *, int fd, uintptr_t ref, void *pd);
 
 //TODO: change to shuso_ipc_receive_fd_start with cleanup callback
-bool shuso_ipc_receive_fd_start(shuso_t *S, const char *description,  float timeout_sec, shuso_ipc_receive_fd_fn *callback, uintptr_t ref, void *pd);
-bool shuso_ipc_receive_fd_finish(shuso_t *S, uintptr_t ref);
-
+int shuso_ipc_receive_fd_start(shuso_t *S, const char *description, float timeout_sec, shuso_ipc_receive_fd_fn *callback, void *pd);
+bool shuso_ipc_receive_fd_finish(shuso_t *S, int ref);
+bool shuso_ipc_receive_fd_cancel(shuso_t *S, int ref);
 //some built-in IPC commands
 
 typedef void (shuso_ipc_open_sockets_fn)(shuso_t *, shuso_status_t status, shuso_hostinfo_t *, int *sockets, int socket_count, void *pd);

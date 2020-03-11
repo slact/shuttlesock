@@ -60,9 +60,6 @@ static void set_log_fd_handle(shuso_t *S, const uint8_t code, void *ptr) {
   S->common->log.fd = (intptr_t )ptr;
 }
 
-static void open_listener_sockets_handle(shuso_t *S, const uint8_t code, void *ptr);
-static void open_listener_sockets_response_handle(shuso_t *S, const uint8_t code, void *ptr);
-
 static void worker_started_handle(shuso_t *S, const uint8_t code, void *ptr);
 static void worker_stopped_handle(shuso_t *S, const uint8_t code, void *ptr);
 static void all_worker_started_handle(shuso_t *S, const uint8_t code, void *ptr);
@@ -88,12 +85,6 @@ bool shuso_ipc_commands_init(shuso_t *S) {
   if(!shuso_ipc_add_handler(S, "receive_proxied_message", SHUTTLESOCK_IPC_CMD_RECEIVE_PROXIED_MESSAGE, received_proxied_message_handle, NULL)) {
     return false;
   }
-  if(!shuso_ipc_add_handler(S, "open_listener_sockets", SHUTTLESOCK_IPC_CMD_OPEN_LISTENER_SOCKETS, open_listener_sockets_handle, NULL)) {
-    return false;
-  }
-  if(!shuso_ipc_add_handler(S, "open_listener_sockets_response", SHUTTLESOCK_IPC_CMD_OPEN_LISTENER_SOCKETS_RESPONSE, open_listener_sockets_response_handle, NULL)) {
-    return false;
-  }
   if(!shuso_ipc_add_handler(S, "worker_started", SHUTTLESOCK_IPC_CMD_WORKER_STARTED, worker_started_handle, NULL)) {
     return false;
   }
@@ -109,7 +100,7 @@ bool shuso_ipc_commands_init(shuso_t *S) {
 
 static void manager_proxy_message_handle(shuso_t *S, const uint8_t code, void *ptr) {
   assert(S->procnum == SHUTTLESOCK_MANAGER);
-  shuso_ipc_manager_proxy_msg_t *d = ptr;
+  shuso_ipc_manager_proxy_msg_t *d = ptr; 
   if(!shuso_ipc_send(S, shuso_process(S, d->dst), SHUTTLESOCK_IPC_CMD_RECEIVE_PROXIED_MESSAGE, d)) {
     shuso_set_error(S, "failed to proxy IPC message");
     shuso_shared_slab_free(&S->common->shm, d);
@@ -158,8 +149,6 @@ bool shuso_ipc_command_open_listener_sockets(shuso_t *S, shuso_hostinfo_t *hosti
   if(!shuso_hostinfo_to_sockaddr(S, hostinfo, &sockaddr.sa, &sockaddr_len)) {
     goto fail;
   }
-  
-  shuso_log_debug(S, "open listener socket %s", hostinfo->name ? hostinfo->name : "");
   
   for(i=0; i < count; i++) {
     //shuso_log_debug(S, "open socket #%d", i);

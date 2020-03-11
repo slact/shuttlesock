@@ -37,6 +37,8 @@ local receivers = setmetatable({}, {
   end
 })
 
+local fd_receivers = {}
+
 local function validate_process_direction(process, direction)
   local ptype = type(process)
   local many = false
@@ -194,11 +196,26 @@ function IPC.receive(name, src, receiver, timeout)
 end
 
 local receiver_mt
-IPC.Receiver = {}
-function IPC.Receiver.new(name, src)
-  local self = {buffer = {}, oldest=1, newest=0, name = name, src = src}
+local function new_receiver(name, opt)
+  local src = opt and opt.src
+  local timeout = opt and opt.timeout
+  local self = {buffer = {}, oldest=1, newest=0, name = name, src = src, timeout = timeout}
   setmetatable(self, receiver_mt)
   return self
+end
+
+IPC.Receiver = {}
+
+
+function IPC.Receiver.new(name, src)
+  local receiver = new_receiver(name, {src=src})
+  function receiver:receive_start()
+    IPC.receive(self.name, self.src, self.receiver_function)
+  end
+  function receiver:receive_stop()
+    IPC.cancel_receive(self.name, self.src, self.receiver_function)
+  end
+  return receiver
 end
 
 function IPC.Receiver.start(name, src)
@@ -212,7 +229,7 @@ receiver_mt = {
       if rcvd then
         self.buffer[self.oldest] = nil
         self.oldest = self.oldest + 1
-        return rcvd.data, rcvd.src
+        return table.unpack(rcvd, 1, rcvd.n)
       end
       
       assert(not self.suspended_coroutine, "IPC receiver already yielded a coroutine")
@@ -224,9 +241,10 @@ receiver_mt = {
     
     start = function(self)
       assert(not self.receiver_function, "IPC receiver already started")
-      self.receiver_function = function(data, src)
+      self.receiver_function = function(...)
         self.newest = self.newest+1
-        self.buffer[self.newest] = {data=data, src=src}
+        local incoming = table.pack(...)
+        self.buffer[self.newest] = incoming
         local coro = self.suspended_coroutine
         if coro then
           local rcvd = self.buffer[self.oldest]
@@ -234,16 +252,16 @@ receiver_mt = {
           self.oldest = self.oldest+1
           assert(rcvd)
           assert(type(coro) == "thread")
-          run_handler("buffered receiver", self.name, coro, rcvd.data, rcvd.src)
+          run_handler("buffered receiver", self.name, coro, table.unpack(rcvd, 1, rcvd.n))
         end
       end
-      IPC.receive(self.name, self.src, self.receiver_function)
+      self:receive_start()
       return self
     end,
     
     stop = function(self)
       assert(self.receiver_function, "IPC receiver not running")
-      IPC.cancel_receive(self.name, self.src, self.receiver_function)
+      self:receive_stop()
       self.receiver_function = nil
       assert(self.suspended_coroutine == nil)
       return self
@@ -288,6 +306,36 @@ function IPC.receive_from_shuttlesock_core(name, src, data)
   end
   
   return all_ok
+end
+
+function IPC.receive_fd_from_shuttlesock_core(ok, ref, fd)
+  local receiver = fd_receivers[ref]
+  if not receiver then
+    require "shuttlesock.log".error(("No Lua fd receiver for ref %d fd %d"):format(ref, fd))
+    return
+  end
+  receiver(ok, fd)
+end
+
+IPC.FD_Receiver = {}
+
+function IPC.FD_Receiver.new(name, timeout)
+  local receiver = new_receiver(name, {timeout=timeout})
+  function receiver:receive_start()
+    self.ref = Core.ipc_receive_fd_start(self.name or "", self.timeout)
+    assert(self.receiver_function)
+    fd_receivers[self.ref]=self.receiver_function
+  end
+  function receiver:receive_stop()
+    fd_receivers[self.ref]=nil
+    Core.ipc_receive_fd_stop(self.ref)
+    self.ref = nil
+  end
+  return receiver
+end
+
+function IPC.FD_Receiver.start(name, timeout)
+  return IPC.FD_Receiver.new(name, timeout):start()
 end
 
 return IPC
