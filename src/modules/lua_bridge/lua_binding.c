@@ -2398,7 +2398,7 @@ int luaS_push_core_module(lua_State *L) {
   luaL_newlib(L, shuttlesock_core_module_methods);
   
   lua_pushvalue(L, -1);
-  luaS_do_embedded_script(L, "lua_binding", 1);
+  luaS_do_embedded_script(L, "shuttlesock.core", 1);
   lua_pop(L, 1);
   return 1;
 }
