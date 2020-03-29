@@ -140,7 +140,7 @@ pack_lua_bundled_module("inspect"  src/luarocks/inspect.lua)
 
 #modules used by the shuttlesock core
 pack_lua_module("shuttlesock.core.module"        src/module.lua)
-pack_lua_module("shuttlesock.core.module_event"  src/module_event.lua)
+pack_lua_module("shuttlesock.core.event"         src/event.lua)
 
 add_core_module("core"
   SOURCES core.c

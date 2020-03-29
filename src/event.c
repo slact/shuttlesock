@@ -69,7 +69,7 @@ bool shuso_event_listen_with_priority(shuso_t *S, const char *name, shuso_event_
   module = (void *)lua_topointer(L, -1);
   lua_pop(L, 2);
   
-  luaS_push_lua_module_field(L, "shuttlesock.core.module_event", "find");
+  luaS_push_lua_module_field(L, "shuttlesock.core.event", "find");
   lua_pushstring(L, name);
   luaS_call(L, 1, 2);
   if(lua_isnil(L, -2)) {
@@ -292,7 +292,7 @@ bool shuso_event_delay(shuso_t *S, shuso_event_state_t *evstate, const char *rea
   lua_State  *L = S->lua.state;
   int         top = lua_gettop(L);
   
-  luaS_push_lua_module_field(L, "shuttlesock.core.module_event", "find");
+  luaS_push_lua_module_field(L, "shuttlesock.core.event", "find");
   lua_pushlightuserdata(L, cev->event);
   luaS_call(L, 1, 1);
   if(lua_isnil(L, -1)) {
@@ -302,7 +302,7 @@ bool shuso_event_delay(shuso_t *S, shuso_event_state_t *evstate, const char *rea
   }
   
   shuso_event_delay_t *delayed = lua_newuserdata(L, sizeof(*delayed));
-  luaL_newmetatable(L, "shuttlesock.core.module_event.delayed");
+  luaL_newmetatable(L, "shuttlesock.core.event.delayed");
   lua_setmetatable(L, -2);
   
   if(!delayed) {
@@ -333,7 +333,7 @@ static bool clear_delayed_state(shuso_t *S, shuso_event_delay_t *delay, bool err
   lua_State  *L = S->lua.state;
   int         top = lua_gettop(L);
   
-  luaS_push_lua_module_field(L, "shuttlesock.core.module_event", "find");
+  luaS_push_lua_module_field(L, "shuttlesock.core.event", "find");
   lua_pushlightuserdata(L, delay->paused.event);
   luaS_call(L, 1, 1);
   if(lua_isnil(L, -1)) {

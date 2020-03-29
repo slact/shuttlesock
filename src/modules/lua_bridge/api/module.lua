@@ -1,5 +1,5 @@
 local Core = require "shuttlesock.core"
-local ModuleEvent = require "shuttlesock.core.module_event"
+local ModuleEvent = require "shuttlesock.core.event"
 local Event = require "shuttlesock.event"
 
 local Module = {}
@@ -224,7 +224,7 @@ function module:subscribe(event_name, subscriber_function, priority)
 end
 
 function module:publish(event_name, code, data)
-  return Core.module_event_publish(self.name, event_name, code, data)
+  return Core.event_publish(self.name, event_name, code, data)
 end
 
 function module:type()

@@ -123,7 +123,7 @@ static void worker_started_handle(shuso_t *S, const uint8_t code, void *ptr) {
   if(all_workers_running) {
     if(!S->common->process.all_workers_running) {
       shuso_ipc_send(S, &S->common->process.master, SHUTTLESOCK_IPC_CMD_ALL_WORKERS_STARTED, NULL); 
-      shuso_core_module_event_publish(S, "manager.workers_started", SHUSO_OK, NULL);
+      shuso_core_event_publish(S, "manager.workers_started", SHUSO_OK, NULL);
       SHUSO_EACH_WORKER(S, worker) {
         shuso_ipc_send(S, worker, SHUTTLESOCK_IPC_CMD_ALL_WORKERS_STARTED, NULL); 
       }
@@ -147,7 +147,7 @@ static void all_worker_started_handle(shuso_t *S, const uint8_t code, void *ptr)
     shuso_log_error(S, "received ALL_WORKERS_STARTED IPC command in unexpected procnum %i", S->procnum);
     return;
   }
-  shuso_core_module_event_publish(S, evname, SHUSO_OK, NULL);
+  shuso_core_event_publish(S, evname, SHUSO_OK, NULL);
 }
 
 static void worker_stopped_handle(shuso_t *S, const uint8_t code, void *ptr) {

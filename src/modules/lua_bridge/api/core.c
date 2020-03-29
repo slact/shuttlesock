@@ -1299,7 +1299,7 @@ typedef struct {
 static bool lua_module_event_interrupt_handler(shuso_t *S, shuso_event_t *event, shuso_event_state_t *evstate, shuso_event_interrupt_t interrupt, double *sec) {
   lua_State *L = S->lua.state;
   int top = lua_gettop(L);
-  luaS_push_lua_module_field(L, "shuttlesock.module_event", "find");
+  luaS_push_lua_module_field(L, "shuttlesock.event", "find");
   lua_pushlightuserdata(L, event);
   luaS_pcall(L, 1, 1);
   if(lua_isnil(L, -1)) {
@@ -1326,12 +1326,12 @@ static bool lua_module_event_interrupt_handler(shuso_t *S, shuso_event_t *event,
     lua_setfield(L, -2, "name");
   }
   
-  luaS_push_lua_module_field(L, "shuttlesock.module_event", "find");
+  luaS_push_lua_module_field(L, "shuttlesock.event", "find");
   lua_pushlightuserdata(L, (void *)evstate->module);
   luaS_pcall(L, 1, 1);
   lua_setfield(L, -2, "module");
   
-  luaS_push_lua_module_field(L, "shuttlesock.module_event", "find");
+  luaS_push_lua_module_field(L, "shuttlesock.event", "find");
   lua_pushlightuserdata(L, (void *)evstate->publisher);
   luaS_pcall(L, 1, 1);
   lua_setfield(L, -2, "publisher");
@@ -1694,7 +1694,7 @@ static int Lua_shuso_module_event_pause(lua_State *L) {
   reason = top >= 2 ? lua_tostring(L, 2) : NULL;
   
   paused = lua_newuserdata(L, sizeof(*paused));
-  luaL_newmetatable(L, "shuttlesock.core.module_event.paused");
+  luaL_newmetatable(L, "shuttlesock.core.event.paused");
   lua_setmetatable(L, -2);
   
   if(!shuso_event_pause(S, evstate, reason, paused)) {
@@ -1732,11 +1732,11 @@ static int Lua_shuso_module_event_resume(lua_State *L) {
   
   bool ok;
   
-  if(luaL_testudata(L, 1, "shuttlesock.core.module_event.paused")) {
+  if(luaL_testudata(L, 1, "shuttlesock.core.event.paused")) {
     shuso_event_pause_t *pause = (void *)lua_topointer(L, 1);
     ok = shuso_event_resume(S, pause);
   }
-  else if(luaL_testudata(L, 1, "shuttlesock.core.module_event.delayed")) {
+  else if(luaL_testudata(L, 1, "shuttlesock.core.event.delayed")) {
     shuso_event_delay_t *delay = (void *)lua_topointer(L, 1);
     ok = shuso_event_resume(S, delay->ref);
   }
@@ -2371,11 +2371,11 @@ luaL_Reg shuttlesock_core_module_methods[] = {
   {"module_pointer", Lua_shuso_module_pointer},
   {"module_name", Lua_shuso_module_name},
   {"module_version", Lua_shuso_module_version},
-  {"module_event_publish", Lua_shuso_module_event_publish},
-  {"module_event_cancel", Lua_shuso_module_event_cancel},
-  {"module_event_pause", Lua_shuso_module_event_pause},
-  {"module_event_delay", Lua_shuso_module_event_delay},
-  {"module_event_resume", Lua_shuso_module_event_resume},
+  {"event_publish", Lua_shuso_module_event_publish},
+  {"event_cancel", Lua_shuso_module_event_cancel},
+  {"event_pause", Lua_shuso_module_event_pause},
+  {"event_delay", Lua_shuso_module_event_delay},
+  {"event_resume", Lua_shuso_module_event_resume},
   
 //ipc
   {"ipc_send_fd", Lua_shuso_ipc_send_fd},

@@ -3,7 +3,7 @@ local Event = {}
 
 local deferred_mt = { __index = {
   resume = function(self)
-    return Core.module_event_resume(self.data)
+    return Core.event_resume(self.data)
   end
 }}
 local function new_deferral(data)
@@ -16,7 +16,7 @@ local evstate = {}
 evstate_mt.__index = evstate
 
 function evstate:delay(reason, delay_sec)
-  local data, err = Core.module_event_delay(self.ptr, reason, delay_sec)
+  local data, err = Core.event_delay(self.ptr, reason, delay_sec)
   if not data then
     return nil, err
   end
@@ -24,7 +24,7 @@ function evstate:delay(reason, delay_sec)
 end
 
 function evstate:cancel()
-  local data, err = Core.module_event_cancel(self.ptr)
+  local data, err = Core.event_cancel(self.ptr)
   if not data then
     return nil, err
   end
@@ -32,7 +32,7 @@ function evstate:cancel()
 end
 
 function evstate:pause(reason)
-  local data, err = Core.module_event_pause(self.ptr, reason)
+  local data, err = Core.event_pause(self.ptr, reason)
   if not data then
     return nil, err
   end

@@ -2,7 +2,7 @@
 #include <shuttlesock/internal.h>
 #include "core.h"
 
-bool shuso_core_module_event_publish(shuso_t *S, const char *name, intptr_t code, void *data) {
+bool shuso_core_event_publish(shuso_t *S, const char *name, intptr_t code, void *data) {
   shuso_core_module_ctx_t *ctx = S->common->module_ctx.core;
   shuso_event_t           *ev = (shuso_event_t *)&ctx->events;
   shuso_event_t           *cur;

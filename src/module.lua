@@ -11,7 +11,7 @@ Module.providers = {}
 
 
 local function split_subscribe_list_string(str)
-  local Event = require "shuttlesock.core.module_event"
+  local Event = require "shuttlesock.core.event"
   local events = {}
   local events_required = {}
   local badchar = str:match("[^%~%s%w%_%.%:]")
@@ -41,7 +41,7 @@ local function split_subscribe_list_string(str)
 end
 
 local function split_publish_list_string(modname, str)
-  local Event = require "shuttlesock.core.module_event"
+  local Event = require "shuttlesock.core.event"
   local events = {}
   local badchar = str:match("[^%s%w%_%.%:]")
   if badchar then

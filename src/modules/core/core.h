@@ -35,7 +35,7 @@ typedef struct {
   } events;
 } shuso_core_module_ctx_t;
 
-bool shuso_core_module_event_publish(shuso_t *S, const char *name, intptr_t code, void *data);
+bool shuso_core_event_publish(shuso_t *S, const char *name, intptr_t code, void *data);
 void *shuso_core_context(shuso_t *S,  shuso_module_t *module);
 bool shuso_set_core_context(shuso_t *S, shuso_module_t *module, void *ctx);
 
