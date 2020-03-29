@@ -1,5 +1,5 @@
 #include <shuttlesock.h>
-#include "api/lua_ipc.h"
+#include "api/ipc_lua_api.h"
 #include "lua_bridge.h"
 
 static void lua_module_gxcopy_loaded_packages(shuso_t *S, shuso_event_state_t *es, intptr_t code, void *data, void *pd) {

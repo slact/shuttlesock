@@ -8,7 +8,7 @@
 #include <ares.h>
 #include <errno.h>
 #include <pthread.h>
-#include "lua_ipc.h"
+#include "ipc_lua_api.h"
 #include <shuttlesock/modules/config/private.h>
 
 typedef enum {

@@ -2,7 +2,7 @@
 #include <lua.h>
 #include <lauxlib.h>
 #include <lualib.h>
-#include <shuttlesock/modules/lua_bridge/api/lua_ipc.h>
+#include <shuttlesock/modules/lua_bridge/api/ipc_lua_api.h>
 #ifndef __clang_analyzer__
 
 bool set_test_options(int *argc, char **argv) {

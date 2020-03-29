@@ -1,5 +1,5 @@
-#ifndef LUA_IPC_H
-#define LUA_IPC_H
+#ifndef IPC_LUA_API_H
+#define IPC_LUA_API_H
 #include <shuttlesock/common.h>
 bool shuso_register_lua_ipc_handler(shuso_t *S);
 int luaS_ipc_send_message(lua_State *L);
@@ -45,4 +45,4 @@ shuso_ipc_lua_data_t *luaS_lua_ipc_pack_data(lua_State *L, int index, const char
 bool luaS_lua_ipc_unpack_data(lua_State *L, shuso_ipc_lua_data_t *d);
 bool luaS_lua_ipc_gc_data(lua_State *L, shuso_ipc_lua_data_t *d);
 
-#endif //LUA_IPC_H
+#endif //IPC_LUA_API_H

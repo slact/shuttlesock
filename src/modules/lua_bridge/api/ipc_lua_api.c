@@ -1,7 +1,7 @@
 #include <shuttlesock.h>
 #include <lauxlib.h>
 #include "../private.h"
-#include "lua_ipc.h"
+#include "ipc_lua_api.h"
 
 
 static void *get_already_packed_field(lua_State *L, int data_index, int packed_data_table_index) {

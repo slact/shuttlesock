@@ -1,7 +1,7 @@
 #include <shuttlesock.h>
 #include <shuttlesock/embedded_lua_scripts.h>
 #include <shuttlesock/modules/lua_bridge/api/lazy_atomics.h>
-#include <shuttlesock/modules/lua_bridge/api/lua_ipc.h>
+#include <shuttlesock/modules/lua_bridge/api/ipc_lua_api.h>
 #include <sys/types.h>
 #include <unistd.h>
 #include <glob.h>
