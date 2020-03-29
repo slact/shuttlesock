@@ -24,7 +24,7 @@
 #include <shuttlesock/module.h>
 #include <shuttlesock/lua_utils.h>
 #include <shuttlesock/sysutil.h>
-#include <shuttlesock/module_event.h>
+#include <shuttlesock/event.h>
 #include <shuttlesock/core_modules.h>
 #include <shuttlesock/buffer.h>
 

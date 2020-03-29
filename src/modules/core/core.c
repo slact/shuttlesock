@@ -4,9 +4,9 @@
 
 bool shuso_core_module_event_publish(shuso_t *S, const char *name, intptr_t code, void *data) {
   shuso_core_module_ctx_t *ctx = S->common->module_ctx.core;
-  shuso_module_event_t    *ev = (shuso_module_event_t *)&ctx->events;
-  shuso_module_event_t    *cur;
-  int n = sizeof(ctx->events)/sizeof(shuso_module_event_t);
+  shuso_event_t           *ev = (shuso_event_t *)&ctx->events;
+  shuso_event_t           *cur;
+  int n = sizeof(ctx->events)/sizeof(shuso_event_t);
   for(int i = 0; i < n; i++) {
     cur = &ev[i];
     if(strcmp(cur->name, name) == 0) {
@@ -118,7 +118,7 @@ static void core_worker_stop(shuso_t *S, shuso_event_state_t *evs, intptr_t stat
   shuso_add_timer_watcher(S, 0.0, 0.0, stop_thing_callback, NULL);
 }
 
-static bool stop_event_interrupt_handler(shuso_t *S, shuso_module_event_t *event, shuso_event_state_t *evstate, shuso_event_interrupt_t interrupt, double *delay_sec) {
+static bool stop_event_interrupt_handler(shuso_t *S, shuso_event_t *event, shuso_event_state_t *evstate, shuso_event_interrupt_t interrupt, double *delay_sec) {
   if(interrupt != SHUSO_EVENT_DELAY) {
     return false;
   }

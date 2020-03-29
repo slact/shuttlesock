@@ -1,7 +1,7 @@
 #ifndef SHUTTLESOCK_MODULE_H
 #define SHUTTLESOCK_MODULE_H
 #include <shuttlesock/common.h>
-#include <shuttlesock/module_event.h>
+#include <shuttlesock/event.h>
 //core-facing stuff
 
 #define SHUSO_MODULE_INDEX_INVALID 255

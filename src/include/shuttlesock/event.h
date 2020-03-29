@@ -1,14 +1,14 @@
-#ifndef SHUTTLESOCK_MODULE_EVENT_H
-#define SHUTTLESOCK_MODULE_EVENT_H
+#ifndef SHUTTLESOCK_EVENT_H
+#define SHUTTLESOCK_EVENT_H
 
 typedef struct {
   shuso_module_t  *module;
-  shuso_module_event_fn *fn;
+  shuso_event_fn  *fn;
   void            *pd;
 #ifdef SHUTTLESOCK_DEBUG_MODULE_SYSTEM
   uint8_t          priority;
 #endif
-} shuso_module_event_listener_t;
+} shuso_event_listener_t;
 
 typedef enum {
   SHUSO_EVENT_NO_INTERRUPT = 0,
@@ -17,12 +17,12 @@ typedef enum {
   SHUSO_EVENT_DELAY
 } shuso_event_interrupt_t;
 
-typedef bool shuso_event_interrupt_handler_fn(shuso_t *S, shuso_module_event_t *event, shuso_event_state_t *evstate, shuso_event_interrupt_t interrupt, double *sec);
+typedef bool shuso_event_interrupt_handler_fn(shuso_t *S, shuso_event_t *event, shuso_event_state_t *evstate, shuso_event_interrupt_t interrupt, double *sec);
 
-typedef struct shuso_module_event_s {
+typedef struct shuso_event_s {
   const char        *name;
   const char        *data_type;
-  shuso_module_event_listener_t *listeners;
+  shuso_event_listener_t *listeners;
   shuso_event_interrupt_handler_fn *interrupt_handler;
   uint16_t           module_index;
   unsigned           firing:1;
@@ -31,25 +31,25 @@ typedef struct shuso_module_event_s {
   size_t             count;
   _Atomic uint64_t   fired_count;
 #endif
-} shuso_module_event_t;
+} shuso_event_t;
 
-typedef struct shuso_module_paused_event_s {
+typedef struct shuso_event_pause_s {
   const char           *reason;
-  shuso_module_event_t *event;
+  shuso_event_t        *event;
   intptr_t              code;
   void                 *data;
   uint16_t             next_listener_index;
-} shuso_module_paused_event_t;
+} shuso_event_pause_t;
 
-typedef struct shuso_module_delayed_event_s {
-  shuso_module_paused_event_t paused;
+typedef struct shuso_event_delay_s {
+  shuso_event_pause_t paused;
   shuso_ev_timer        timer;
   lua_reference_t       ref;
-} shuso_module_delayed_event_t;
+} shuso_event_delay_t;
 
 typedef struct {
   const char           *name;
-  shuso_module_event_t *event;
+  shuso_event_t        *event;
   const char           *data_type;
   shuso_event_interrupt_handler_fn *interrupt_handler;
 } shuso_event_init_t;
@@ -63,24 +63,24 @@ typedef struct shuso_event_state_s {
 
 //event stuff
 bool shuso_events_initialize(shuso_t *S, shuso_module_t *module, shuso_event_init_t *events_init);
-bool shuso_event_initialize(shuso_t *S, shuso_module_t *mod, shuso_module_event_t *mev, shuso_event_init_t *event_init);
+bool shuso_event_initialize(shuso_t *S, shuso_module_t *mod, shuso_event_t *mev, shuso_event_init_t *event_init);
 
-bool shuso_event_listen(shuso_t *S, const char *name, shuso_module_event_fn *callback, void *pd);
-bool shuso_event_listen_with_priority(shuso_t *S, const char *name, shuso_module_event_fn *callback, void *pd, int8_t priority);
+bool shuso_event_listen(shuso_t *S, const char *name, shuso_event_fn *callback, void *pd);
+bool shuso_event_listen_with_priority(shuso_t *S, const char *name, shuso_event_fn *callback, void *pd, int8_t priority);
 
 bool shuso_event_cancel(shuso_t *S, shuso_event_state_t *evstate);
 
-bool shuso_event_pause(shuso_t *S, shuso_event_state_t *evstate, const char *reason,  shuso_module_paused_event_t *paused);
+bool shuso_event_pause(shuso_t *S, shuso_event_state_t *evstate, const char *reason,  shuso_event_pause_t *paused);
 bool shuso_event_delay(shuso_t *S, shuso_event_state_t *evstate, const char *reason, double max_delay_sec, int *delay_ref);
 #define shuso_event_resume(S, resume_data) \
   _Generic((resume_data), \
            int                          :shuso_event_resume_delayed, \
-           shuso_module_paused_event_t *:shuso_event_resume_paused \
+           shuso_event_pause_t *:shuso_event_resume_paused \
   )(S, resume_data)
 
 bool shuso_event_resume_delayed(shuso_t *S, int delay_id);
-bool shuso_event_resume_paused(shuso_t *S, shuso_module_paused_event_t *paused);
+bool shuso_event_resume_paused(shuso_t *S, shuso_event_pause_t *paused);
   
-bool shuso_event_publish(shuso_t *S, shuso_module_event_t *event, intptr_t code, void *data);
+bool shuso_event_publish(shuso_t *S, shuso_event_t *event, intptr_t code, void *data);
 
-#endif //SHUTTLESOCK_MODULE_EVENT_H
+#endif //SHUTTLESOCK_EVENT_H

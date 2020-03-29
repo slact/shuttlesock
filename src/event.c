@@ -5,7 +5,7 @@ void *shuso_events(shuso_t *S, shuso_module_t *module) {
   return S->common->modules.events[module->index];
 }
 
-bool shuso_event_initialize(shuso_t *S, shuso_module_t *mod, shuso_module_event_t *mev, shuso_event_init_t *event_init) {
+bool shuso_event_initialize(shuso_t *S, shuso_module_t *mod, shuso_event_t *mev, shuso_event_init_t *event_init) {
   lua_State       *L = S->lua.state;
   if(mod == NULL) {
     return shuso_set_error(S, "can't initialize event from outside a shuttlesock module");
@@ -46,11 +46,11 @@ bool shuso_events_initialize(shuso_t *S, shuso_module_t *module, shuso_event_ini
   return true;
 }
 
-bool shuso_event_listen(shuso_t *S, const char *name, shuso_module_event_fn *callback, void *pd) {
+bool shuso_event_listen(shuso_t *S, const char *name, shuso_event_fn *callback, void *pd) {
   return shuso_event_listen_with_priority(S, name, callback, pd, 0);
 }
 
-bool shuso_event_listen_with_priority(shuso_t *S, const char *name, shuso_module_event_fn *callback, void *pd, int8_t priority) {
+bool shuso_event_listen_with_priority(shuso_t *S, const char *name, shuso_event_fn *callback, void *pd, int8_t priority) {
   lua_State       *L = S->lua.state;
   shuso_module_t  *module;
   int              top = lua_gettop(L);
@@ -110,19 +110,19 @@ bool shuso_event_listen_with_priority(shuso_t *S, const char *name, shuso_module
 }
 
 typedef struct {
-  shuso_module_event_t  *event;
-  shuso_event_state_t    state;
-  int                    current_listener_index;
-  intptr_t               code;
-  void                  *data;
-  shuso_module_event_listener_t *cur;
-  shuso_event_interrupt_t interrupt;
-  const char            *interrupt_reason;
-} complete_evstate_t;
+  shuso_event_t             *event;
+  shuso_event_state_t        state;
+  int                        current_listener_index;
+  intptr_t                   code;
+  void                      *data;
+  shuso_event_listener_t    *cur;
+  shuso_event_interrupt_t    interrupt;
+  const char                *interrupt_reason;
+} shuso_complete_event_state_t;
 
-static bool fire_event(shuso_t *S, shuso_module_event_t *event, int listener_start_index, intptr_t code, void *data) {
+static bool fire_event(shuso_t *S, shuso_event_t *event, int listener_start_index, intptr_t code, void *data) {
   shuso_module_t *publisher = shuso_get_module(S, event->module_index);
-  complete_evstate_t cev = {
+  shuso_complete_event_state_t cev = {
     .event = event,
     .state = {
       .publisher = publisher,
@@ -220,12 +220,12 @@ static bool fire_event(shuso_t *S, shuso_module_event_t *event, int listener_sta
   return false;
 }
 
-bool shuso_event_publish(shuso_t *S, shuso_module_event_t *event, intptr_t code, void *data) {
+bool shuso_event_publish(shuso_t *S, shuso_event_t *event, intptr_t code, void *data) {
   return fire_event(S, event, 0, code, data);
 }
 
 
-static bool try_to_interrupt_event(shuso_t *S, complete_evstate_t *cev, const char *what, shuso_event_interrupt_t interrupt, double *sec) {
+static bool try_to_interrupt_event(shuso_t *S, shuso_complete_event_state_t *cev, const char *what, shuso_event_interrupt_t interrupt, double *sec) {
   shuso_event_interrupt_handler_fn *interrupt_handler = cev->event->interrupt_handler;
   
   if(interrupt_handler == NULL) {
@@ -244,7 +244,7 @@ static bool try_to_interrupt_event(shuso_t *S, complete_evstate_t *cev, const ch
 }
 
 bool shuso_event_cancel(shuso_t *S, shuso_event_state_t *evstate) {
-  complete_evstate_t *cev = container_of(evstate, complete_evstate_t, state);
+  shuso_complete_event_state_t *cev = container_of(evstate, shuso_complete_event_state_t, state);
   
   if(!try_to_interrupt_event(S, cev, "canceled", SHUSO_EVENT_CANCEL, NULL)) {
     return false;
@@ -254,8 +254,8 @@ bool shuso_event_cancel(shuso_t *S, shuso_event_state_t *evstate) {
   return true;
 }
 
-bool shuso_event_pause(shuso_t *S, shuso_event_state_t *evstate, const char *reason, shuso_module_paused_event_t *paused) {
-  complete_evstate_t *cev = container_of(evstate, complete_evstate_t, state);
+bool shuso_event_pause(shuso_t *S, shuso_event_state_t *evstate, const char *reason, shuso_event_pause_t *paused) {
+  shuso_complete_event_state_t *cev = container_of(evstate, shuso_complete_event_state_t, state);
   
   if(!try_to_interrupt_event(S, cev, "paused", SHUSO_EVENT_PAUSE, NULL)) {
     return false;
@@ -263,7 +263,7 @@ bool shuso_event_pause(shuso_t *S, shuso_event_state_t *evstate, const char *rea
   
   cev->interrupt = SHUSO_EVENT_PAUSE;
   
-  *paused = (shuso_module_paused_event_t) {
+  *paused = (shuso_event_pause_t) {
     .reason = reason,
     .event = cev->event,
     .code = cev->code,
@@ -277,7 +277,7 @@ bool shuso_event_pause(shuso_t *S, shuso_event_state_t *evstate, const char *rea
 static void delayed_event_handler(shuso_loop *, shuso_ev_timer *, int);
 
 bool shuso_event_delay(shuso_t *S, shuso_event_state_t *evstate, const char *reason, double max_delay_sec, int *delay_ref) {
-  complete_evstate_t *cev = container_of(evstate, complete_evstate_t, state);
+  shuso_complete_event_state_t *cev = container_of(evstate, shuso_complete_event_state_t, state);
   
   if(!try_to_interrupt_event(S, cev, "delayed", SHUSO_EVENT_DELAY, &max_delay_sec)) {
     return false;
@@ -301,7 +301,7 @@ bool shuso_event_delay(shuso_t *S, shuso_event_state_t *evstate, const char *rea
     return false;
   }
   
-  shuso_module_delayed_event_t *delayed = lua_newuserdata(L, sizeof(*delayed));
+  shuso_event_delay_t *delayed = lua_newuserdata(L, sizeof(*delayed));
   luaL_newmetatable(L, "shuttlesock.core.module_event.delayed");
   lua_setmetatable(L, -2);
   
@@ -310,7 +310,7 @@ bool shuso_event_delay(shuso_t *S, shuso_event_state_t *evstate, const char *rea
     shuso_set_error(S, "event %s:%s cannot be delayed due to a failed allocation", cev->state.publisher->name, cev->state);
     return false;
   }
-  *delayed = (shuso_module_delayed_event_t ){
+  *delayed = (shuso_event_delay_t ){
     .paused.reason = reason,
     .paused.event = cev->event,
     .paused.code = cev->code,
@@ -329,7 +329,7 @@ bool shuso_event_delay(shuso_t *S, shuso_event_state_t *evstate, const char *rea
   return true;
 }
 
-static bool clear_delayed_state(shuso_t *S, shuso_module_delayed_event_t *delay, bool error_out, shuso_module_paused_event_t *paused) {
+static bool clear_delayed_state(shuso_t *S, shuso_event_delay_t *delay, bool error_out, shuso_event_pause_t *pause) {
   lua_State  *L = S->lua.state;
   int         top = lua_gettop(L);
   
@@ -344,8 +344,8 @@ static bool clear_delayed_state(shuso_t *S, shuso_module_delayed_event_t *delay,
     return false;
   }
   
-  if(paused != NULL) {
-    *paused = delay->paused;
+  if(pause != NULL) {
+    *pause = delay->paused;
   }
   luaL_unref(L, LUA_REGISTRYINDEX, delay->ref);
   return true;
@@ -353,10 +353,10 @@ static bool clear_delayed_state(shuso_t *S, shuso_module_delayed_event_t *delay,
 
 static void delayed_event_handler(shuso_loop *loop, shuso_ev_timer *w, int event) {
   shuso_t    *S = shuso_state(loop, w);
-  shuso_module_delayed_event_t *delay = shuso_ev_data(w);
-  shuso_module_paused_event_t   paused;
+  shuso_event_delay_t      *delay = shuso_ev_data(w);
+  shuso_event_pause_t       pause;
   
-  if(!clear_delayed_state(S, delay, true, &paused)) {
+  if(!clear_delayed_state(S, delay, true, &pause)) {
     return;
   }
   
@@ -364,7 +364,7 @@ static void delayed_event_handler(shuso_loop *loop, shuso_ev_timer *w, int event
     return;
   }
   
-  fire_event(S, paused.event, paused.next_listener_index, paused.code, paused.data);
+  fire_event(S, pause.event, pause.next_listener_index, pause.code, pause.data);
 }
 
 bool shuso_event_resume_delayed(shuso_t *S, int delay_id) {
@@ -374,65 +374,18 @@ bool shuso_event_resume_delayed(shuso_t *S, int delay_id) {
     shuso_set_error(S, "failed to resume delayed event: invalid delay id");
   }
   
-  shuso_module_delayed_event_t *delay = (void *)lua_topointer(L, -1);
+  shuso_event_delay_t *delay = (void *)lua_topointer(L, -1);
   lua_pop(L, 1);
   
-  shuso_module_paused_event_t  paused;
+  shuso_event_pause_t  pause;
   
-  if(!clear_delayed_state(S, delay, false, &paused)) {
+  if(!clear_delayed_state(S, delay, false, &pause)) {
     return false;
   }
   
-  return fire_event(S, paused.event, paused.next_listener_index, paused.code, paused.data);
+  return fire_event(S, pause.event, pause.next_listener_index, pause.code, pause.data);
 }
 
-bool shuso_event_resume_paused(shuso_t *S, shuso_module_paused_event_t *paused) {
-  return fire_event(S, paused->event, paused->next_listener_index, paused->code, paused->data);
+bool shuso_event_resume_paused(shuso_t *S, shuso_event_pause_t *pause) {
+  return fire_event(S, pause->event, pause->next_listener_index, pause->code, pause->data);
 }
-
-
-
-/*
-bool shuso_register_event_data_type_mapping(shuso_t *S, shuso_event_data_type_map_t *t, shuso_module_t *registering_module, bool replace_if_present) {
-  lua_State *L = S->lua.state;
-  
-  //does it already exist?
-  luaS_push_lua_module_field(L, "shuttlesock.core.module_event", "data_type_map");
-  lua_pushstring(L, t->language);
-  lua_pushstring(L, t->data_type);
-  luaS_call(L, 2, 2); //returns data_type_map_ptr, module_name
-  
-  if(!lua_isnil(L, -2)) {
-    //yeah, it exists
-    if(replace_if_present) {
-      //but that's okay
-      luaS_push_lua_module_field(L, "shuttlesock.core.module_event", "unregister_data_type");
-      lua_pushstring(L, t->language);
-      lua_pushstring(L, t->data_type);
-      luaS_function_call_result_ok(L, 2, false);
-    }
-  }
-  lua_pop(L, 2);
-  
-  shuso_event_data_type_map_t *map = shuso_stalloc(&S->stalloc, sizeof(*map));
-  if(!map) {
-    return shuso_set_error(S, "failed to allocate map while registering event data type");
-  }
-  *map = *t;
-  map->language = shuso_stalloc(&S->stalloc, strlen(t->language)+1);
-  map->data_type = shuso_stalloc(&S->stalloc, strlen(t->data_type)+1);
-  if(!map->language || !map->data_type) {
-    return shuso_set_error(S, "failed to allocate map while registering event data type");
-  }
-  strcpy((char *)map->language, t->language);
-  strcpy((char *)map->data_type, t->data_type);
-  
-  luaS_push_lua_module_field(L, "shuttlesock.core.module_event", "register_data_type");
-  lua_pushstring(L, map->language);
-  lua_pushstring(L, map->data_type);
-  lua_pushstring(L, registering_module->name);
-  lua_pushlightuserdata(L, map);
-  
-  return luaS_function_call_result_ok(L, 4, false);
-}
-*/

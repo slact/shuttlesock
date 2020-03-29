@@ -29,7 +29,7 @@ target_sources(shuttlesock PRIVATE
   src/resolver.c
   src/shared_slab.c
   src/module.c
-  src/module_event.c
+  src/event.c
   src/embedded_lua_scripts.c
   src/lua_utils.c
   src/io.c

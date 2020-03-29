@@ -1292,11 +1292,11 @@ static void lua_module_event_listener(shuso_t *S, shuso_event_state_t *evs, intp
 }
 
 typedef struct {
-  shuso_module_event_t   *events;
-  int                     events_count;
+  shuso_event_t   *events;
+  int              events_count;
 } lua_module_core_ctx_t;
 
-static bool lua_module_event_interrupt_handler(shuso_t *S, shuso_module_event_t *event, shuso_event_state_t *evstate, shuso_event_interrupt_t interrupt, double *sec) {
+static bool lua_module_event_interrupt_handler(shuso_t *S, shuso_event_t *event, shuso_event_state_t *evstate, shuso_event_interrupt_t interrupt, double *sec) {
   lua_State *L = S->lua.state;
   int top = lua_gettop(L);
   luaS_push_lua_module_field(L, "shuttlesock.module_event", "find");
@@ -1392,7 +1392,7 @@ static bool lua_module_initialize(shuso_t *S, shuso_module_t *module) {
   lua_remove(L, -2);
   int npub;
   if(lua_istable(L, -1) && (npub = luaS_table_count(L, -1)) > 0) {
-    shuso_module_event_t *events = shuso_stalloc(&S->stalloc, sizeof(*events) * npub);
+    shuso_event_t *events = shuso_stalloc(&S->stalloc, sizeof(*events) * npub);
     if(events == NULL) {
       lua_settop(L, top);
       return shuso_set_error(S, "failed to allocate lua module published events array");
@@ -1688,7 +1688,7 @@ static int Lua_shuso_module_event_pause(lua_State *L) {
   luaL_checktype(L, 1, LUA_TLIGHTUSERDATA);
   shuso_event_state_t *evstate = (void *)lua_topointer(L, 1);
   int top = lua_gettop(L);
-  shuso_module_paused_event_t *paused;
+  shuso_event_pause_t *paused;
   const char *reason;
   
   reason = top >= 2 ? lua_tostring(L, 2) : NULL;
@@ -1733,12 +1733,12 @@ static int Lua_shuso_module_event_resume(lua_State *L) {
   bool ok;
   
   if(luaL_testudata(L, 1, "shuttlesock.core.module_event.paused")) {
-    shuso_module_paused_event_t *paused = (void *)lua_topointer(L, 1);
-    ok = shuso_event_resume(S, paused);
+    shuso_event_pause_t *pause = (void *)lua_topointer(L, 1);
+    ok = shuso_event_resume(S, pause);
   }
   else if(luaL_testudata(L, 1, "shuttlesock.core.module_event.delayed")) {
-    shuso_module_delayed_event_t *delayed = (void *)lua_topointer(L, 1);
-    ok = shuso_event_resume(S, delayed->ref);
+    shuso_event_delay_t *delay = (void *)lua_topointer(L, 1);
+    ok = shuso_event_resume(S, delay->ref);
   }
   else {
     return luaL_error(L, "invalid resume paramenter");
