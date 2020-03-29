@@ -6,6 +6,8 @@
 #include <unistd.h>
 #include <glob.h>
 
+#define SHUTTLESOCK_DEBUG_CRASH_ON_LUA_ERROR 1
+
 #if defined(SHUTTLESOCK_DEBUG_SANITIZE) || defined(SHUTTLESOCK_DEBUG_VALGRIND) || defined(__clang_analyzer__)
 #define INIT_LUA_ALLOCS 1 //don't need this since we started building Lua statically when sanitizing
 #endif
@@ -121,14 +123,7 @@ int luaS_traceback_error_handler(lua_State *L) {
   if (!lua_isstring(L, -1)) { /* 'message' not a string? */
     return 1;  /* keep it intact */
   }
-  luaL_checkstack(L, 3, NULL);
-  lua_getglobal(L, "debug");
-  lua_getfield(L, -1, "traceback");
-  lua_remove(L, -2);
-
-  lua_pushvalue(L, 1);  /* pass error message */
-  lua_pushinteger(L, 2);  /* skip this function and traceback */
-  lua_call(L, 2, 1);  /* call debug.traceback */
+  luaL_traceback(L, L, lua_tostring(L, -1), 1);
   return 1;
 }
 
@@ -615,7 +610,7 @@ static int auxresume(lua_State *L, lua_State *co, int narg) {
   assert(co != L);
   lua_xmove(L, co, narg);
 #ifdef SHUSO_LUA_DEBUG_ERRORS
-    status = lua_resume(co, NULL, narg);
+    status = luaS_resume(co, NULL, narg);
 #else
     status = lua_resume(co, NULL, narg);
 #endif
@@ -637,15 +632,16 @@ static int auxresume(lua_State *L, lua_State *co, int narg) {
 }
 
 int luaS_coroutine_resume(lua_State *L, lua_State *coro, int nargs) { //like coroutine.resume, but handles errors and lua_xmoves between threads
-  //shuso_log_debug(shuso_state(L), "luaS_coroutine_resume coroutine %p from %p", (void *)coro, (void *)L);
+  shuso_t *S = shuso_state(L);
+  //shuso_log_debug(S, "luaS_coroutine_resume coroutine %p from %p", (void *)coro, (void *)L);
   assert(lua_gettop(L) >= nargs);
   int r = auxresume(L, coro, nargs);
-  //shuso_log_debug(shuso_state(L), "finished luaS_coroutine_resume coroutine %p from %p ret: %d", (void *)coro, (void *)L, r);
+  //shuso_log_debug(S, "finished luaS_coroutine_resume coroutine %p from %p ret: %d", (void *)coro, (void *)L, r);
   if (r < 0) {
     
     luaL_traceback(L, coro, lua_tostring(L, -1), 0);
     lua_remove(L, -2);
-    shuso_set_error(shuso_state(L), lua_tostring(L, -1));
+    shuso_set_error(S, lua_tostring(L, -1));
     
     lua_pushboolean(L, 0);
     lua_insert(L, -2);

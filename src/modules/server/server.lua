@@ -3,7 +3,7 @@ local Core = require "shuttlesock.core"
 local coroutine = require "shuttlesock.coroutine"
 local Process = require "shuttlesock.process"
 local IPC = require "shuttlesock.ipc"
-
+local Log = require "shuttlesock.log"
 
 -- luacheck: ignore CFuncs
 local CFuncs = require "shuttlesock.modules.core.server.cfuncs"
@@ -200,33 +200,56 @@ Server:subscribe("core:manager.workers_started", function()
     
     --require"mm"(Server.hosts)
     
-    for i, host in ipairs(Server.hosts) do
-      assert(CFuncs.create_binding_data(host, i), "problem creating bind data")
-      host.sockets = assert(CFuncs.get_listen_fds_yield(host.ptr))
-    end
+    local worker_procnums = Process.worker_procnums()
     
     if #Server.hosts > 0 then
-      for _, worker in ipairs(Process.worker_procnums()) do
-        print("deal with worker", worker)
+      
+      local rcv = IPC.Receiver.start("server:create_listener_sockets", "master")
+      local rcvfd = IPC.FD_Receiver.start("server:receive_listener_sockets", 5.0)
+      
+      for i, host in ipairs(Server.hosts) do
+      
+        host.ptr = assert(CFuncs.create_binding_data(host, i), "problem creating bind data")
+        local shared_ptr = CFuncs.create_shared_host_data(host.ptr)
+        
+        local msg = {
+          count = #worker_procnums,
+          shared_ptr = shared_ptr,
+          fd_ref = rcvfd.id
+        }
+        
+        IPC.send("master", "server:create_listener_sockets", msg)
+        local resp = rcv:yield()
+        host.sockets = host.sockets or {}
+        for _, err in ipairs(resp.errors or {}) do
+          Log.error(err)
+        end
+        while #host.sockets < resp.fd_count do
+          local ok, fd = rcvfd:yield()
+          assert(ok)
+          table.insert(host.sockets, fd)
+        end
+        IPC.send("master", "server:create_listener_sockets", "ok")
+        
+        CFuncs.free_shared_host_data(shared_ptr)
+      end
+    end
+    for _, worker in ipairs(worker_procnums) do
+      if #Server.hosts > 0 then
         local receiver = IPC.Receiver.start("server:listener_socket_transfer", worker)
         for _, host in ipairs(Server.hosts) do
-          print("hmm")
-          require"mm"(host.sockets)
           local fd = assert(table.remove(host.sockets), "not enough listener sockets opened. weird")
           --print("uuuh send " .. host.name .. " fd: " .. fd .. " to worker " .. worker)
           IPC.send(worker, "server:listener_socket_transfer", {name = host.name, fd = fd, address = host.address, ptr = host.ptr})
           local resp = receiver:yield()
           assert(resp == "ok", resp)
         end
-        IPC.send(worker, "server:listener_socket_transfer", "done")
-        assert(receiver:yield() == "kthxbye")
         receiver:stop()
       end
+      IPC.send(worker, "server:listener_socket_transfer", "done")
     end
-    
-    
-    print("floobarr")
-    --require"mm"(Server.hosts)
+    IPC.send("master", "server:create_listener_sockets", "done")
+    Server.startup_finished = true
   end)
   coroutine.resume(coro)
 end)
@@ -235,15 +258,11 @@ Server:subscribe("core:worker.start", function()
   Server.listener_io_c_coroutines = {}
   local coro = coroutine.create(function()
     local receiver = IPC.Receiver.start("server:listener_socket_transfer", "manager")
-    print("start receiver")
     while true do
       local data = receiver:yield()
-      print("yes hi?!")
       if data == "done" then
-        IPC.send("manager", "server:listener_socket_transfer", "kthxbye")
         break
       elseif type(data) == "table" then
-        print("listen on " .. data.name .. " fd:" .. data.fd)
         local c_io_coro = CFuncs.start_worker_io_listener_coro(data.fd, data.ptr, data.address)
         local resp
         if c_io_coro then
@@ -254,15 +273,60 @@ Server:subscribe("core:worker.start", function()
         end
         IPC.send("manager", "server:listener_socket_transfer", resp)
       else
-        print("huh?...")
         IPC.send("manager", "server:listener_socket_transfer", "i don't get it")
       end
     end
     receiver:stop()
+    Server.startup_finished = true
   end)
   
   coroutine.resume(coro)
 end)
+
+Server:subscribe("core:master.start", function()
+  local coro = coroutine.create(function()
+    local rcv = IPC.Receiver.start("server:create_listener_sockets", "manager")
+    repeat
+      local req, src = rcv:yield()
+      if type(req) == "table" then
+        local fds = {}
+        local errors = {}
+        while #fds < req.count - #errors do
+          local fd, err = CFuncs.handle_fd_request(req.shared_ptr)
+          if fd then
+            table.insert(fds, fd)
+          else
+            table.insert(errors, err or "error")
+          end
+        end
+        
+        local resp = {
+          fd_count = #fds,
+          errors = errors
+        }
+        IPC.send(src, "server:create_listener_sockets", resp)
+        for _, fd in ipairs(fds) do
+          IPC.send_fd(src, req.fd_ref, fd)
+        end
+        resp = rcv:yield()
+        assert(resp == "ok")
+      end
+    until not req or req == "done"
+    rcv:stop()
+    Server.startup_finished = true
+  end)
+  coroutine.resume(coro)
+end)
+
+local function delay_stopping(self, evstate)
+  if not Server.startup_finished then
+    assert(evstate:delay("still initializing", 0.3))
+  end
+end
+
+Server:subscribe("core:master.stop", delay_stopping)
+Server:subscribe("core:manager.stop", delay_stopping)
+Server:subscribe("core:worker.stop", delay_stopping)
 
 Server:add()
 

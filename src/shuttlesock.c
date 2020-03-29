@@ -345,10 +345,13 @@ static bool shuso_fork_manager(shuso_t *S) {
 bool shuso_is_manager(shuso_t *S) {
   return S->procnum == SHUTTLESOCK_MANAGER;
 }
-
 bool shuso_is_master(shuso_t *S) {
   return S->procnum == SHUTTLESOCK_MASTER;
 }
+bool shuso_is_worker(shuso_t *S) {
+  return S->procnum >= SHUTTLESOCK_WORKER;
+}
+
 
 bool shuso_processes_share_heap(shuso_t *S, int procnum1, int procnum2) {
   if((procnum1 == SHUTTLESOCK_MASTER && procnum2 != SHUTTLESOCK_MASTER) || (procnum2 == SHUTTLESOCK_MASTER && procnum1 != SHUTTLESOCK_MASTER)) {
@@ -357,61 +360,23 @@ bool shuso_processes_share_heap(shuso_t *S, int procnum1, int procnum2) {
   return true;
 }
 
-static void stop_manager_timer_cb(shuso_loop *loop, shuso_ev_timer *w, int revents) {
-  shuso_t           *S = shuso_state(loop, w);
-  shuso_stop_manager(S, SHUSO_STOP_ASK);
-}
-static void stop_master_timer_cb(shuso_loop *loop, shuso_ev_timer *w, int revents) {
-  shuso_t           *S = shuso_state(loop, w);
-  shuso_stop(S, SHUSO_STOP_ASK);
-}
-
 bool shuso_stop_manager(shuso_t *S, shuso_stop_t forcefulness) {
-  if(S->procnum == SHUTTLESOCK_MASTER) {
+  if(shuso_is_master(S)) {
     //shuso_log_debug(S, "shuso_stop_manager from master");
     if(!shuso_ipc_send(S, &S->common->process.manager, SHUTTLESOCK_IPC_CMD_SHUTDOWN, (void *)(intptr_t )forcefulness)) {
       return false;
     }
     return true;
   }
-  assert(S->procnum == SHUTTLESOCK_MANAGER);
-  //shuso_log_debug(S, "shuso_stop_manager from manager");
+  if(shuso_is_worker(S)) {
+    return shuso_set_error(S, "cannot stop manager from worker");
+  }
+  assert(shuso_is_manager(S));
   
-  //shuso_log_debug(S, "stop manager (current state: %s)", shuso_runstate_as_string(*S->process->state));
   if(*S->process->state == SHUSO_STATE_RUNNING) {
-    *S->process->state = SHUSO_STATE_STOPPING;
-    shuso_ipc_send_workers(S, SHUTTLESOCK_IPC_CMD_SHUTDOWN, (void *)(intptr_t )forcefulness);
-    shuso_add_timer_watcher(S, 0, 0.1, stop_manager_timer_cb, S);
+    return shuso_core_module_event_publish(S, "manager.stop", SHUSO_OK, (void *)(uintptr_t )forcefulness);
   }
-  if(*S->process->state == SHUSO_STATE_STOPPING) {
-    int all_dead = true;
-    if(forcefulness >= SHUSO_STOP_FORCE) {
-      //kill all threads
-      SHUSO_EACH_WORKER(S, worker) {
-        //TODO: kill 'em!
-      }
-    }
-    
-    SHUSO_EACH_WORKER(S, worker) {
-      if(*worker->state == SHUSO_STATE_STOPPED) {
-#ifndef SHUTTLESOCK_DEBUG_NO_WORKER_THREADS
-        //worker is done running or is about to finish running (within a short, bounded time)
-        pthread_join(worker->tid, NULL);
-#endif
-        *worker->state = SHUSO_STATE_DEAD;
-      }
-      if (*worker->state != SHUSO_STATE_DEAD) {
-        all_dead = false;
-      }
-    }
-    if(all_dead) {
-      shuso_core_module_event_publish(S, "manager.stop", SHUSO_OK, NULL);
-      //TODO: deferred stopping
-      ev_break(S->ev.loop, EVBREAK_ALL);
-      return true;
-    }
-  }
-  return true;
+  return false;
 }
 
 bool shuso_run(shuso_t *S) {
@@ -474,11 +439,15 @@ bool shuso_run(shuso_t *S) {
     }
     shuso_core_module_event_publish(S, "manager.start", SHUSO_OK, NULL);
   }
+  
   ev_run(S->ev.loop, 0);
-  shuso_log_debug(S, "stopping %s...", shuso_process_as_string(S->procnum));
-  if(S->procnum == SHUTTLESOCK_MASTER) {
-    shuso_core_module_event_publish(S, "master.stop", SHUSO_OK, NULL);
+  if(shuso_is_master(S)) {
+    shuso_core_module_event_publish(S, "master.exit", SHUSO_OK, NULL);
   }
+  else if(shuso_is_manager(S)) {
+    shuso_core_module_event_publish(S, "manager.exit", SHUSO_OK, NULL);
+  }
+  
   shuso_cleanup_loop(S);
   shuso_resolver_cleanup(&S->resolver);
   *S->process->state = SHUSO_STATE_STOPPED;
@@ -506,38 +475,17 @@ bool shuso_stop(shuso_t *S, shuso_stop_t forcefulness) {
     return shuso_ipc_send(S, &S->common->process.master, SHUTTLESOCK_IPC_CMD_SHUTDOWN, (void *)(intptr_t )forcefulness);
   }
   
-  //TODO: implement forced shutdown
-  if(*S->process->state == SHUSO_STATE_RUNNING) {
-    if(*S->common->process.manager.state == SHUSO_STATE_RUNNING) {
-      if(!shuso_stop_manager(S, forcefulness)) {
-        return false;
-      }
-    }
-    shuso_add_timer_watcher(S, 0.1, 1, stop_master_timer_cb, (void *)(intptr_t)forcefulness);
+  if(*S->process->state != SHUSO_STATE_RUNNING) {
+    shuso_log_info(S, "master process is already stopping");
+    return false;
   }
   
-  bool first_try = false;
-  if(*S->process->state == SHUSO_STATE_RUNNING) {
-    *S->process->state = SHUSO_STATE_STOPPING;
-    first_try = true;
-  }
-  
-  if(*S->common->process.manager.state == SHUSO_STATE_DEAD) {
-    //S->common->phase_handlers.stop_master(S, S->common->phase_handlers.privdata);
-    //TODO: deferred stop
-    if(!first_try) {
-      shuso_log_info(S, "manager process %i exited", S->common->process.manager.pid);
-    }
-    ev_break(S->ev.loop, EVBREAK_ALL);
-  }
-  else if(!first_try) {
-      shuso_log_info(S, "waiting for manager process %i to exit..", S->common->process.manager.pid);
-  }
+  shuso_core_module_event_publish(S, "master.stop", SHUSO_OK, NULL);
   return true;
 }
 
-static void shuso_worker_shutdown(shuso_t *S) {
-  shuso_log_debug(S, "stopping worker %i...", S->procnum);
+
+void shuso_worker_shutdown(shuso_t *S) {
   shuso_cleanup_loop(S);
   _Atomic(shuso_runstate_t) *worker_state = S->process->state;
   assert(*worker_state == SHUSO_STATE_STOPPING);
@@ -617,6 +565,7 @@ int               procnum = shuso_process_to_procnum(S, proc);
   wS->process = proc;
   *wS->process->state = SHUSO_STATE_NIL;
   wS->process->pid = getpid();
+  wS->process->S = wS;
   wS->procnum = procnum;
   
   if(!(stalloc_initialized = shuso_stalloc_init(&wS->stalloc, 0))) {
@@ -737,18 +686,10 @@ static bool shuso_spawn_workers(shuso_t *S, shuso_t **worker_state) {
 
 bool shuso_stop_worker(shuso_t *S, shuso_process_t *proc, shuso_stop_t forcefulness) {
   if(S->process == proc) { //i'm the worker that wants to stop
-    //TODO: forced self-shutdown
     if(*S->process->state == SHUSO_STATE_RUNNING) {
       *S->process->state = SHUSO_STATE_STOPPING;
-      //TODO: defer worker stop maybe?
-      shuso_log_debug(S, "attempting to stop worker %i", S->procnum);
+      shuso_log_debug(S, "stopping worker %i...", S->procnum);
       shuso_core_module_event_publish(S, "worker.stop", SHUSO_OK, NULL);
-#ifndef SHUTTLESOCK_DEBUG_NO_WORKER_THREADS
-      ev_break(S->ev.loop, EVBREAK_ALL);
-#else
-      shuso_worker_shutdown(S);
-#endif
-      
     }
     else {
       shuso_log_debug(S, "already shutting down");

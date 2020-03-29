@@ -1,12 +1,21 @@
 local Event = {}
 
 local events_by_name = {}
+local events_by_ptr = {}
 
 Event.FIRST_PRIORITY = 127
 Event.LAST_PRIORITY  = -127
 
 local event_mt
 function Event.find(module_name, event_name)
+  if type(module_name) == "userdata" and not event_name then --find by pointer
+    local event = events_by_ptr[module_name]
+    if not event then
+      return nil, "event not found"
+    end
+    return event
+  end
+  
   if type(module_name)=="string" and not event_name then
     local str = module_name
     module_name, event_name = str:match("^([%w%_]+):([%w%_%.]+)$")
@@ -140,10 +149,14 @@ do
     
     self.module = assert(Module.find(self.module_name))
     self.initialized = true
-    self.ptr = opts.ptr
-    self.data_type = opts.data_type
-    self.cancelable = opts.cancelable or false
-    self.pausable = opts.pausable or false
+    for k, v in pairs(opts) do
+      self[k]=v
+    end
+    self.cancelable = self.cancelable or false
+    self.pausable = self.pausable or false
+    
+    events_by_ptr[self.ptr] = self
+    
     return self
   end
 end
@@ -154,11 +167,13 @@ setmetatable(Event, {
   __gxcopy_save_module_state = function()
     local k = {
       by_name = events_by_name,
+      by_ptr = events_by_ptr
     }
     return k
   end,
   __gxcopy_load_module_state = function(state)
     events_by_name = assert(state.by_name, "by_name missing from global Event state")
+    events_by_ptr = assert(state.by_ptr, "by_ptr missing from global Event state")
   end
 })
 

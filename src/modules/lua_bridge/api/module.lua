@@ -1,10 +1,11 @@
 local Core = require "shuttlesock.core"
-local Event = require "shuttlesock.core.module_event"
+local ModuleEvent = require "shuttlesock.core.module_event"
+local Event = require "shuttlesock.event"
 
 local Module = {}
 
-Module.FIRST_PRIORITY = Event.FIRST_PRIORITY
-Module.LAST_PRIORITY  = Event.LAST_PRIORITY
+Module.FIRST_PRIORITY = ModuleEvent.FIRST_PRIORITY
+Module.LAST_PRIORITY  = ModuleEvent.LAST_PRIORITY
 
 local wrapped_modules = {}
 local lua_modules = {}
@@ -100,29 +101,6 @@ function Module.is_lua_module(tbl)
   return true
 end
 
-local event_mt = {__index = function(self, k)
-  if k == "cancel" then
-    return function()
-      return Core.module_event_cancel(self.ptr)
-    end
-  elseif k == "publisher" then
-    local publisher = Module.find(self.module_name)
-    if not publisher then
-      publisher = Module.wrap(self.module_name)
-    end
-    rawset(self, "publisher", publisher)
-    return publisher
-  end
-end}
-
-local function new_event(ptr, name, publisher_name)
-  return setmetatable({
-    ptr = ptr,
-    name = name,
-    module_name = publisher_name,
-  }, event_mt)
-end
-
 function module:add()
   local ok, err
   
@@ -145,11 +123,11 @@ function module:add()
     local optional = true
     for _, sub in ipairs(subscribers) do
       local subscriber = sub.subscriber
-      sub.wrapper = function (publisher_module_name, module_name, event_name, code, data, event_ptr)
+      sub.wrapper = function (eventstate_ptr, publisher_module_name, module_name, event_name, code, data)
+        assert(publisher_module_name, "publisher module name missing")
         assert(full_event_name:match(":"..event_name.."$"))
-        local event = new_event(event_ptr, full_event_name, module_name)
-        --return Core.pcall(subscriber, self, code, data, event)
-        return true, subscriber(self, code, data, event)
+        local event = Event.new_event_state(eventstate_ptr, full_event_name, module_name)
+        return true, subscriber(self, event, code, data)
       end
       table.insert(Module.event_subscribers, sub.wrapper)
       sub.index = #Module.event_subscribers
@@ -213,6 +191,15 @@ function module:subscribe(event_name, subscriber_function, priority)
   if Core.runstate() ~= "configuring" then
     error("can't subscribe to module events while " .. Core.runstate(), 0)
   end
+  if type(event_name) == "table" then
+    local ret, err
+    for _, evname in ipairs(event_name) do
+      ret, err = self:subscribe(evname, subscriber_function, priority)
+      if not ret then return nil, err end
+    end
+    return ret
+  end
+  
   assert0(type(event_name) == "string", "event name must be a string")
   assert0(type(subscriber_function) == "function", "subscriber function must be a function in case that's not perfectly clear")
   

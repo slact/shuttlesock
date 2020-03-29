@@ -39,18 +39,18 @@ local receivers = setmetatable({}, {
 
 local fd_receivers = {}
 
-local function validate_process_direction(process, direction)
+local function validate_process_direction(process, direction, no_multi)
   local ptype = type(process)
   local many = false
   if ptype == "number" then
     if not Core.procnum_valid(process) then
-      error("invalid "..(direction or "").." procnum")
+      error("invalid "..(direction or "").." procnum " .. (process or ""))
     end
   elseif not process then
     if direction == "receive" then
       process = "any"
     else
-      error("missing "..(direction or "").." procnum")
+      error("missing "..(direction or "").." procnum " .. (process or ""))
     end
   elseif process == "any" and direction == "receive" then
     process = "any"
@@ -72,7 +72,10 @@ local function validate_process_direction(process, direction)
   elseif process == "manager" then
     process = -1
   else
-    error("invalid "..(direction or "").." procnum")
+    error("invalid "..(direction or "").." procnum " .. (process or ""))
+  end
+  if no_multi and many then
+    error("invalid "..(direction or "").." procnum " .. (process or ""))
   end
   return process, many
 end
@@ -165,6 +168,15 @@ function IPC.send(destination, name, data, how_to_handle_acknowledgement)
   end
 end
 
+function IPC.send_fd(dst, ref, fd)
+  dst = validate_process_direction(dst, "send", true)
+  
+  assert(type(ref)=="number", "FD receiver ref must be a number")
+  assert(type(fd)=="number", "FD must be a number")
+  
+  return Core.ipc_send_fd(dst, fd, ref)
+end
+
 function IPC.receive(name, src, receiver, timeout)
   --flexible args. looks ugly, but works good.
   local srctype = type(src)
@@ -195,6 +207,8 @@ function IPC.receive(name, src, receiver, timeout)
   end
 end
 
+
+local all_active_receivers = setmetatable({}, {__mode="k"})
 local receiver_mt
 local function new_receiver(name, opt)
   local src = opt and opt.src
@@ -256,11 +270,13 @@ receiver_mt = {
         end
       end
       self:receive_start()
+      all_active_receivers[self]=true
       return self
     end,
     
     stop = function(self)
       assert(self.receiver_function, "IPC receiver not running")
+      all_active_receivers[self]=nil
       self:receive_stop()
       self.receiver_function = nil
       assert(self.suspended_coroutine == nil)
@@ -323,6 +339,7 @@ function IPC.FD_Receiver.new(name, timeout)
   local receiver = new_receiver(name, {timeout=timeout})
   function receiver:receive_start()
     self.ref = Core.ipc_receive_fd_start(self.name or "", self.timeout)
+    self.id = self.ref
     assert(self.receiver_function)
     fd_receivers[self.ref]=self.receiver_function
   end
@@ -336,6 +353,12 @@ end
 
 function IPC.FD_Receiver.start(name, timeout)
   return IPC.FD_Receiver.new(name, timeout):start()
+end
+
+function IPC.shutdown_from_shuttlesock_core()
+  for receiver in pairs(all_active_receivers) do
+    receiver:stop()
+  end
 end
 
 return IPC

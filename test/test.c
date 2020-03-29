@@ -1212,6 +1212,7 @@ void listener_port_test_runner_callback(shuso_t *S, shuso_status_t status, shuso
   shuso_stop(S, SHUSO_STOP_INSIST);
 }
 
+/*
 void listener_port_test(shuso_t *S, void *pd) {;
   listener_port_test_t *pt = S->data;
   assert(S->procnum == SHUTTLESOCK_MANAGER);
@@ -1236,7 +1237,8 @@ void listener_port_test(shuso_t *S, void *pd) {;
   bool rc = shuso_ipc_command_open_listener_sockets(S, &host, 5, &opts, listener_port_test_runner_callback, pt);
   assert(rc);
 }
-
+*/
+/*
 describe(listener_sockets) {
   static shuso_t *S = NULL;
   static listener_port_test_t *pt = NULL;
@@ -1261,7 +1263,7 @@ describe(listener_sockets) {
     }
   }
 }
-
+*/
 snow_main_decls;
 int main(int argc, char **argv) {
   _snow.ignore_unknown_options = 1;

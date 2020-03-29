@@ -161,7 +161,7 @@ add_core_module("lua_bridge"
     lua_bridge.c
     api/lazy_atomics.c
     api/lua_ipc.c
-    lua_binding.c
+    api/core.c
   HEADERS
     lua_bridge.h
     PRIVATE private.h
@@ -172,6 +172,7 @@ add_core_module("lua_bridge"
     "shuttlesock"                 api/shuttlesock.lua
     "shuttlesock.log"             api/log.lua
     "shuttlesock.module"          api/module.lua
+    "shuttlesock.event"           api/event.lua
     "shuttlesock.atomics"         api/atomics.lua
     "shuttlesock.watcher"         api/watcher.lua
     "shuttlesock.process"         api/process.lua
@@ -184,7 +185,7 @@ add_core_module("lua_bridge"
     "shuttlesock.debug.mutex"     api/debug/mutex.lua
   LUA_SOURCES
     #utils used inside "shuttlesock.core" lua_binding
-    "lua_binding" lua_binding.lua
+    "shuttlesock.core" api/core.lua
 )
 
 add_core_module("server" LUA

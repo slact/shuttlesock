@@ -328,12 +328,26 @@ static bool shuso_module_finalize(shuso_t *S, shuso_module_t *mod) {
     event->data_type = lua_tostring(L, -1);
     lua_pop(L, 1);
     
-    lua_getfield(L, -1, "cancelable");
-    event->cancelable = lua_toboolean(L, -1);
-    lua_pop(L, 1);
+    lua_getfield(L, -1, "interrupt_handler");
+    if(lua_islightuserdata(L, -1)) {
+      union {
+        void                             *addr;
+        shuso_event_interrupt_handler_fn *fn;
+      } handler;
+      handler.addr = (void *)lua_topointer(L, -1);
+      event->interrupt_handler = handler.fn;
+    }
+    else {
+      assert(lua_isnil(L, -1));
+      event->interrupt_handler = NULL;
+    }
     
-    lua_getfield(L, -1, "pausable");
-    event->pausable = lua_toboolean(L, -1);
+#ifdef SHUTTLESOCK_DEBUG_MODULE_SYSTEM
+    event->interrupt_state = SHUSO_EVENT_NO_INTERRUPT;
+    event->count = 0;
+    event->fired_count = 0;
+#endif
+    
     lua_pop(L, 1);
     
     lua_getfield(L, -1, "listeners");

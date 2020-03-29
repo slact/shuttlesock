@@ -12,7 +12,10 @@ local testmod = Module.new {
 
 
 testmod:subscribe("core:manager.workers_started", function()
-  --Shuso.stop()
+  coroutine.wrap(function()
+    Watcher.timer(0.5):yield()
+    Shuso.stop()
+  end)()
 end)
 
 function testmod:initialize_config(block)

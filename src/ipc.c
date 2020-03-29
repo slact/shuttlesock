@@ -183,10 +183,9 @@ static void ipc_handle_received_socket(shuso_t *S, int fd, int ref, void *pd) {
   
   lua_geti(L, -1, ref);
   if(lua_isnil(L, -1)) {
-    lua_pop(L, 2);
     shuso_log_error(S, "no handler with ref %d to received socket fd %d", ref, fd);
     close(fd);
-    assert(lua_gettop(L) == top);
+    lua_settop(L, top);
     return;
   }
   
@@ -202,11 +201,8 @@ static void ipc_handle_received_socket(shuso_t *S, int fd, int ref, void *pd) {
   
   lua_getfield(L, -1, "privdata");
   receiver_pd = (void *)lua_topointer(L, -1);
-  lua_pop(L, 1);
   
-  lua_pop(L, 1);
-  
-  assert(lua_gettop(L) == top);
+  lua_settop(L, top);
   
   cb.func(S, true, ref, fd, receiver_pd, pd);
 }
@@ -668,9 +664,9 @@ int shuso_ipc_receive_fd_start(shuso_t *S, const char *description, float timeou
   } cb;
   
   lua_State *L = S->lua.state;
-  luaL_getsubtable(L, LUA_REGISTRYINDEX, "shuttlesock.ipc.fd_receivers");
-  
   cb.func = callback;
+  
+  int top = lua_gettop(L);
   
   lua_newtable(L);
   lua_pushlightuserdata(L, cb.addr);
@@ -683,18 +679,20 @@ int shuso_ipc_receive_fd_start(shuso_t *S, const char *description, float timeou
   lua_setfield(L, -2, "description");
   
   
+  luaL_getsubtable(L, LUA_REGISTRYINDEX, "shuttlesock.ipc.fd_receivers");
   lua_pushvalue(L, -2);
   int ref = luaL_ref(L, -2);
   
   if(timeout_sec > 0) {
     shuso_ev_timer *timer = lua_newuserdata(L, sizeof(*timer));
     assert(timer);
-    lua_setfield(L, -1, "timer");
+    lua_setfield(L, -2, "timer");
     shuso_ev_timer_init(S, timer, timeout_sec, 0, ipc_receive_fd_timeout_cb, (void *)(intptr_t)ref);
     shuso_ev_timer_start(S, timer);
   }
   
-  lua_pop(L, 1);
+  
+  lua_settop(L, top);
   return ref;
 }
 
@@ -705,8 +703,7 @@ static bool shuso_ipc_receive_fd_stop_generic(shuso_t *S, int ref, bool run_call
   
   lua_geti(L, -1, ref);
   if(lua_isnil(L, -1)) {
-    lua_pop(L, 2);
-    assert(lua_gettop(L) == top);
+    lua_settop(L, top);
     shuso_set_error(S, "no ipc fd receiver found with reference %d", ref);
     return false;
   }
@@ -741,7 +738,7 @@ static bool shuso_ipc_receive_fd_stop_generic(shuso_t *S, int ref, bool run_call
   luaL_unref(L, -1, ref);
   lua_pop(L, 1);
   
-  assert(lua_gettop(L) == top);
+  lua_settop(L, top);
   return true;
 }
 

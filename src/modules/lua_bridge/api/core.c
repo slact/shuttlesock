@@ -8,9 +8,8 @@
 #include <ares.h>
 #include <errno.h>
 #include <pthread.h>
-#include "api/lua_ipc.h"
+#include "lua_ipc.h"
 #include <shuttlesock/modules/config/private.h>
-#include <ipv6.h>
 
 typedef enum {
   LUA_EV_WATCHER_IO =       0,
@@ -42,16 +41,6 @@ static int Lua_watcher_stop(lua_State *L);
 static void lua_watcher_unref(lua_State *L, shuso_lua_ev_watcher_t *w);
 static const char *watchertype_str(shuso_lua_ev_watcher_type_t type);
 static shuso_process_t *lua_shuso_checkprocnum(lua_State *L, int index);
-
-static void lua_get_registry_table(lua_State *L, const char *name) {
-  lua_getfield(L, LUA_REGISTRYINDEX, name);
-  if(lua_isnil(L, -1)) {
-    lua_pop(L, 1);
-    lua_newtable(L);
-    lua_pushvalue(L, -1);
-    lua_setfield(L, LUA_REGISTRYINDEX, name);
-  }
-}
 
 typedef struct {
   size_t      len;
@@ -1126,112 +1115,37 @@ static int Lua_shuso_ipc_send_fd(lua_State *L) {
   return 1;
 }
 
-static int Lua_ipc_file_receiver_gc(lua_State *L) {
-  return 0;
-}
-static int Lua_ipc_file_receiver_index(lua_State *L) {
-  return 0;
-}
-static int Lua_ipc_file_receiver_newindex(lua_State *L) {
-  return 0;
-}
-static int Lua_shuso_ipc_file_receiver_new(lua_State *L) {
-  //int           nargs = lua_gettop(L);
-  //uintptr_t     fd_receiver_ref = luaL_checkinteger(L, 1);
-  //const char   *description = luaL_checkstring(L, 2);
-  //double        timeout_sec = luaL_checknumber(L, 3);
-  
-  shuso_lua_fd_receiver_t *receiver;
-  if((receiver = lua_newuserdata(L, sizeof(*receiver))) == NULL) {
-    return luaL_error(L, "unable to allocate memory for new file receiver");
-  }
-  
-  if(luaL_newmetatable(L, "shuttlesock.ipc.fd_receiver")) {
-    lua_pushcfunction(L, Lua_ipc_file_receiver_gc);
-    lua_setfield(L, -2, "__gc");
-    
-    lua_pushcfunction(L, Lua_ipc_file_receiver_index);
-    lua_setfield(L, -2, "__index");
-    
-    lua_pushcfunction(L, Lua_ipc_file_receiver_newindex);
-    lua_setfield(L, -2, "__newindex");
-  }
-  lua_setmetatable(L, -2);
-  return 1;
-}
-
 static shuso_ipc_receive_fd_fn lua_receive_fd_callback;
 
 int Lua_shuso_ipc_receive_fd_start(lua_State *L) {
-  int           nargs = lua_gettop(L);
-  uintptr_t     fd_receiver_ref = luaL_checkinteger(L, 1);
-  const char   *description = luaL_checkstring(L, 2);
-  double        timeout_sec = luaL_checknumber(L, 3);
   
-  lua_get_registry_table(L, "shuttlesock.ipc.fd_receiver");
-  lua_pushvalue(L, 1);
-  lua_rawget(L, -2);
-  if(!lua_isnil(L, -1)) {
-    return luaL_error(L, "fd receiver for ref %d already exists", (int )fd_receiver_ref);
-  }
-  lua_pop(L, 1);
-  lua_pushvalue(L, 1);
-  lua_push_handler_function_or_coroutine(L, nargs, NULL, true, false);
-  assert(lua_type(L, -1) == LUA_TFUNCTION || lua_type(L, -1) == LUA_TTHREAD);
-  lua_rawset(L, -3);
+  const char   *description = luaL_checkstring(L, 1);
+  double        timeout_sec = luaL_checknumber(L, 2);
   
-  bool ok = shuso_ipc_receive_fd_start(shuso_state(L), description, timeout_sec, lua_receive_fd_callback, fd_receiver_ref, NULL);
-  if(!ok) {
-    lua_get_registry_table(L, "shuttlesock.ipc.fd_receiver");
-    lua_pushvalue(L, 1);
-    lua_pushnil(L);
-    lua_rawset(L, -3);
-    return luaS_shuso_error(L);
-  }
+  int ref = shuso_ipc_receive_fd_start(shuso_state(L), description, timeout_sec, lua_receive_fd_callback, NULL);
   
-  lua_pushboolean(L, 1);
+  lua_pushinteger(L, ref);
   return 1;
 }
 
 static void lua_receive_fd_callback(shuso_t *S, bool ok, uintptr_t ref, int fd, void *received_pd, void *pd) {
-  
+  lua_State *L = S->lua.state;
+  luaS_push_lua_module_field(L, "shuttlesock.ipc", "receive_fd_from_shuttlesock_core");
+  lua_pushboolean(L, ok);
+  lua_pushinteger(L, ref);
+  lua_pushinteger(L, fd);
+  luaS_call(L, 3, 0);
 }
 
 int Lua_shuso_ipc_receive_fd_finish(lua_State *L) {
-  uintptr_t     fd_receiver_ref = luaL_checkinteger(L, 1);
-  lua_get_registry_table(L, "shuttlesock.ipc.fd_receiver");
-  lua_pushvalue(L, 1);
-  lua_rawget(L, -2);
-  if(lua_isnil(L, -1)) {
-    return luaL_error(L, "fd receiver for ref %d does not exist", (int )fd_receiver_ref);
-  }
-  lua_pop(L, 1);
-  //unreference handler
-  lua_pushvalue(L, 1);
-  lua_pushnil(L);
-  lua_rawset(L, -3);
+  int ref = luaL_checkinteger(L, 1);
   
-  if(!shuso_ipc_receive_fd_finish(shuso_state(L), fd_receiver_ref)) {
+  if(!shuso_ipc_receive_fd_finish(shuso_state(L), ref)) {
     return lua_push_nil_error(L);
   }
   lua_pushboolean(L, 1);
   return 1;
 }
-
-
-//lua modules
-/*
-static int luaS_find_module_table(lua_State *L, const char *name) {
-  lua_getglobal(L, "require");
-  lua_pushliteral(L, "shuttlesock.core.module");
-  lua_call(L, 1, 1);
-  lua_getfield(L, -1, "find");
-  lua_remove(L, -2);
-  lua_pushstring(L, name);
-  lua_call(L, 1, 1);
-  return 1;
-}
-*/
 
 static bool lua_module_initialize_config(shuso_t *S, shuso_module_t *module, shuso_setting_block_t *block) {
   lua_State *L = S->lua.state;
@@ -1347,19 +1261,28 @@ static void luaS_unwrap_event_data_cleanup(lua_State *L, const char *datatype, l
 static void lua_module_event_listener(shuso_t *S, shuso_event_state_t *evs, intptr_t code, void *data, void *pd) {
   lua_State *L = S->lua.state;
   int top = lua_gettop(L);
+  
+  luaL_checkstack(L, 5, NULL);
+  
   luaS_push_lua_module_field(L, "shuttlesock.module", "event_subscribers");
   intptr_t fn_index = (intptr_t )pd;
+  
   lua_rawgeti(L, -1, fn_index);
   assert(lua_isfunction(L, -1));
   lua_remove(L, -2);
+  
+  lua_pushlightuserdata(L, evs);
+  
   lua_pushstring(L, evs->publisher->name);
+  
   lua_pushstring(L, evs->module->name);
+  
   lua_pushstring(L, evs->name);
+  
   lua_pushinteger(L, code);
   
   luaS_push_wrapped_event_data(L, evs->data_type, data);
-  
-  lua_pushlightuserdata(L, evs);
+
   luaS_function_call_result_ok(L, 6, false);
   
   luaS_wrap_event_data_cleanup(L, evs->data_type, data);
@@ -1373,6 +1296,80 @@ typedef struct {
   int                     events_count;
 } lua_module_core_ctx_t;
 
+static bool lua_module_event_interrupt_handler(shuso_t *S, shuso_module_event_t *event, shuso_event_state_t *evstate, shuso_event_interrupt_t interrupt, double *sec) {
+  lua_State *L = S->lua.state;
+  int top = lua_gettop(L);
+  luaS_push_lua_module_field(L, "shuttlesock.module_event", "find");
+  lua_pushlightuserdata(L, event);
+  luaS_pcall(L, 1, 1);
+  if(lua_isnil(L, -1)) {
+    shuso_log_error(S, "invalid Lua event to be running an interrupt handler");
+    lua_settop(L, top);
+    return false;
+  }
+  
+  lua_getfield(L, -1, "interrupt_handler");
+  if(lua_isnil(L, -1)) {
+    lua_pop(L, 1);
+    lua_getfield(L, -1, "interrupt");
+  }
+  if(lua_isnil(L, -1)) {
+    lua_settop(L, top);
+    return false;
+  }
+  
+  lua_pushvalue(L, -2);
+  lua_newtable(L);
+  
+  if(evstate->name) {
+    lua_pushstring(L, evstate->name);
+    lua_setfield(L, -2, "name");
+  }
+  
+  luaS_push_lua_module_field(L, "shuttlesock.module_event", "find");
+  lua_pushlightuserdata(L, (void *)evstate->module);
+  luaS_pcall(L, 1, 1);
+  lua_setfield(L, -2, "module");
+  
+  luaS_push_lua_module_field(L, "shuttlesock.module_event", "find");
+  lua_pushlightuserdata(L, (void *)evstate->publisher);
+  luaS_pcall(L, 1, 1);
+  lua_setfield(L, -2, "publisher");
+  
+  if(evstate->data_type) {
+    lua_pushstring(L, evstate->data_type);
+    lua_setfield(L, -2, "data_type");
+  }
+  
+  switch(interrupt) {
+    case SHUSO_EVENT_NO_INTERRUPT:
+      lua_pushliteral(L, "none");
+      break;
+    case SHUSO_EVENT_PAUSE:
+      lua_pushliteral(L, "pause");
+      break;
+    case SHUSO_EVENT_CANCEL:
+      lua_pushliteral(L, "cancel");
+      break;
+    case SHUSO_EVENT_DELAY:
+      lua_pushliteral(L, "delay");
+      break;
+  }
+  
+  if(sec) {
+    lua_pushnumber(L, sec ? *sec : 0.0);
+  }
+  
+  luaS_pcall(L, 4, 2);
+  bool ok = lua_toboolean(L, -2);
+  if(sec) {
+    *sec = lua_tonumber(L, -1);
+  }
+  lua_settop(L, top);
+  
+  return ok;
+}
+
 static bool lua_module_initialize(shuso_t *S, shuso_module_t *module) {
   lua_State *L = S->lua.state;
   int top = lua_gettop(L);
@@ -1380,6 +1377,7 @@ static bool lua_module_initialize(shuso_t *S, shuso_module_t *module) {
   lua_module_core_ctx_t *ctx = shuso_stalloc(&S->stalloc, sizeof(*ctx));
   shuso_set_core_context(S, module, ctx);
   ctx->events = NULL;
+  ctx->events_count = 0;
   
   luaS_push_lua_module_field(L, "shuttlesock.module", "find");
   lua_pushstring(L, module->name);
@@ -1411,12 +1409,13 @@ static bool lua_module_initialize(shuso_t *S, shuso_module_t *module) {
 
       evinit.name = lua_tostring(L, -2);
       
-      lua_getfield(L, -1, "cancelable");
-      evinit.cancelable = lua_toboolean(L, -1);
-      lua_pop(L, 1);
-      
-      lua_getfield(L, -1, "cancellable"); //throw the brits a bone
-      evinit.cancelable = evinit.cancelable || lua_toboolean(L, -1);
+      lua_getfield(L, -1, "interrupt_handler");
+      if(lua_isfunction(L, -1)) {
+        evinit.interrupt_handler = lua_module_event_interrupt_handler;
+      }
+      else {
+        evinit.interrupt_handler = NULL;
+      }
       lua_pop(L, 1);
       
       lua_getfield(L, -1, "data_type");
@@ -1688,40 +1687,63 @@ static int Lua_shuso_module_event_pause(lua_State *L) {
   shuso_t *S = shuso_state(L);
   luaL_checktype(L, 1, LUA_TLIGHTUSERDATA);
   shuso_event_state_t *evstate = (void *)lua_topointer(L, 1);
-  
+  int top = lua_gettop(L);
   shuso_module_paused_event_t *paused;
+  const char *reason;
   
-  if(lua_gettop(L) >= 2) {
-    paused = luaL_checkudata(L, 2, "paused_event");
-    lua_pushvalue(L, 2);
-  }
-  else {
-    paused = lua_newuserdata(L, sizeof(*paused));
-    if(!paused) {
-      lua_pushnil(L);
-      lua_pushliteral(L, "event could not be paused because we're out of memory");
-      return 2;
-    }
-    luaL_newmetatable(L, "paused_event");
-    lua_setmetatable(L, -2);
-  }
+  reason = top >= 2 ? lua_tostring(L, 2) : NULL;
   
-  if(shuso_event_pause(S, evstate, paused)) {
-    //return the userdata on the stack
-    return 1;
-  }
-  else {
-    lua_pushnil(L);
-    lua_pushliteral(L, "event cannot be paused");
+  paused = lua_newuserdata(L, sizeof(*paused));
+  luaL_newmetatable(L, "shuttlesock.core.module_event.paused");
+  lua_setmetatable(L, -2);
+  
+  if(!shuso_event_pause(S, evstate, reason, paused)) {
+     lua_pushnil(L);
+    lua_pushliteral(L, "event was not paused");
     return 2;
   }
+  
+  //return the userdata on the stack
+  return 1;
+}
+
+
+static int Lua_shuso_module_event_delay(lua_State *L) {
+  shuso_t *S = shuso_state(L);
+  luaL_checktype(L, 1, LUA_TLIGHTUSERDATA); //eventstate pointer
+  shuso_event_state_t *evstate = (void *)lua_topointer(L, 1);
+  
+  const char *reason = lua_tostring(L, 2);
+  double delay = lua_tonumber(L, 3);
+  lua_reference_t delay_ref;
+  
+  if(!shuso_event_delay(S, evstate, reason, delay, &delay_ref)) {
+    lua_pushnil(L);
+    lua_pushliteral(L, "event was not deferred");
+    return 2;
+  }
+  
+  lua_rawgeti(L, LUA_REGISTRYINDEX, delay_ref);
+  return 1;
 }
 
 static int Lua_shuso_module_event_resume(lua_State *L) {
   shuso_t *S = shuso_state(L);
-  shuso_module_paused_event_t *paused = luaL_checkudata(L, 1, "paused_event");
   
-  bool ok = shuso_event_resume(S, paused);
+  bool ok;
+  
+  if(luaL_testudata(L, 1, "shuttlesock.core.module_event.paused")) {
+    shuso_module_paused_event_t *paused = (void *)lua_topointer(L, 1);
+    ok = shuso_event_resume(S, paused);
+  }
+  else if(luaL_testudata(L, 1, "shuttlesock.core.module_event.delayed")) {
+    shuso_module_delayed_event_t *delayed = (void *)lua_topointer(L, 1);
+    ok = shuso_event_resume(S, delayed->ref);
+  }
+  else {
+    return luaL_error(L, "invalid resume paramenter");
+  }
+  
   lua_pushboolean(L, ok);
   return 1;
 }
@@ -2055,6 +2077,7 @@ static int Lua_shuso_coroutine_resume(lua_State *L) {
   lua_State *coro = lua_tothread(L, 1);
   lua_remove(L, 1);
   int top = lua_gettop(L);
+  
   int ret = luaS_coroutine_resume(L, coro, top);
   return ret;
 }
@@ -2351,11 +2374,13 @@ luaL_Reg shuttlesock_core_module_methods[] = {
   {"module_event_publish", Lua_shuso_module_event_publish},
   {"module_event_cancel", Lua_shuso_module_event_cancel},
   {"module_event_pause", Lua_shuso_module_event_pause},
+  {"module_event_delay", Lua_shuso_module_event_delay},
   {"module_event_resume", Lua_shuso_module_event_resume},
   
 //ipc
-  {"send_file", Lua_shuso_ipc_send_fd},
-  {"new_file_receiver", Lua_shuso_ipc_file_receiver_new},
+  {"ipc_send_fd", Lua_shuso_ipc_send_fd},
+  {"ipc_receive_fd_start", Lua_shuso_ipc_receive_fd_start},
+  {"ipc_receive_fd_finish", Lua_shuso_ipc_receive_fd_finish},
   //{"open_listener_sockets", Lua_shuso_ipc_open_listener_sockets},
   {"ipc_send_message", luaS_ipc_send_message},
   {"ipc_pack_message_data", Lua_shuso_ipc_pack_message_data},

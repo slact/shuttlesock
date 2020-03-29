@@ -1,4 +1,5 @@
 #include <shuttlesock.h>
+#include <shuttlesock/internal.h>
 #include "core.h"
 
 bool shuso_core_module_event_publish(shuso_t *S, const char *name, intptr_t code, void *data) {
@@ -27,35 +28,149 @@ void *shuso_core_context(shuso_t *S, shuso_module_t *module) {
   return shuso_context(S, &shuso_core_module, module, &S->common->module_ctx.core->context_list);
 }
 
+static void stop_thing_callback(shuso_loop *loop, shuso_ev_timer *timer, int events) {
+  shuso_t *S = shuso_state(loop, timer);
+  shuso_remove_timer_watcher(S, timer);
+  if(S->procnum >= SHUTTLESOCK_WORKER) {
+    #ifndef SHUTTLESOCK_DEBUG_NO_WORKER_THREADS
+      ev_break(S->ev.loop, EVBREAK_ALL);
+    #else
+      shuso_worker_shutdown(S);
+    #endif
+  }
+  else {
+    ev_break(S->ev.loop, EVBREAK_ALL);
+  }
+}
+
+
+
+
+static void core_manager_try_stop(shuso_t *S, shuso_event_state_t *evs, intptr_t status, void *data, void *pd) {
+  shuso_stop_t forcefulness = (shuso_stop_t )(intptr_t )data;
+  assert(S->procnum == SHUTTLESOCK_MANAGER);
+  //shuso_log_debug(S, "shuso_stop_manager from manager");
+  
+  //shuso_log_debug(S, "stop manager (current state: %s)", shuso_runstate_as_string(*S->process->state));
+  if(*S->process->state == SHUSO_STATE_RUNNING) {
+    *S->process->state = SHUSO_STATE_STOPPING;
+    shuso_ipc_send_workers(S, SHUTTLESOCK_IPC_CMD_SHUTDOWN, (void *)(intptr_t )forcefulness);
+  }
+  
+  assert(*S->process->state == SHUSO_STATE_STOPPING);
+  
+  int all_workers_dead = true;
+  
+  SHUSO_EACH_WORKER(S, worker) {
+    if(*worker->state == SHUSO_STATE_STOPPED) {
+#ifndef SHUTTLESOCK_DEBUG_NO_WORKER_THREADS
+      //worker is done running or is about to finish running (within a short, bounded time)
+      pthread_join(worker->tid, NULL);
+#endif
+      *worker->state = SHUSO_STATE_DEAD;
+    }
+    if (*worker->state != SHUSO_STATE_DEAD) {
+      all_workers_dead = false;
+    }
+  }
+    
+  if(!all_workers_dead) {
+    shuso_event_delay(S, evs, "waiting for workers to shut down", 0.1, NULL);
+    return;
+  }
+  
+  shuso_log_debug(S, "stopping manager...");
+}
+  
+static void core_master_try_stop(shuso_t *S, shuso_event_state_t *evs, intptr_t status, void *data, void *pd) {
+  bool first_try = false;
+  if(*S->process->state == SHUSO_STATE_RUNNING) {
+    *S->process->state = SHUSO_STATE_STOPPING;
+    first_try = true;
+  }
+  
+  if(*S->common->process.manager.state == SHUSO_STATE_RUNNING) {
+    shuso_stop_manager(S, SHUSO_STOP_INSIST);
+    if(!first_try) {
+      shuso_log_info(S, "waiting for manager process %i to exit..", S->common->process.manager.pid);
+    }
+  }
+  
+  if(*S->common->process.manager.state != SHUSO_STATE_DEAD) {
+    shuso_event_delay(S, evs, "waiting for manager to stop", 0.1, NULL);
+    return;
+  }
+  
+  if(!first_try) {
+    shuso_log_info(S, "manager process %i exited", S->common->process.manager.pid);
+  }
+  
+  shuso_log_debug(S, "stopping master...");
+}
+
+static void core_master_stop(shuso_t *S, shuso_event_state_t *evs, intptr_t status, void *data, void *pd) {
+  shuso_add_timer_watcher(S, 0.0, 0.0, stop_thing_callback, NULL);
+}
+static void core_manager_stop(shuso_t *S, shuso_event_state_t *evs, intptr_t status, void *data, void *pd) {
+  shuso_add_timer_watcher(S, 0.0, 0.0, stop_thing_callback, NULL);
+}
+static void core_worker_stop(shuso_t *S, shuso_event_state_t *evs, intptr_t status, void *data, void *pd) {
+  shuso_add_timer_watcher(S, 0.0, 0.0, stop_thing_callback, NULL);
+}
+
+static bool stop_event_interrupt_handler(shuso_t *S, shuso_module_event_t *event, shuso_event_state_t *evstate, shuso_event_interrupt_t interrupt, double *delay_sec) {
+  if(interrupt != SHUSO_EVENT_DELAY) {
+    return false;
+  }
+  if(!delay_sec) {
+    return false;
+  }
+  if(*delay_sec > 1) {
+    *delay_sec = 1;
+  }
+  return true;
+}
+
 static bool core_module_initialize(shuso_t *S, shuso_module_t *self) {
   shuso_core_module_ctx_t *ctx = shuso_stalloc(&S->stalloc, sizeof(*ctx));
   assert(ctx);
   
   shuso_events_initialize(S, self, (shuso_event_init_t[]){
-    {"configure",       &ctx->events.configure,         NULL, false, false},
-    {"configure.after", &ctx->events.configure_after,   NULL, false, false},
+    {"configure",       &ctx->events.configure,         NULL, NULL},
+    {"configure.after", &ctx->events.configure_after,   NULL, NULL},
     
-    {"master.start",    &ctx->events.start_master,      NULL, false, false},
-    {"manager.start",   &ctx->events.start_manager,     NULL, false, false},
-    {"worker.start",    &ctx->events.start_worker,      NULL, false, false},
-    {"worker.start.before.lua_gxcopy",&ctx->events.start_worker_before_lua_gxcopy, "shuttlesock_state", false, false},
-    {"worker.start.before",&ctx->events.start_worker_before, "shuttlesock_state", false, false},
+    {"master.start",    &ctx->events.start_master,      NULL, NULL},
+    {"manager.start",   &ctx->events.start_manager,     NULL, NULL},
+    {"worker.start",    &ctx->events.start_worker,      NULL, NULL},
+    {"worker.start.before.lua_gxcopy",&ctx->events.start_worker_before_lua_gxcopy, "shuttlesock_state", NULL},
+    {"worker.start.before",&ctx->events.start_worker_before, "shuttlesock_state", NULL},
     
-    {"master.stop",     &ctx->events.stop_master,       NULL, false, false},
-    {"manager.stop",    &ctx->events.stop_manager,      NULL, false, false},
-    {"worker.stop",     &ctx->events.stop_worker,       NULL, false, false},
+    {"master.stop",     &ctx->events.stop_master,       NULL, stop_event_interrupt_handler},
+    {"manager.stop",    &ctx->events.stop_manager,      NULL, stop_event_interrupt_handler},
+    {"worker.stop",     &ctx->events.stop_worker,       NULL, stop_event_interrupt_handler},
     
-    {"manager.workers_started",   &ctx->events.manager_all_workers_started, NULL, false, false},
-    {"master.workers_started",    &ctx->events.master_all_workers_started,  NULL, false, false},
-    {"worker.workers_started",    &ctx->events.worker_all_workers_started,  NULL, false, false},
-    {"manager.worker_exited",     &ctx->events.worker_exited,               NULL, false, false},
-    {"master.manager_exited",     &ctx->events.manager_exited,              NULL, false, false},
+    {"master.exit",     &ctx->events.exit_master,       NULL, NULL},
+    {"manager.exit",    &ctx->events.exit_manager,      NULL, NULL},
+    {"worker.exit",     &ctx->events.exit_worker,       NULL, NULL},
     
-    {"error",                     &ctx->events.error,              "string", false, false},
+    {"manager.workers_started",   &ctx->events.manager_all_workers_started, NULL, NULL},
+    {"master.workers_started",    &ctx->events.master_all_workers_started,  NULL, NULL},
+    {"worker.workers_started",    &ctx->events.worker_all_workers_started,  NULL, NULL},
+    {"manager.worker_exited",     &ctx->events.worker_exited,               NULL, NULL},
+    {"master.manager_exited",     &ctx->events.manager_exited,              NULL, NULL},
+    
+    {"error",                     &ctx->events.error,              "string", NULL},
     {.name=NULL}
   });
   
-  shuso_event_listen(S, "core:worker.start.before.lua_gxcopy", core_gxcopy, self);
+  shuso_event_listen(S, "core:worker.start.before.lua_gxcopy", core_gxcopy,     self);
+  shuso_event_listen_with_priority(S, "core:worker.stop",   core_worker_stop,   self, SHUTTLESOCK_LAST_PRIORITY);
+  
+  shuso_event_listen_with_priority(S, "core:manager.stop",  core_manager_try_stop, self, SHUTTLESOCK_FIRST_PRIORITY);
+  shuso_event_listen_with_priority(S, "core:manager.stop",  core_manager_stop,  self, SHUTTLESOCK_LAST_PRIORITY);
+  
+  shuso_event_listen_with_priority(S, "core:master.stop",   core_master_try_stop, self, SHUTTLESOCK_FIRST_PRIORITY);
+  shuso_event_listen_with_priority(S, "core:master.stop",   core_master_stop,   self, SHUTTLESOCK_LAST_PRIORITY);
   
   bool ok = shuso_context_list_initialize(S, self, &ctx->context_list, &S->stalloc);
   assert(ok);
@@ -114,6 +229,10 @@ shuso_module_t shuso_core_module = {
    " manager.stop"
    " worker.stop"
    
+   " master.exit"
+   " manager.exit"
+   " worker.exit"
+   
    " manager.workers_started"
    " master.workers_started"
    " worker.workers_started"
@@ -135,6 +254,9 @@ shuso_module_t shuso_core_module = {
   },
   .subscribe = 
    " core:worker.start.before.lua_gxcopy"
+   " core:master.stop"
+   " core:manager.stop"
+   " core:worker.stop"
   ,
   .initialize = core_module_initialize,
   .initialize_config = core_module_initialize_config

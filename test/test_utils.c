@@ -143,6 +143,9 @@ static void runcheck_event_listener(shuso_t *S, shuso_event_state_t *evs, intptr
     chk->events.worker_start++;
   }
   else if(strcmp(evn, "master.stop") == 0) {
+    if(chk->process.master.stopped > 0) {
+      raise(SIGABRT);
+    }
     assert(chk->process.master.started == 1);
     assert(chk->process.master.stopped == 0);
     assert(getpid() == chk->process.master.pid);

@@ -4,7 +4,7 @@
 extern shuso_module_t shuso_lua_bridge_module;
 
 typedef struct {
-  int           placeholder;
+  int           ipc_messages_active;
 } shuso_lua_bridge_module_ctx_t;
 
 #endif //SHUTTLESOCK_MODULE_LUA_BRIDGE_H

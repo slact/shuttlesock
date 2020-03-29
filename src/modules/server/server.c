@@ -6,6 +6,7 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <netdb.h>
+#include <errno.h>
 
 static int get_addr_info(lua_State *L) {
   const char    *ip_str = luaL_checkstring(L, 1);
@@ -227,7 +228,6 @@ static int luaS_create_binding_data(lua_State *L) {
     memcpy(host->sockaddr_un->sun_path, host->path, pathlen > maxlen ? maxlen : pathlen);
   }
   else if(fam == AF_INET) {
-    printf("!!! host sockaddr: %p %p\n", host->sockaddr_in, &host->sockaddr_in[1]);
     host->sockaddr_in->sin_family = AF_INET;
     host->sockaddr_in->sin_port = htons(host->port);
     host->sockaddr_in->sin_addr = host->addr;
@@ -270,58 +270,7 @@ static int luaS_create_binding_data(lua_State *L) {
   lua_pop(L, 1); //pop ["listen"]
   
   lua_pushlightuserdata(L, binding);
-  lua_setfield(L, 1, "ptr");
-  
-  lua_pushboolean(L, 1);
   return 1;
-}
-
-static void luaS_get_listen_fds_coro_resume(shuso_t *S, shuso_status_t status, shuso_hostinfo_t *hostinfo, int *sockets, int socket_count, void *pd) {
-  lua_State       *L = S->lua.state;
-  lua_reference_t  luaref = (intptr_t )pd;
-  
-  lua_rawgeti(L, LUA_REGISTRYINDEX, luaref);
-  lua_State *coro = lua_tothread(L, -1);
-  lua_pop(L, 1);
-  luaL_unref(L, LUA_REGISTRYINDEX, luaref);
-  
-  
-  if(status != SHUSO_OK) {
-    lua_pushnil(L);
-  }
-  else {
-    lua_newtable(coro);
-    for(int i=0; i<socket_count; i++) {
-      lua_pushinteger(coro, sockets[i]);
-      lua_seti(coro, -2, i+1);
-    }
-  }
-  luaS_resume(coro, L, 1);
-}
-
-static int luaS_get_listen_fds_coro_yield(lua_State *L) {
-  shuso_t                *S = shuso_state(L);
-  shuso_server_binding_t *binding = (void *)lua_topointer(L, 1);
-  
-  shuso_sockopt_t sopt = {
-    .level = SOL_SOCKET,
-    .name = SO_REUSEPORT,
-    .value.integer = 1
-  };
-  shuso_sockopts_t opts = {
-    .count = 1,
-    .array = &sopt
-  };
-  
-  lua_pushthread(L); //current coro
-  lua_reference_t coro_ref = luaL_ref(L, LUA_REGISTRYINDEX);
-  
-  if(!shuso_ipc_command_open_listener_sockets(S, &binding->host, shuso_workers_count(S), &opts, luaS_get_listen_fds_coro_resume, (void *)(intptr_t)coro_ref)) {
-    return luaL_error(L, "shuso_ipc_command_open_listener_sockets failed");
-  }
-  
-  lua_pushboolean(L, 1);
-  return lua_yield(L, 1);
 }
 
 static void listener_accept_coro_error(shuso_t *S, shuso_io_t *io) {
@@ -371,13 +320,158 @@ static int luaS_stop_worker_io_listener_coroutine(lua_State *L) {
   return 1;
 }
 
+static void free_shared_host_data(shuso_t *S, shuso_hostinfo_t *h) {
+  if(h) {
+    if(h->sockaddr) {
+      shuso_shared_slab_free(&S->common->shm, h->sockaddr);
+    }
+    if(h->addr_family == AF_UNIX && h->path) {
+      shuso_shared_slab_free(&S->common->shm, h->path);
+    }
+    shuso_shared_slab_free(&S->common->shm, h);
+  }
+}
+
+static int luaS_create_shared_host_data(lua_State *L) {
+  shuso_t *S = shuso_state(L);
+  shuso_server_binding_t   *binding = (void *)lua_topointer(L, 1);
+  shuso_hostinfo_t *host = &binding->host;
+  
+  shuso_hostinfo_t *shared_host = shuso_shared_slab_alloc(&S->common->shm, sizeof(*shared_host));
+  if(!shared_host) {
+    goto fail;
+  }
+  *shared_host = *host;
+  
+  if(host->name) {
+    shared_host->name = shuso_shared_slab_alloc(&S->common->shm, strlen(host->name)+1);
+    if(!shared_host->name) {
+      goto fail;
+    }
+    strcpy((char *)shared_host->name, host->name);
+  }
+  if(host->addr_family == AF_UNIX && host->path) {
+    shared_host->path = shuso_shared_slab_alloc(&S->common->shm, strlen(host->path)+1);
+    if(!shared_host->path) {
+      goto fail;
+    }
+    strcpy((char *)shared_host->path, host->path);
+  }
+  
+  if(host->sockaddr) {
+    if(host->sockaddr->sa_family == AF_UNIX) {
+      shared_host->sockaddr_un = shuso_shared_slab_alloc(&S->common->shm, sizeof(*host->sockaddr_un));
+      if(!shared_host->sockaddr_un) {
+        goto fail;
+      }
+      *shared_host->sockaddr_un = *host->sockaddr_un;
+    }
+    else if(host->sockaddr->sa_family == AF_INET) {
+      shared_host->sockaddr_in = shuso_shared_slab_alloc(&S->common->shm, sizeof(*host->sockaddr_in));
+      if(!shared_host->sockaddr_in) {
+        goto fail;
+      }
+      *shared_host->sockaddr_in = *host->sockaddr_in;
+    }
+#ifdef SHUTTLESOCK_HAVE_IPV6
+    else if(host->sockaddr->sa_family == AF_INET6) {
+      shared_host->sockaddr_in6 = shuso_shared_slab_alloc(&S->common->shm, sizeof(*host->sockaddr_in6));
+      if(!shared_host->sockaddr_in6) {
+        goto fail;
+      }
+      *shared_host->sockaddr_in6 = *host->sockaddr_in6;
+    }
+#endif
+  }
+  
+  lua_pushlightuserdata(L, shared_host);
+  return 1;
+  
+fail:
+  free_shared_host_data(S, shared_host);
+  return luaL_error(L, "Failed to allocate shared memory for fd request");
+}
+
+static int luaS_handle_fd_request(lua_State *L) {
+  shuso_hostinfo_t *hostinfo = (void *)lua_topointer(L, 1);
+  shuso_t          *S = shuso_state(L);
+  int               socktype = hostinfo->udp ? SOCK_DGRAM : SOCK_STREAM;
+  union {
+    struct sockaddr        sa;
+    struct sockaddr_un     sa_unix;
+    struct sockaddr_in     sa_inet;
+#ifdef SHUTTLESOCK_HAVE_IPV6
+    struct sockaddr_in6    sa_inet6;
+#endif
+  }                 sockaddr;
+  size_t            sockaddr_len = sizeof(sockaddr);
+  
+  shuso_sockopt_t sopt = {
+    .level = SOL_SOCKET,
+    .name = SO_REUSEPORT,
+    .value.integer = 1
+  };
+  shuso_sockopts_t opts = {
+    .count = 1,
+    .array = &sopt
+  };
+  
+  assert(S->procnum == SHUTTLESOCK_MASTER);
+  
+  if(!shuso_hostinfo_to_sockaddr(S, hostinfo, &sockaddr.sa, &sockaddr_len)) {
+    lua_pushnil(L);
+    lua_pushfstring(L, "Failed to obtain sockaddr for listener socket %s", hostinfo->name ? hostinfo->name : "");
+    return 2;
+  }
+  
+  int fd = socket(hostinfo->addr_family, socktype, 0);
+  if(fd == -1) {
+    lua_pushnil(L);
+    lua_pushfstring(L, "Failed to create listener socket %s: %s", hostinfo->name ? hostinfo->name : "", strerror(errno));
+    return 2;
+  }
+  
+  shuso_set_nonblocking(fd);
+  
+  if(bind(fd, &sockaddr.sa, sockaddr_len) == -1) {
+    close(fd);
+    lua_pushnil(L);
+    lua_pushfstring(L, "Failed to bind listener socket %s: %s", hostinfo->name ? hostinfo->name : "", strerror(errno));
+    return 2;
+  }
+  
+  
+  for(unsigned i=0; i < opts.count; i++) {
+    shuso_sockopt_t *opt = &opts.array[i];
+    if(!shuso_setsockopt(S, fd, opt)) {
+      close(fd);
+      lua_pushnil(L);
+      lua_pushfstring(L, "Failed to set sockopts for listener socket %s: %s", hostinfo->name ? hostinfo->name : "", strerror(errno));
+      return 2;
+    }
+  }
+  
+  lua_pushinteger(L, fd);
+  return 1;
+}
+
+static int luaS_free_shared_host_data(lua_State *L) {
+  shuso_hostinfo_t *shared_host = (void *)lua_topointer(L, 1);
+  free_shared_host_data(shuso_state(L), shared_host);
+  lua_pushboolean(L, 1);
+  return 1;
+}
+
 void shuttlesock_server_module_prepare(shuso_t *S, void *pd) {
   luaL_Reg lib[] = {
     {"getaddrinfo_noresolve", get_addr_info},
-    {"get_listen_fds_yield", luaS_get_listen_fds_coro_yield},
     {"create_binding_data", luaS_create_binding_data},
     {"start_worker_io_listener_coro", luaS_start_worker_io_listener_coroutine},
     {"stop_worker_io_listener_coro", luaS_stop_worker_io_listener_coroutine},
+    
+    {"create_shared_host_data", luaS_create_shared_host_data},
+    {"handle_fd_request", luaS_handle_fd_request},
+    {"free_shared_host_data", luaS_free_shared_host_data},
     {NULL, NULL}
   };
   

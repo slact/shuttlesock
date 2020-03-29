@@ -29,6 +29,7 @@
 #include <shuttlesock/buffer.h>
 
 typedef struct shuso_process_s {
+  shuso_t                          *S;
   pid_t                             pid;
   pthread_t                         tid;
   int                               procnum;
@@ -201,7 +202,7 @@ bool shuso_stop_manager(shuso_t *S, shuso_stop_t forcefulness);
 
 bool shuso_is_master(shuso_t *S);
 bool shuso_is_manager(shuso_t *S);
-
+bool shuso_is_worker(shuso_t *S);
 
 bool shuso_set_log_fd(shuso_t *S, int fd);
 

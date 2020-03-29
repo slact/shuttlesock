@@ -81,8 +81,8 @@ void *shuso_shared_slab_alloc(shuso_shared_slab_t *shm, size_t size);
 void *shuso_shared_slab_alloc_locked(shuso_shared_slab_t *shm, size_t size);
 void *shuso_shared_slab_calloc(shuso_shared_slab_t *shm, size_t size);
 void *shuso_shared_slab_calloc_locked(shuso_shared_slab_t *shm, size_t size);
-void shuso_shared_slab_free(shuso_shared_slab_t *shm, void *p);
-void shuso_shared_slab_free_locked(shuso_shared_slab_t *shm, void *p);
+void shuso_shared_slab_free(shuso_shared_slab_t *shm, const void *p);
+void shuso_shared_slab_free_locked(shuso_shared_slab_t *shm, const void *p);
 
 
 #endif /* SHUTTLESOCK_SHARED_SLAB_H */

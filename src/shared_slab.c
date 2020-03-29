@@ -918,11 +918,11 @@ void *shuso_shared_slab_calloc_locked(shuso_shared_slab_t *shm, size_t size) {
   return ngx_slab_calloc_locked(shm->pool, size);
 }
 
-void shuso_shared_slab_free(shuso_shared_slab_t *shm, void *p) {
-  ngx_slab_free(shm->pool, p);
+void shuso_shared_slab_free(shuso_shared_slab_t *shm, const void *p) {
+  ngx_slab_free(shm->pool, (void *)p);
 }
-void shuso_shared_slab_free_locked(shuso_shared_slab_t *shm, void *p) {
-  ngx_slab_free_locked(shm->pool, p);
+void shuso_shared_slab_free_locked(shuso_shared_slab_t *shm, const void *p) {
+  ngx_slab_free_locked(shm->pool, (void *)p);
 }
 
 void shuso_shared_slab_lock(shuso_shared_slab_t *shm) {
