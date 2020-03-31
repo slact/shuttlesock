@@ -48,7 +48,7 @@ describe(init_and_shutdown) {
   after_each() {
     shusoT_destroy(S, &chk);
   }
-  test("lua stack doesn't grow") {  
+  test("lua stack doesn't grow") {
     assert(lua_gettop(S->lua.state) == 0);
     shuso_configure_finish(S);
     if(lua_gettop(S->lua.state) != 0) {
@@ -599,7 +599,7 @@ describe(lua_api) {
   }
   
   subdesc(listen) {
-    test("module with listening blocks") {
+    skip("module with listening blocks") {
       assert_luaL_dofile(S->lua.state, "module_config_listen.lua");
       shuso_run(S);
       assert_shuso_ran_ok(S);
@@ -637,6 +637,7 @@ describe(lua_api) {
   
   subdesc(ipc) {
     test("pack/unpack data in heap") {
+      assert_shuso(S, shuso_configure_finish(S));
       lua_State *L = S->lua.state;
       assert_luaL_dostring(L,"\
         local x = {}\n\

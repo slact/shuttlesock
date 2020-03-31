@@ -16,7 +16,7 @@ testmod:subscribe("core:manager.workers_started", function(self)
 end)
 
 local cur = 0
-testmod:subscribe("core:error", function(self, code, err)
+testmod:subscribe("core:error", function(self, event, code, err, arg1, arg2)
   assert(Process.type() == "manager")
   if cur == 0 then
     assert(err == "err1")
