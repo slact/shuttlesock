@@ -207,3 +207,5 @@ function core.parse_host(str)
     hostname = host
   }
 end
+
+core.event_data_wrappers = {}

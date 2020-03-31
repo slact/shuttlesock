@@ -1182,80 +1182,21 @@ static bool lua_module_initialize_config(shuso_t *S, shuso_module_t *module, shu
   return true;
 }
 
-static bool luaS_push_wrapped_event_data(lua_State *L, const char *type, void *data) {
-  if(type == NULL || data == NULL) {
-    lua_pushnil(L);
-    return true;
+static shuso_lua_event_data_wrapper_t *lua_event_get_data_wrapper(lua_State *L, const char *type) {
+  int top = lua_gettop(L);
+  luaS_push_lua_module_field(L, "shuttlesock.core", "event_data_wrappers");
+  if(!lua_istable(L, -1)) {
+    lua_settop(L, top);
+    return NULL;
   }
-  
-  lua_pushstring(L, type);
-  if(luaS_streq_literal(L, -1, "string")) {
-    lua_pop(L, 1);
-    lua_pushstring(L, (char *)data);
-    return true;
+  lua_getfield(L, -1, type);
+  if(lua_isnil(L, -1)) {
+    lua_settop(L, top);
+    return NULL;
   }
-  else if(luaS_streq_literal(L, -1, "float")) {
-    lua_pop(L, 1);
-    lua_pushnumber(L, *(double *)data);
-    return true;
-  }
-  else if(luaS_streq_literal(L, -1, "integer")) {
-    lua_pop(L, 1);
-    lua_pushinteger(L, *(int *)data);
-    return true;
-  }
-  else {
-    shuso_set_error(shuso_state(L), "don't know how to wrap event data type '%s'", type);
-    lua_pop(L, 1);
-    lua_pushnil(L);
-    return false;
-  }
-}
-
-static bool luaS_wrap_event_data_cleanup(lua_State *L, const char *type, void *data) {
-  return true;
-}
-
-static lua_reference_t luaS_unwrap_event_data(lua_State *L, const char *type, int narg, void **ret) {
-  if(type  == NULL) {
-    *ret = NULL;
-    return LUA_NOREF;
-  }
-  
-  lua_pushstring(L, type);
-  if(luaS_streq_literal(L, -1, "string")) {
-    lua_pop(L, 1);
-    *(const char **)ret = lua_tostring(L, narg);
-    lua_pushvalue(L, narg);
-    return luaL_ref(L, LUA_REGISTRYINDEX);
-  }
-  else if(luaS_streq_literal(L, -1, "float")) {
-    lua_pop(L, 1);
-    double *dubs = lua_newuserdata(L, sizeof(double));
-    *dubs = lua_tonumber(L, narg);
-    *ret = dubs;
-    return luaL_ref(L, LUA_REGISTRYINDEX);
-  }
-  else if(luaS_streq_literal(L, -1, "integer")) {
-    int *integer = lua_newuserdata(L, sizeof(int));
-    *integer = lua_tointeger(L, narg);
-    *ret = integer;
-    return luaL_ref(L, LUA_REGISTRYINDEX);
-  }
-  else {
-    *ret = NULL;
-    shuso_set_error(shuso_state(L), "don't know how to unwrap event data type '%s'", type);
-    return LUA_NOREF;
-  }
-}
-
-static void luaS_unwrap_event_data_cleanup(lua_State *L, const char *datatype, lua_reference_t ref, void *data) {
-  if(ref == LUA_REFNIL || ref == LUA_NOREF) {
-    //nothing to clean up
-    return;
-  }
-  luaL_unref(L, LUA_REGISTRYINDEX, ref);
-  return;
+  shuso_lua_event_data_wrapper_t *wrapper = (void *)lua_topointer(L, -1);
+  lua_settop(L, top);
+  return wrapper;
 }
 
 static void lua_module_event_listener(shuso_t *S, shuso_event_state_t *evs, intptr_t code, void *data, void *pd) {
@@ -1281,11 +1222,30 @@ static void lua_module_event_listener(shuso_t *S, shuso_event_state_t *evs, intp
   
   lua_pushinteger(L, code);
   
-  luaS_push_wrapped_event_data(L, evs->data_type, data);
-
+  bool wrapped = true;
+  shuso_lua_event_data_wrapper_t *wrapper = NULL;
+  if(!evs->data_type) {
+    wrapped = false;
+    lua_pushnil(L);
+  }
+  else {
+    wrapper = lua_event_get_data_wrapper(L, evs->data_type);
+    if(!wrapper) {
+      shuso_set_error(shuso_state(L), "don't know how to wrap event data type '%s'", evs->data_type);
+      lua_pushnil(L);
+      wrapped = false;
+    }
+    else if(!wrapper->wrap(L, evs->data_type, data)) {
+      shuso_set_error(shuso_state(L), "failed to wrap event data type '%s'", evs->data_type);
+      lua_pushnil(L);
+      wrapped = false;
+    }
+  }
   luaS_function_call_result_ok(L, 6, false);
   
-  luaS_wrap_event_data_cleanup(L, evs->data_type, data);
+  if(wrapper && wrapped) {
+    wrapper->wrap_cleanup(L, evs->data_type, data);
+  }
   
   assert(lua_gettop(L) == top);
   return;
@@ -1821,18 +1781,27 @@ static int Lua_shuso_module_event_publish(lua_State *L) {
   
   const char    *datatype = ctx->events[evindex].data_type;
   void          *data;
+  bool           unwrapped = true;
   lua_reference_t unwrapref;
-  if(nargs >=4) {
-    unwrapref = luaS_unwrap_event_data(L, datatype, 4, &data);
+  shuso_lua_event_data_wrapper_t *wrapper = NULL;
+  if(nargs >=4 && datatype) {
+    wrapper = lua_event_get_data_wrapper(L, datatype);
+    if(!wrapper) {
+      shuso_set_error(shuso_state(L), "don't know how to unwrap event data type '%s'", datatype);
+      lua_pushnil(L);
+      unwrapped = false;
+    }
+    unwrapref = wrapper->unwrap(L, datatype, 4, &data);
   }
   else {
     data = NULL;
+    unwrapped = false;
   }
   
   bool ok = shuso_event_publish(S, &ctx->events[evindex], code, data);
   
-  if(nargs >= 4) {
-    luaS_unwrap_event_data_cleanup(L, datatype, unwrapref, data);
+  if(wrapper && unwrapped) {
+    wrapper->unwrap_cleanup(L, datatype, unwrapref, data);
   }
   
   lua_pushboolean(L, ok);
@@ -2371,6 +2340,7 @@ luaL_Reg shuttlesock_core_module_methods[] = {
   {"module_pointer", Lua_shuso_module_pointer},
   {"module_name", Lua_shuso_module_name},
   {"module_version", Lua_shuso_module_version},
+//module events
   {"event_publish", Lua_shuso_module_event_publish},
   {"event_cancel", Lua_shuso_module_event_cancel},
   {"event_pause", Lua_shuso_module_event_pause},
