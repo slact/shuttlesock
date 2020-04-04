@@ -12,10 +12,10 @@ local Server = Module.new {
   name = "server",
   version = require "shuttlesock".VERSION,
   publish = {
-    listen_token= {data_type="string"}
+    listen = {data_type="server_binding"}
   },
   raw_hosts = {},
-  hosts = {}
+  bindings = {}
 }
 
 Server.settings = {
@@ -146,6 +146,37 @@ function Server:initialize_config(block)
   table.insert(self.raw_hosts, host)
 end
 
+local function common_parent_block(blocks)
+  local parents = {}
+  local maxlen = 0
+  for _, block in pairs(blocks) do
+    local cur = block
+    local pchain = {}
+    repeat
+      table.insert(pchain, 1, cur)
+      cur = cur:parent_block()
+    until not cur
+    
+    table.insert(parents, pchain)
+    if maxlen < #pchain then
+      maxlen = #pchain
+    end
+  end
+  local cur, common, last_common
+  for i=0, maxlen do
+    cur, common = nil, nil
+    for _, pchain in pairs(parents) do
+      cur = pchain[i]
+      if common == nil then
+        common = cur
+      elseif cur == nil or cur ~= common then
+        return last_common
+      end
+    end
+    last_common = cur
+  end
+end
+
 Server:subscribe("core:manager.workers_started", function()
 
   local coro = coroutine.create(function()
@@ -175,7 +206,8 @@ Server:subscribe("core:manager.workers_started", function()
         return nil, host.setting:error(err or "failed to process host")
       end
     end
-    local hosts = {}
+    local unique_bindings = {}
+    local unique_binding_blocks = {}
     for _, host in ipairs(Server.raw_hosts) do
       for _, addr in ipairs(host.addresses) do
         addr.port = host.port
@@ -187,30 +219,33 @@ Server:subscribe("core:manager.workers_started", function()
         else
           return nil, host.setting:error("can't figure out internal id")
         end
-        hosts[id]=hosts[id] or {address = addr, listen = {}}
-        table.insert(hosts[id].listen, {block = host.block, setting = host.setting})
+        unique_bindings[id]=unique_bindings[id] or {address = addr, listen = {}}
+        table.insert(unique_bindings[id].listen, {block = host.block, setting = host.setting})
+        unique_binding_blocks[id] = unique_binding_blocks[id] or {}
+        table.insert(unique_binding_blocks[id], host.block)
       end
     end
     
-    Server.hosts = {}
-    for id, host in pairs(hosts) do
-      host.name = id
-      table.insert(Server.hosts, host)
+    Server.bindings = {}
+    for id, binding in pairs(unique_bindings) do
+      binding.name = id
+      binding.common_parent_block = common_parent_block(unique_binding_blocks[id])
+      table.insert(Server.bindings, binding)
     end
     
-    --require"mm"(Server.hosts)
+    --require"mm"(Server.bindings)
     
     local worker_procnums = Process.worker_procnums()
     
-    if #Server.hosts > 0 then
+    if #Server.bindings > 0 then
       
       local rcv = IPC.Receiver.start("server:create_listener_sockets", "master")
       local rcvfd = IPC.FD_Receiver.start("server:receive_listener_sockets", 5.0)
       
-      for i, host in ipairs(Server.hosts) do
-      
-        host.ptr = assert(CFuncs.create_binding_data(host, i), "problem creating bind data")
-        local shared_ptr = CFuncs.create_shared_host_data(host.ptr)
+      for i, binding in ipairs(Server.bindings) do
+
+        binding.ptr = assert(CFuncs.create_binding_data(binding, i), "problem creating bind data")
+        local shared_ptr = CFuncs.create_shared_host_data(binding.ptr)
         
         local msg = {
           count = #worker_procnums,
@@ -220,14 +255,14 @@ Server:subscribe("core:manager.workers_started", function()
         
         IPC.send("master", "server:create_listener_sockets", msg)
         local resp = rcv:yield()
-        host.sockets = host.sockets or {}
+        binding.sockets = binding.sockets or {}
         for _, err in ipairs(resp.errors or {}) do
           Log.error(err)
         end
-        while #host.sockets < resp.fd_count do
+        while #binding.sockets < resp.fd_count do
           local ok, fd = rcvfd:yield()
           assert(ok)
-          table.insert(host.sockets, fd)
+          table.insert(binding.sockets, fd)
         end
         IPC.send("master", "server:create_listener_sockets", "ok")
         
@@ -235,12 +270,12 @@ Server:subscribe("core:manager.workers_started", function()
       end
     end
     for _, worker in ipairs(worker_procnums) do
-      if #Server.hosts > 0 then
+      if #Server.bindings > 0 then
         local receiver = IPC.Receiver.start("server:listener_socket_transfer", worker)
-        for _, host in ipairs(Server.hosts) do
-          local fd = assert(table.remove(host.sockets), "not enough listener sockets opened. weird")
-          --print("uuuh send " .. host.name .. " fd: " .. fd .. " to worker " .. worker)
-          IPC.send(worker, "server:listener_socket_transfer", {name = host.name, fd = fd, address = host.address, ptr = host.ptr})
+        for _, binding in ipairs(Server.bindings) do
+          local fd = assert(table.remove(binding.sockets), "not enough listener sockets opened. weird")
+          --print("uuuh send " .. binding.name .. " fd: " .. fd .. " to worker " .. worker)
+          IPC.send(worker, "server:listener_socket_transfer", {name = binding.name, fd = fd, address = binding.address, ptr = binding.ptr})
           local resp = receiver:yield()
           assert(resp == "ok", resp)
         end

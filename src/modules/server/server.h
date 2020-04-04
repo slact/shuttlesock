@@ -7,6 +7,7 @@ void shuttlesock_server_module_prepare(shuso_t *S, void *pd);
 
 typedef struct {
   int                 lua_hostnum;
+  lua_reference_t     ref;
   shuso_hostinfo_t    host;
   struct {
     size_t              count;
@@ -14,9 +15,16 @@ typedef struct {
       shuso_setting_block_t *block;
       shuso_setting_t       *setting;
     }                  *array;
+    shuso_setting_block_t *common_parent_block;
   }                   config;
   shuso_io_t          io;
+  shuso_event_t       accept_event;
 } shuso_server_binding_t;
+
+typedef struct {
+  shuso_socket_t         *socket;
+  shuso_server_binding_t *binding;
+} shuso_server_accept_data_t;
 
 typedef struct {
   struct {

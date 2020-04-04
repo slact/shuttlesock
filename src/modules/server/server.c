@@ -148,6 +148,9 @@ static int luaS_create_binding_data(lua_State *L) {
   }
   binding->lua_hostnum = lua_tointeger(L, 2);
   
+  lua_pushvalue(L, 1);
+  binding->ref = luaL_ref(L, LUA_REGISTRYINDEX);
+  
   lua_getfield(L, 1, "name");
   name = lua_tostring(L, -1);
   lua_pop(L, 1); //pop ["name"]
@@ -249,6 +252,16 @@ static int luaS_create_binding_data(lua_State *L) {
     luaL_error(L, "couldn't allocate server host config array");
   }
   
+  lua_getfield(L, -1, "common_parent_block");
+  if(!lua_isnil(L, -1)) {
+    lua_getfield(L, -1, "ptr");
+    if(lua_islightuserdata(L, -1) || lua_isuserdata(L, -1)) {
+      binding->config.common_parent_block = (void *)lua_topointer(L, -1);
+    }
+    lua_pop(L, 1);
+  }
+  lua_pop(L, 1);
+  
   for(int j=0; j<listen_count; j++) {
     
     lua_geti(L, -1, j+1);
@@ -269,6 +282,14 @@ static int luaS_create_binding_data(lua_State *L) {
   
   lua_pop(L, 1); //pop ["listen"]
   
+  
+  shuso_event_init_t evinit = {
+    .name = "accept",
+    .event = &binding->accept_event,
+    .data_type = "server_accept", 
+  };
+  shuso_event_initialize(S, shuso_get_module(S, "server"), &binding->accept_event, &evinit);
+  
   lua_pushlightuserdata(L, binding);
   return 1;
 }
@@ -278,6 +299,8 @@ static void listener_accept_coro_error(shuso_t *S, shuso_io_t *io) {
 }
 
 static void listener_accept_coro(shuso_t *S, shuso_io_t *io) {
+  
+  
   int rc = 0;
   SHUSO_IO_CORO_BEGIN(io, listener_accept_coro_error);
   rc = listen(io->io_socket.fd, 100);
@@ -288,6 +311,7 @@ static void listener_accept_coro(shuso_t *S, shuso_io_t *io) {
     SHUSO_IO_CORO_YIELD(wait, SHUSO_IO_READ);
     SHUSO_IO_CORO_YIELD(accept);
     shuso_log(S, "accepted new socket");
+    
   }
   SHUSO_IO_CORO_END(io);
 }
@@ -462,6 +486,24 @@ static int luaS_free_shared_host_data(lua_State *L) {
   return 1;
 }
 
+static bool binding_data_lua_wrap(lua_State *L, const char *type, void *data) {
+  assert(strcmp(type, "server_binding") == 0);
+  shuso_server_binding_t *binding = data;
+  lua_checkstack(L, 1);
+  lua_rawgeti(L, LUA_REGISTRYINDEX, binding->ref);
+  return true;
+}
+
+static lua_reference_t binding_data_lua_unwrap(lua_State *L, const char *type, int narg, void **ret) {
+  assert(strcmp(type, "server_binding") == 0);
+  lua_checkstack(L, 1);
+  lua_getfield(L, narg, "ptr");
+  assert(lua_islightuserdata(L, -1) || lua_isuserdata(L, -1));
+  *ret = (void *)lua_topointer(L, -1);
+  lua_pop(L, 1);
+  return LUA_NOREF;
+}
+
 void shuttlesock_server_module_prepare(shuso_t *S, void *pd) {
   luaL_Reg lib[] = {
     {"getaddrinfo_noresolve", get_addr_info},
@@ -476,4 +518,10 @@ void shuttlesock_server_module_prepare(shuso_t *S, void *pd) {
   };
   
   luaS_register_lib(S->lua.state, "shuttlesock.modules.core.server.cfuncs", lib);
+  
+  shuso_lua_event_register_data_wrapper(S, "server_binding", &(shuso_lua_event_data_wrapper_t ){
+    .wrap =           binding_data_lua_wrap,
+    .unwrap =         binding_data_lua_unwrap
+  });
+  
 }

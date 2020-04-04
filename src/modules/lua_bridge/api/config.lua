@@ -58,6 +58,14 @@ function block:parent_setting()
   return Config.setting(self.parent_setting_ptr)
 end
 
+function block:parent_block()
+  local parent_setting = self:parent_setting()
+  if not parent_setting then
+    return nil
+  end
+  return parent_setting.block
+end
+
 function block.settings() --all local setting in this
   error("not implemented yet")
 end

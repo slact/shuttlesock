@@ -1243,7 +1243,7 @@ static void lua_module_event_listener(shuso_t *S, shuso_event_state_t *evs, intp
   }
   luaS_function_call_result_ok(L, 6, false);
   
-  if(wrapper && wrapped) {
+  if(wrapper && wrapped && wrapper->wrap_cleanup) {
     wrapper->wrap_cleanup(L, evs->data_type, data);
   }
   
@@ -1800,7 +1800,7 @@ static int Lua_shuso_module_event_publish(lua_State *L) {
   
   bool ok = shuso_event_publish(S, &ctx->events[evindex], code, data);
   
-  if(wrapper && unwrapped) {
+  if(wrapper && unwrapped && wrapper->unwrap_cleanup) {
     wrapper->unwrap_cleanup(L, datatype, unwrapref, data);
   }
   
