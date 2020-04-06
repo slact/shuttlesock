@@ -347,10 +347,7 @@ static bool lua_event_accept_data_wrap(lua_State *L, const char *type, void *dat
   lua_checkstack(L, 3);
   
   lua_newtable(L);
-  if(!lua_event_data_socket_wrap(L, "shuso_socket", accept->socket)) {
-    lua_pop(L, 1);
-    return false;
-  }
+  lua_event_data_socket_wrap(L, "shuso_socket", accept->socket);
   lua_setfield(L, -2, "socket");
   
   lua_rawgeti(L, LUA_REGISTRYINDEX, accept->binding->ref);

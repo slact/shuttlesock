@@ -1316,9 +1316,7 @@ static bool lua_module_event_interrupt_handler(shuso_t *S, shuso_event_t *event,
       break;
   }
   
-  if(sec) {
-    lua_pushnumber(L, sec ? *sec : 0.0);
-  }
+  lua_pushnumber(L, sec ? *sec : 0.0);
   
   luaS_pcall(L, 4, 2);
   bool ok = lua_toboolean(L, -2);
@@ -1790,8 +1788,11 @@ static int Lua_shuso_module_event_publish(lua_State *L) {
       shuso_set_error(shuso_state(L), "don't know how to unwrap event data type '%s'", datatype);
       lua_pushnil(L);
       unwrapped = false;
+      data = NULL;
     }
-    unwrapref = wrapper->unwrap(L, datatype, 4, &data);
+    else { 
+      unwrapref = wrapper->unwrap(L, datatype, 4, &data);
+    }
   }
   else {
     data = NULL;

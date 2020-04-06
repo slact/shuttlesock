@@ -170,6 +170,12 @@ struct iovec *shuso_buffer_add_iovec(shuso_t *S, shuso_buffer_t *buf, int iovcnt
 char *shuso_buffer_add_msg_fd(shuso_t *S, shuso_buffer_t *buf, int fd,size_t data_sz) {
   return shuso_buffer_add_msg_fd_with_cleanup(S, buf, fd, data_sz, NULL, NULL);
 }
+
+#ifndef __clang_analyzer__
+//clang analyzer doesn't like this.
+//it would be nice to have added a data[] at the end of the msgblob, but the trailing 
+// space is already taken up by char buf[CMSG_SPACE(...)]
+
 char *shuso_buffer_add_msg_fd_with_cleanup(shuso_t *S, shuso_buffer_t *buf, int fd,size_t data_sz, shuso_buffer_link_cleanup_fn *cleanup, void *cleanup_pd) {
   struct msgblob_s {
     struct msghdr                         msg;
@@ -253,3 +259,5 @@ char *shuso_buffer_add_msg_fd_with_cleanup(shuso_t *S, shuso_buffer_t *buf, int 
   shuso_buffer_queue(S, buf, link);
   return msgblob->iov.iov_base;
 }
+
+#endif

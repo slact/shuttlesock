@@ -31,16 +31,17 @@ void *shuso_core_context(shuso_t *S, shuso_module_t *module) {
 static void stop_thing_callback(shuso_loop *loop, shuso_ev_timer *timer, int events) {
   shuso_t *S = shuso_state(loop, timer);
   shuso_remove_timer_watcher(S, timer);
+  
+#ifndef SHUTTLESOCK_DEBUG_NO_WORKER_THREADS
+  ev_break(S->ev.loop, EVBREAK_ALL);
+#else
   if(S->procnum >= SHUTTLESOCK_WORKER) {
-    #ifndef SHUTTLESOCK_DEBUG_NO_WORKER_THREADS
-      ev_break(S->ev.loop, EVBREAK_ALL);
-    #else
-      shuso_worker_shutdown(S);
-    #endif
+    shuso_worker_shutdown(S);
   }
   else {
     ev_break(S->ev.loop, EVBREAK_ALL);
   }
+#endif
 }
 
 

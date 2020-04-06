@@ -249,7 +249,7 @@ static int luaS_create_binding_data(lua_State *L) {
   binding->config.count = listen_count;
   binding->config.array = shuso_stalloc(&S->stalloc, sizeof(*binding->config.array) * listen_count);
   if(!binding->config.array) {
-    luaL_error(L, "couldn't allocate server host config array");
+    return luaL_error(L, "couldn't allocate server host config array");
   }
   
   lua_getfield(L, -1, "common_parent_block");

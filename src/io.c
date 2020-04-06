@@ -314,7 +314,7 @@ static int io_ev_connect(shuso_io_t *io) {
     connect_sockaddr = &sockaddr.sa;
   }
   
-  return connect(io->io_socket.fd, &sockaddr.sa, sockaddr_sz);
+  return connect(io->io_socket.fd, connect_sockaddr, sockaddr_sz);
 }
 
 static void shuso_io_ev_operation(shuso_io_t *io) {
