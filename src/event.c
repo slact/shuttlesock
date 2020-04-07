@@ -186,6 +186,7 @@ static bool fire_event(shuso_t *S, shuso_event_t *event, int listener_start_inde
   
   switch(cev.interrupt) {
     case SHUSO_EVENT_NO_INTERRUPT:
+      interrupt_action = "uninterrupted";
       shuso_log_debug(S, "event %s:%s finished", publisher->name, event->name);
 #ifdef SHUTTLESOCK_DEBUG_MODULE_SYSTEM
       event->interrupt_state = SHUSO_EVENT_NO_INTERRUPT;
@@ -208,6 +209,9 @@ static bool fire_event(shuso_t *S, shuso_event_t *event, int listener_start_inde
 #ifdef SHUTTLESOCK_DEBUG_MODULE_SYSTEM
       event->interrupt_state = SHUSO_EVENT_DELAY;
 #endif
+      break;
+    default:
+      interrupt_action = "<?>";
       break;
   }
   
