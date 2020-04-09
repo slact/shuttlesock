@@ -7,6 +7,11 @@ void *shuso_events(shuso_t *S, shuso_module_t *module) {
 
 bool shuso_event_initialize(shuso_t *S, shuso_module_t *mod, shuso_event_t *mev, shuso_event_init_t *event_init) {
   lua_State       *L = S->lua.state;
+  
+  if(!(shuso_runstate_check(S, SHUSO_STATE_CONFIGURING, "initialize event"))) {
+    return false;
+  }
+  
   if(mod == NULL) {
     return shuso_set_error(S, "can't initialize event from outside a shuttlesock module");
   }
@@ -23,6 +28,11 @@ bool shuso_event_initialize(shuso_t *S, shuso_module_t *mod, shuso_event_t *mev,
   if(event_init->data_type) {
     lua_pushstring(L, event_init->data_type);
     lua_setfield(L, -2, "data_type");
+  }
+  
+  if(event_init->detached) {
+    lua_pushboolean(L, 1);
+    lua_setfield(L, -2, "detached");
   }
   
   if(event_init->interrupt_handler) {
@@ -46,32 +56,41 @@ bool shuso_events_initialize(shuso_t *S, shuso_module_t *module, shuso_event_ini
   return true;
 }
 
-bool shuso_event_listen(shuso_t *S, const char *name, shuso_event_fn *callback, void *pd) {
-  return shuso_event_listen_with_priority(S, name, callback, pd, 0);
-}
 
-bool shuso_event_listen_with_priority(shuso_t *S, const char *name, shuso_event_fn *callback, void *pd, int8_t priority) {
-  lua_State       *L = S->lua.state;
-  shuso_module_t  *module;
-  int              top = lua_gettop(L);
+static bool event_listen_continue(shuso_t *S, lua_State *L, int nargs, bool optional, shuso_event_fn *callback, void *pd, int8_t priority);
+
+bool shuso_event_by_name_listen_with_priority(shuso_t *S, const char *name, shuso_event_fn *callback, void *pd, int8_t priority) {
+  lua_State             *L = S->lua.state;
   
   bool optional = name[0] == '~';
   if(optional) {
     name = &name[1];
   }
+  luaL_checkstack(L, 1, NULL);
   
-  luaS_push_lua_module_field(L, "shuttlesock.core.module", "currently_initializing_module");
-  if(!luaS_function_call_result_ok(L, 0, true)) {
-    return false;
-  }
-  lua_getfield(L, -1, "ptr");
-  
-  module = (void *)lua_topointer(L, -1);
-  lua_pop(L, 2);
-  
-  luaS_push_lua_module_field(L, "shuttlesock.core.event", "find");
   lua_pushstring(L, name);
-  luaS_call(L, 1, 2);
+
+  return event_listen_continue(S, L, 1, optional, callback, pd, priority);
+}
+
+
+bool shuso_event_by_pointer_listen_with_priority(shuso_t *S, shuso_event_t *event, shuso_event_fn *callback, void *pd, int8_t priority) {
+  lua_State             *L = S->lua.state;
+
+  luaL_checkstack(L, 1, NULL);
+  lua_pushlightuserdata(L, event);
+  
+  return event_listen_continue(S, L, 1, false, callback, pd, priority);
+}
+
+static bool event_listen_continue(shuso_t *S, lua_State *L, int nargs, bool optional, shuso_event_fn *callback, void *pd, int8_t priority) {
+  const shuso_module_t  *module = S->active_module;
+  int top = lua_gettop(L) - nargs;
+  
+  luaL_checkstack(L, 3, NULL);
+  luaS_push_lua_module_field(L, "shuttlesock.core.event", "find");
+  lua_insert(L, top+1);
+  luaS_call(L, nargs, 2);
   if(lua_isnil(L, -2)) {
     //module not found
     if(optional) {
@@ -86,9 +105,10 @@ bool shuso_event_listen_with_priority(shuso_t *S, const char *name, shuso_event_
   }
   lua_pop(L, 1);
   
+  luaL_checkstack(L, 6, NULL);
   lua_getfield(L, -1, "add_listener");
   lua_pushvalue(L, -2);
-  lua_pushlightuserdata(L, module);
+  lua_pushlightuserdata(L, (void *)module);
   lua_pushlightuserdata(L, *((void **)&callback));
   lua_pushlightuserdata(L, pd);
   lua_pushnumber(L, priority);
@@ -167,9 +187,12 @@ static bool fire_event(shuso_t *S, shuso_event_t *event, int listener_start_inde
   }
 #endif
   shuso_log_debug(S, "event %s:%s started", publisher->name, event->name);
+  
+  const shuso_module_t *prev_active_module = S->active_module;
   if(event->interrupt_handler == NULL) {
     for(cev.cur = &event->listeners[listener_start_index]; cev.cur->fn != NULL; cev.cur++) {
       cev.state.module = cev.cur->module;
+      S->active_module = cev.state.module;
       cev.cur->fn(S, &cev.state, code, data, cev.cur->pd);
     }
   }
@@ -178,15 +201,16 @@ static bool fire_event(shuso_t *S, shuso_event_t *event, int listener_start_inde
     cev.data = data;
     for(cev.cur = &event->listeners[listener_start_index]; cev.interrupt == SHUSO_EVENT_NO_INTERRUPT && cev.cur->fn != NULL; cev.cur++) {
       cev.state.module = cev.cur->module;
+      S->active_module = cev.state.module;
       cev.cur->fn(S, &cev.state, code, data, cev.cur->pd);
     }
   }
+  S->active_module = prev_active_module;
   
   const char *interrupt_action;
   
   switch(cev.interrupt) {
     case SHUSO_EVENT_NO_INTERRUPT:
-      interrupt_action = "uninterrupted";
       shuso_log_debug(S, "event %s:%s finished", publisher->name, event->name);
 #ifdef SHUTTLESOCK_DEBUG_MODULE_SYSTEM
       event->interrupt_state = SHUSO_EVENT_NO_INTERRUPT;
@@ -216,7 +240,7 @@ static bool fire_event(shuso_t *S, shuso_event_t *event, int listener_start_inde
   }
   
   if(cev.interrupt_reason) {
-    shuso_log_info(S, "event %s:%s %s by module %s: %s", cev.state.publisher->name, cev.event->name, interrupt_action, cev.state.module->name, cev.interrupt_reason);
+    shuso_log_debug(S, "event %s:%s %s by module %s: %s", cev.state.publisher->name, cev.event->name, interrupt_action, cev.state.module->name, cev.interrupt_reason);
   }
   else {
     shuso_log_debug(S, "event %s:%s %s by module %s", cev.state.publisher->name, cev.event->name, interrupt_action, cev.state.module->name);

@@ -31,6 +31,10 @@ local function assert0(test, err)
   return test
 end
 
+function Module.active()
+  return Core.get_active_module()
+end
+
 function Module.wrap(module_name, module_ptr)
   local self = wrapped_modules[module_name]
   if not self then

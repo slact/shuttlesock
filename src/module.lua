@@ -3,12 +3,13 @@ local Module = {
   by_name = {},
   by_ptr = {},
   index_counter = 0,
-  max_module_count = 255
+  max_module_count = 255,
 }
 Module.dependents_indexed = {}
 Module.dependents = {}
 Module.providers = {}
 
+local Core = require "shuttlesock.core"
 
 local function split_subscribe_list_string(str)
   local Event = require "shuttlesock.core.event"
@@ -76,6 +77,14 @@ local function split_parent_modules_string(str)
 end
 
 local module_mt
+
+function Module.active()
+  return Core.active_module()
+end
+
+function Module.set_active(active_module)
+  return Core.set_active_module(active_module)
+end
 
 function Module.start_initializing_module(module_name)
   if Module.currently_initializing_module_name then

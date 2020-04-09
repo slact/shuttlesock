@@ -1463,6 +1463,24 @@ static bool lua_module_initialize(shuso_t *S, shuso_module_t *module) {
   return true;
 }
 
+static int Lua_shuso_get_active_module(lua_State *L) {
+  shuso_t               *S = shuso_state(L);
+  const shuso_module_t  *module = S->active_module;
+  
+  luaS_push_lua_module_field(L, "shuttlesock.module", "find");
+  lua_pushstring(L, module->name);
+  lua_call(L, 1, 1);
+  if(lua_isnil(L, -1)) {
+    lua_pop(L, 1);
+    luaS_push_lua_module_field(L, "shuttlesock.module", "wrap");
+    lua_pushstring(L, module->name);
+    lua_pushlightuserdata(L, (void *)module);
+    lua_call(L, 2, 1);
+  }
+  
+  return 1;
+}
+
 static int Lua_shuso_add_module(lua_State *L) {
   shuso_t *S = shuso_state(L);
   if(!(shuso_runstate_check(S, SHUSO_STATE_CONFIGURING, "add module"))) {
@@ -2337,6 +2355,7 @@ luaL_Reg shuttlesock_core_module_methods[] = {
   {"log_fatal", Lua_shuso_log_fatal},
 
 //modules
+  {"get_active_module", Lua_shuso_get_active_module},
   {"add_module", Lua_shuso_add_module},
   {"module_pointer", Lua_shuso_module_pointer},
   {"module_name", Lua_shuso_module_name},

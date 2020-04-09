@@ -137,30 +137,30 @@ static bool core_module_initialize(shuso_t *S, shuso_module_t *self) {
   assert(ctx);
   
   shuso_events_initialize(S, self, (shuso_event_init_t[]){
-    {"configure",       &ctx->events.configure,         NULL, NULL},
-    {"configure.after", &ctx->events.configure_after,   NULL, NULL},
+    {.name="configure",       .event=&ctx->events.configure},
+    {.name="configure.after", .event=&ctx->events.configure_after},
     
-    {"master.start",    &ctx->events.start_master,      NULL, NULL},
-    {"manager.start",   &ctx->events.start_manager,     NULL, NULL},
-    {"worker.start",    &ctx->events.start_worker,      NULL, NULL},
-    {"worker.start.before.lua_gxcopy",&ctx->events.start_worker_before_lua_gxcopy, "shuttlesock_state", NULL},
-    {"worker.start.before",&ctx->events.start_worker_before, "shuttlesock_state", NULL},
+    {.name="master.start",    .event=&ctx->events.start_master},
+    {.name="manager.start",   .event=&ctx->events.start_manager},
+    {.name="worker.start",    .event=&ctx->events.start_worker},
+    {.name="worker.start.before.lua_gxcopy", .event=&ctx->events.start_worker_before_lua_gxcopy, .data_type="shuttlesock_state"},
+    {.name="worker.start.before", .event=&ctx->events.start_worker_before, .data_type="shuttlesock_state"},
     
-    {"master.stop",     &ctx->events.stop_master,       NULL, stop_event_interrupt_handler},
-    {"manager.stop",    &ctx->events.stop_manager,      NULL, stop_event_interrupt_handler},
-    {"worker.stop",     &ctx->events.stop_worker,       NULL, stop_event_interrupt_handler},
+    {.name="master.stop",     .event=&ctx->events.stop_master,  .interrupt_handler=stop_event_interrupt_handler},
+    {.name="manager.stop",    .event=&ctx->events.stop_manager, .interrupt_handler=stop_event_interrupt_handler},
+    {.name="worker.stop",     .event=&ctx->events.stop_worker,  .interrupt_handler=&stop_event_interrupt_handler},
     
-    {"master.exit",     &ctx->events.exit_master,       NULL, NULL},
-    {"manager.exit",    &ctx->events.exit_manager,      NULL, NULL},
-    {"worker.exit",     &ctx->events.exit_worker,       NULL, NULL},
+    {.name="master.exit",     .event=&ctx->events.exit_master},
+    {.name="manager.exit",    .event=&ctx->events.exit_manager},
+    {.name="worker.exit",     .event=&ctx->events.exit_worker},
     
-    {"manager.workers_started",   &ctx->events.manager_all_workers_started, NULL, NULL},
-    {"master.workers_started",    &ctx->events.master_all_workers_started,  NULL, NULL},
-    {"worker.workers_started",    &ctx->events.worker_all_workers_started,  NULL, NULL},
-    {"manager.worker_exited",     &ctx->events.worker_exited,               NULL, NULL},
-    {"master.manager_exited",     &ctx->events.manager_exited,              NULL, NULL},
+    {.name="manager.workers_started",   .event=&ctx->events.manager_all_workers_started},
+    {.name="master.workers_started",    .event=&ctx->events.master_all_workers_started},
+    {.name="worker.workers_started",    .event=&ctx->events.worker_all_workers_started},
+    {.name="manager.worker_exited",     .event=&ctx->events.worker_exited},
+    {.name="master.manager_exited",     .event=&ctx->events.manager_exited},
     
-    {"error",                     &ctx->events.error,              "string", NULL},
+    {.name="error",                     .event=&ctx->events.error,              .data_type="string"},
     {.name=NULL}
   });
   

@@ -25,6 +25,7 @@ typedef struct shuso_event_s {
   shuso_event_listener_t *listeners;
   shuso_event_interrupt_handler_fn *interrupt_handler;
   uint16_t           module_index;
+  unsigned           detached:1;
   unsigned           firing:1;
 #ifdef SHUTTLESOCK_DEBUG_MODULE_SYSTEM
   shuso_event_interrupt_t interrupt_state;
@@ -52,6 +53,7 @@ typedef struct {
   shuso_event_t        *event;
   const char           *data_type;
   shuso_event_interrupt_handler_fn *interrupt_handler;
+  bool                  detached;
 } shuso_event_init_t;
 
 typedef struct shuso_event_state_s {
@@ -65,8 +67,25 @@ typedef struct shuso_event_state_s {
 bool shuso_events_initialize(shuso_t *S, shuso_module_t *module, shuso_event_init_t *events_init);
 bool shuso_event_initialize(shuso_t *S, shuso_module_t *mod, shuso_event_t *mev, shuso_event_init_t *event_init);
 
-bool shuso_event_listen(shuso_t *S, const char *name, shuso_event_fn *callback, void *pd);
-bool shuso_event_listen_with_priority(shuso_t *S, const char *name, shuso_event_fn *callback, void *pd, int8_t priority);
+#define shuso_event_listen(S, evt, callback, pd) \
+  _Generic((evt), \
+    const shuso_event_t*:shuso_event_by_pointer_listen_with_priority, \
+    shuso_event_t  *    :shuso_event_by_pointer_listen_with_priority, \
+    char *              :shuso_event_by_name_listen_with_priority, \
+    const char *        :shuso_event_by_name_listen_with_priority \
+  )(S, evt, callback, pd, 0)
+
+#define shuso_event_listen_with_priority(S, evt, callback, pd, priority) \
+  _Generic((evt), \
+    const shuso_event_t*:shuso_event_by_pointer_listen_with_priority, \
+    shuso_event_t  *    :shuso_event_by_pointer_listen_with_priority, \
+    char *              :shuso_event_by_name_listen_with_priority, \
+    const char *        :shuso_event_by_name_listen_with_priority \
+  )(S, evt, callback, pd, priority)
+
+bool shuso_event_by_name_listen_with_priority(shuso_t *S, const char *name, shuso_event_fn *callback, void *pd, int8_t priority);
+bool shuso_event_by_pointer_listen_with_priority(shuso_t *S, shuso_event_t *event, shuso_event_fn *callback, void *pd, int8_t priority);
+  
 
 bool shuso_event_cancel(shuso_t *S, shuso_event_state_t *evstate);
 
@@ -74,8 +93,8 @@ bool shuso_event_pause(shuso_t *S, shuso_event_state_t *evstate, const char *rea
 bool shuso_event_delay(shuso_t *S, shuso_event_state_t *evstate, const char *reason, double max_delay_sec, int *delay_ref);
 #define shuso_event_resume(S, resume_data) \
   _Generic((resume_data), \
-           int                          :shuso_event_resume_delayed, \
-           shuso_event_pause_t *:shuso_event_resume_paused \
+    int                  :shuso_event_resume_delayed, \
+    shuso_event_pause_t *:shuso_event_resume_paused \
   )(S, resume_data)
 
 bool shuso_event_resume_delayed(shuso_t *S, int delay_id);

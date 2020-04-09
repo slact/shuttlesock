@@ -108,7 +108,8 @@ shuso_t *shuso_create_with_lua(lua_State *lua, const char **err) {
     .ev.loop = NULL,
     .ev.flags = EVFLAG_AUTO,
     .config.ready = false,
-    .common  = common_ctx
+    .common  = common_ctx,
+    .active_module = &shuso_core_module
   };
   if(lua) {
       S->lua.state = lua;
@@ -561,6 +562,7 @@ int               procnum = shuso_process_to_procnum(S, proc);
   wS->ev.flags = S->ev.flags;
   wS->ev.loop = NULL;
   wS->data = S->data;
+  wS->active_module = &shuso_core_module;
   
   wS->process = proc;
   *wS->process->state = SHUSO_STATE_NIL;

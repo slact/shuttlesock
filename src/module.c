@@ -168,37 +168,47 @@ bool shuso_initialize_added_modules(shuso_t *S) {
     }
   }
   
+  const shuso_module_t *prev_active_module = S->active_module;
+  
   for(unsigned i=0; i<S->common->modules.count; i++) {
     shuso_module_t *module = S->common->modules.array[i];
     luaS_push_lua_module_field(L, "shuttlesock.core.module", "start_initializing_module");
+    S->active_module = module;
     lua_pushstring(L, module->name);
     if(!luaS_function_call_result_ok(L, 1, false)) {
+      S->active_module = prev_active_module;
       return false;
     }
     if(module->initialize) {
       int errcount = shuso_error_count(S);
       if(!module->initialize(S, module)) {
         if(shuso_last_error(S) == NULL) {
+          S->active_module = prev_active_module;
           return shuso_set_error(S, "module %s failed to initialize, but reported no error", module->name);
         }
+        S->active_module = prev_active_module;
         return false;
       }
       if(shuso_error_count(S) > errcount) {
+        S->active_module = prev_active_module;
         return false;
       }
     }
     luaS_push_lua_module_field(L, "shuttlesock.core.module", "finish_initializing_module");
     lua_pushstring(L, module->name);
     if(!luaS_function_call_result_ok(L, 1, false)) {
+      S->active_module = prev_active_module;
       return false;
     }
   }
   for(unsigned i=0; i<S->common->modules.count; i++) {
     shuso_module_t *module = S->common->modules.array[i];
     if(!shuso_module_finalize(S, module)) {
+      S->active_module = prev_active_module;
       return false;
     }
   }
+  S->active_module = prev_active_module;
   return true;
 }
 
@@ -255,7 +265,7 @@ static bool shuso_module_freeze(shuso_t *S, shuso_module_t *mod) {
     return false;
   }
   
-  int     total_module_count =lua_tointeger(L, -1); 
+  int     total_module_count =lua_tointeger(L, -1);
   size_t  submodule_presence_map_size = sizeof(*mod->submodules.submodule_presence_map) * total_module_count;
   lua_pop(L, 1);
   
@@ -326,6 +336,10 @@ static bool shuso_module_finalize(shuso_t *S, shuso_module_t *mod) {
     
     lua_getfield(L, -1, "data_type");
     event->data_type = lua_tostring(L, -1);
+    lua_pop(L, 1);
+    
+    lua_getfield(L, -1, "detached");
+    event->detached = lua_toboolean(L, -1);
     lua_pop(L, 1);
     
     lua_getfield(L, -1, "interrupt_handler");

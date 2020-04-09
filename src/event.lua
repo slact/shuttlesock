@@ -34,12 +34,17 @@ function Event.find(module_name, event_name)
 end
 
 function Event.get(module_name, event_name, opts)
+  local detached = opts and opts.detached
+  
   if type(module_name)=="string" and not event_name then
     module_name, event_name = module_name:match(Event.MODULE_EVENT_NAME_PATTERN)
   end
-  local event = Event.find(module_name, event_name)
-  if event then
-    return event
+  local event
+  if not detached then
+    event = Event.find(module_name, event_name)
+    if event then
+      return event
+    end
   end
   
   event = {
@@ -49,7 +54,9 @@ function Event.get(module_name, event_name, opts)
   }
   setmetatable(event, event_mt)
   
-  events_by_name[module_name..":"..event_name] = event
+  if not detached then
+    events_by_name[module_name..":"..event_name] = event
+  end
   return event
 end
 do
@@ -145,7 +152,9 @@ do
       return nil, "module "..self.module_name.." has already registered event "..self.name.." with a different event struct"
     end
     
-    assert(type(opts.ptr) == "userdata", "event ptr must be a userdata")
+    if not self.ptr then
+      assert(type(opts.ptr) == "userdata", "event ptr must be a userdata")
+    end
     
     self.module = assert(Module.find(self.module_name))
     self.initialized = true

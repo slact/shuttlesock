@@ -167,6 +167,7 @@ typedef struct shuso_s {
   shuso_stalloc_t             stalloc;
   shuso_shared_slab_t         shm;
   shuso_resolver_t            resolver;
+  const shuso_module_t       *active_module;
   void                       *data;  //custom data attached to this shuttlesock context
   struct {
     bool                        ready;
