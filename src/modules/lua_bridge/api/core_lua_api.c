@@ -1724,12 +1724,75 @@ static int Lua_shuso_module_event_resume(lua_State *L) {
   return 1;
 }
 
+static shuso_event_t *lua_module_event_pointer(shuso_t *S, lua_State *L, const char *modname, const char *evname) {
+  int                      top = lua_gettop(L);
+  shuso_event_t           *event;
+  shuso_module_t          *module = shuso_get_module(S, modname);
+  lua_module_core_ctx_t   *ctx = shuso_core_context(S, module);
+  
+  assert(ctx);
+  
+  luaS_push_lua_module_field(L, "shuttlesock.module", "module_publish_events");
+  lua_getfield(L, -1, modname);
+  lua_remove(L, -2);
+  if(!lua_istable(L, -1)) {
+    lua_settop(L, top);
+    lua_pushnil(L);
+    lua_pushfstring(L, "no such module '%s'", modname);
+    return NULL;
+  }
+  
+  lua_getfield(L, -1, evname);
+  if(lua_isnil(L, -1)) {
+    lua_settop(L, top);
+    lua_pushnil(L);
+    lua_pushfstring(L, "can't publish event '%s:%s', it's not registed as a publishable event for module %s", modname, evname, modname);
+    return NULL;
+  }
+  
+  lua_getfield(L, -1, "index");
+  if(!lua_isinteger(L, -1)) {
+    lua_settop(L, top);
+    lua_pushnil(L);
+    lua_pushfstring(L, "can't publish event '%s:%s', it hasn't been initialized", modname, evname);
+    return NULL;
+  }
+  
+  int evindex = lua_tointeger(L, -1);
+  assert(evindex >= 0);
+  assert(evindex < ctx->events_count);
+  
+  event = &ctx->events[evindex];
+  return event;
+}
+
+static int Lua_shuso_module_event_pointer(lua_State *L) {
+  shuso_t                 *S = shuso_state(L);
+  const char              *modname = luaL_checkstring(L, 1);
+  const char              *evname = luaL_checkstring(L, 2);
+  
+  shuso_event_t           *event = lua_module_event_pointer(S, L, modname, evname);
+  if(!event) {
+    //nil, err already push onto the Lua stack
+    return 2;
+  }
+  
+  lua_pushlightuserdata(L, event);
+  return 1;
+}
+
 static int Lua_shuso_module_event_publish(lua_State *L) {
   shuso_t                 *S = shuso_state(L);
   int                      nargs = lua_gettop(L);
   const char              *modname = luaL_checkstring(L, 1);
   const char              *evname = luaL_checkstring(L, 2);
   intptr_t                 code;
+  
+  shuso_event_t           *event = lua_module_event_pointer(S, L, modname, evname);
+  if(!event) {
+    //nil, err already push onto the Lua stack
+    return 2;
+  }
   
   if(nargs < 3) {    
     code = 0;
@@ -1758,44 +1821,9 @@ static int Lua_shuso_module_event_publish(lua_State *L) {
     }
   }
   
-  shuso_module_t          *module = shuso_get_module(S, modname);
-  if(!module) {
-    lua_pushnil(L);
-    lua_pushfstring(L, "no such module '%s'", modname);
-    return 2;
-  }
-  lua_module_core_ctx_t   *ctx = shuso_core_context(S, module);
-  assert(ctx);
+  assert(evname == event->name);
   
-  luaS_push_lua_module_field(L, "shuttlesock.module", "module_publish_events");
-  lua_getfield(L, -1, modname);
-  lua_remove(L, -2);
-  if(!lua_istable(L, -1)) {
-    return luaL_error(L, "couldn't find module_publish_events table");
-  }
-  
-  lua_getfield(L, -1, evname);
-  if(lua_isnil(L, -1)) {
-    lua_pushnil(L);
-    lua_pushfstring(L, "can't publish event '%s:%s', it's not registed as a publishable event for module %s", modname, evname, modname);
-    return 2;
-  }
-  
-  lua_getfield(L, -1, "index");
-  if(!lua_isinteger(L, -1)) {
-    lua_pushnil(L);
-    lua_pushfstring(L, "can't publish event '%s:%s', it hasn't been initialized", modname, evname);
-    return 2;
-  }
-  int evindex = lua_tointeger(L, -1);
-  assert(evindex >= 0);
-  assert(evindex < ctx->events_count);
-  
-  lua_settop(L, nargs);
-  
-  assert(evname == ctx->events[evindex].name);
-  
-  const char    *datatype = ctx->events[evindex].data_type;
+  const char    *datatype = event->data_type;
   void          *data;
   bool           unwrapped = true;
   lua_reference_t unwrapref;
@@ -1817,7 +1845,7 @@ static int Lua_shuso_module_event_publish(lua_State *L) {
     unwrapped = false;
   }
   
-  bool ok = shuso_event_publish(S, &ctx->events[evindex], code, data);
+  bool ok = shuso_event_publish(S, event, code, data);
   
   if(wrapper && unwrapped && wrapper->unwrap_cleanup) {
     wrapper->unwrap_cleanup(L, datatype, unwrapref, data);
@@ -1859,6 +1887,9 @@ static int Lua_shuso_config_object(lua_State *L) {
 static int Lua_shuso_block_parent_setting_pointer(lua_State *L) {
   luaL_checktype(L, 1, LUA_TLIGHTUSERDATA);
   const shuso_setting_block_t *block = lua_topointer(L, 1);
+  if(block == NULL) {
+    return luaL_error(L, "wuh?");
+  }
   lua_pushlightuserdata(L, block->setting);
   return 1;
 }
@@ -1894,7 +1925,7 @@ static int Lua_shuso_block_setting_pointer(lua_State *L) {
 static int Lua_shuso_setting_block_pointer(lua_State *L) {
   luaL_checktype(L, 1, LUA_TLIGHTUSERDATA);
   const shuso_setting_t *setting = lua_topointer(L, 1);
-  if(setting->block) {
+  if(setting->block == NULL) {
     lua_pushnil(L);
   }
   else {
@@ -2000,6 +2031,25 @@ static int Lua_shuso_setting_value(lua_State *L) {
   lua_pushlstring(L, val->raw, val->raw_len);
   lua_setfield(L, -2, "raw");
   
+  return 1;
+}
+
+static int Lua_shuso_setting_parent_block_pointer(lua_State *L) {
+  luaL_checktype(L, 1, LUA_TLIGHTUSERDATA);
+  luaS_get_config_pointer_ref(L, (void *)lua_topointer(L, 1));
+  assert(!lua_isnil(L, -1));
+  lua_getfield(L, -1, "parent");
+  if(lua_isnil(L, -1)) {
+    return 1;
+  }
+  lua_getfield(L, -1, "block");
+  if(lua_isnil(L, -1)) {
+    return 1;
+  }
+  lua_getfield(L, -1, "ptr");
+  if(lua_isnil(L, -1)) {
+    return 1;
+  }
   return 1;
 }
 
@@ -2328,6 +2378,8 @@ luaL_Reg shuttlesock_core_module_methods[] = {
   {"config_setting_block_pointer", Lua_shuso_setting_block_pointer},
   {"config_setting_path", Lua_shuso_setting_path},
   {"config_match_path", Lua_shuso_match_path},
+  
+  {"config_setting_parent_block_pointer", Lua_shuso_setting_parent_block_pointer},
   {"config_setting_value", Lua_shuso_setting_value},
   {"config_setting_name", Lua_shuso_setting_name},
   {"config_setting_raw_name", Lua_shuso_setting_raw_name},
@@ -2355,12 +2407,13 @@ luaL_Reg shuttlesock_core_module_methods[] = {
   {"log_fatal", Lua_shuso_log_fatal},
 
 //modules
-  {"get_active_module", Lua_shuso_get_active_module},
+  {"blocks_cache", Lua_shuso_get_active_module},
   {"add_module", Lua_shuso_add_module},
   {"module_pointer", Lua_shuso_module_pointer},
   {"module_name", Lua_shuso_module_name},
   {"module_version", Lua_shuso_module_version},
 //module events
+  {"event_pointer", Lua_shuso_module_event_pointer},
   {"event_publish", Lua_shuso_module_event_publish},
   {"event_cancel", Lua_shuso_module_event_cancel},
   {"event_pause", Lua_shuso_module_event_pause},

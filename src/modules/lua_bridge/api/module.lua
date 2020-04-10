@@ -149,6 +149,9 @@ function module:add()
   if not Module.module_publish_events[self.name] then
     Module.module_publish_events[self.name] = {}
   end
+  
+  local publish_names = {}
+  
   for k, v in pairs(rawget(self, "publish") or {}) do
     local name, opts
     if type(k)=="number" then
@@ -164,14 +167,11 @@ function module:add()
       error("publish name " .. name .. " can't contain punctuation other than '.'", 0)
     end
     Module.module_publish_events[self.name][name]=opts
-  end
-  local publish_keys = {}
-  for k, _ in pairs(Module.module_publish_events[self.name] or {}) do
-    table.insert(publish_keys, k)
+    table.insert(publish_names, name)
   end
   self.publish = nil
   
-  module_table.publish = table.concat(publish_keys, " ")
+  module_table.publish = table.concat(publish_names, " ")
   local parent_modules = {}
   for _, v in ipairs(self.parent_modules or {}) do
     table.insert(parent_modules, v)
@@ -229,6 +229,10 @@ end
 
 function module:publish(event_name, code, data)
   return Core.event_publish(self.name, event_name, code, data)
+end
+
+function module:event_pointer(event_name)
+  return Core.event_pointer(self.name, event_name)
 end
 
 function module:type()

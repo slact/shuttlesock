@@ -12,7 +12,15 @@ local Server = Module.new {
   name = "server",
   version = require "shuttlesock".VERSION,
   publish = {
-    listen = {data_type="server_binding"}
+    ["accept"] = {
+      data_type = "server_accept"
+    },
+    ["http.accept"] = {
+      data_type = "server_accept"
+    },
+    ["stream.accept"] = {
+      data_type = "server_accept"
+    }
   },
   raw_hosts = {},
   bindings = {}
@@ -142,6 +150,7 @@ function Server:initialize_config(block)
   end
 
   host.block = block
+  host.type = block:parent_block().name
   host.setting = listen
   table.insert(self.raw_hosts, host)
 end
@@ -234,6 +243,10 @@ Server:subscribe("core:manager.workers_started", function()
     end
     
     --require"mm"(Server.bindings)
+    
+    --for _, binding in pairs(Server.bindings) do
+    --
+    --end
     
     local worker_procnums = Process.worker_procnums()
     

@@ -286,7 +286,8 @@ static int luaS_create_binding_data(lua_State *L) {
   shuso_event_init_t evinit = {
     .name = "accept",
     .event = &binding->accept_event,
-    .data_type = "server_accept", 
+    .data_type = "server_accept",
+    .detached = true
   };
   shuso_event_initialize(S, shuso_get_module(S, "server"), &binding->accept_event, &evinit);
   

@@ -58,12 +58,12 @@ function block:parent_setting()
   return Config.setting(self.parent_setting_ptr)
 end
 
-function block:parent_block()
+function block:parent_block(parent_level)
   local parent_setting = self:parent_setting()
   if not parent_setting then
     return nil
   end
-  return parent_setting.block
+  return parent_setting:parent_block(parent_level)
 end
 
 function block.settings() --all local setting in this
@@ -160,8 +160,15 @@ function Config.setting(ptr)
     raw_name = Core.config_setting_raw_name(ptr),
     module_name = Core.config_setting_module_name(ptr),
     path = Core.config_setting_path(ptr),
+    parent_block_ptr = Core.config_setting_parent_block_pointer(ptr),
     ptr=ptr,
   }, setting_mt)
+  
+  local block_ptr = Core.config_setting_block_pointer(ptr)
+  self.block_ptr = block_ptr
+  if block_ptr then
+    self.block = Config.block(block_ptr)
+  end
   
   self.values_cache = {}
   
@@ -246,6 +253,19 @@ end
 
 function block:match_path(match)
   return CoreConfig.match_path(self, match)
+end
+
+function setting:parent_block(level)
+  level = level or 1
+  assert(self.parent_block_ptr)
+  local parent_block = Config.block(self.parent_block_ptr)
+  
+  level = level - 1
+  if level == 0 then
+    return parent_block
+  else
+    return parent_block:parent_block(level)
+  end
 end
 
 Config.block_metatable = block_mt
