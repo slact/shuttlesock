@@ -229,7 +229,7 @@ Server:subscribe("core:manager.workers_started", function()
           return nil, host.setting:error("can't figure out internal id")
         end
         unique_bindings[id]=unique_bindings[id] or {address = addr, listen = {}}
-        table.insert(unique_bindings[id].listen, {block = host.block, setting = host.setting})
+        table.insert(unique_bindings[id].listen, {block = host.block, setting = host.setting, type=host.type})
         unique_binding_blocks[id] = unique_binding_blocks[id] or {}
         table.insert(unique_binding_blocks[id], host.block)
       end
@@ -240,6 +240,16 @@ Server:subscribe("core:manager.workers_started", function()
       binding.name = id
       binding.common_parent_block = common_parent_block(unique_binding_blocks[id])
       table.insert(Server.bindings, binding)
+      
+      local host_type
+      for _, host in pairs(binding.listen) do
+        if not host_type then
+          host_type = host.type
+        elseif host_type ~= binding.type then
+          return nil, host.setting:error("can't listen on the same address as server type '" .. host_type.."'")
+        end
+      end
+      binding.type = host_type
     end
     
     --require"mm"(Server.bindings)
@@ -288,7 +298,7 @@ Server:subscribe("core:manager.workers_started", function()
         for _, binding in ipairs(Server.bindings) do
           local fd = assert(table.remove(binding.sockets), "not enough listener sockets opened. weird")
           --print("uuuh send " .. binding.name .. " fd: " .. fd .. " to worker " .. worker)
-          IPC.send(worker, "server:listener_socket_transfer", {name = binding.name, fd = fd, address = binding.address, ptr = binding.ptr})
+          IPC.send(worker, "server:listener_socket_transfer", {name = binding.name, fd = fd, address = binding.address, binding_ptr = binding.ptr})
           local resp = receiver:yield()
           assert(resp == "ok", resp)
         end
@@ -311,7 +321,7 @@ Server:subscribe("core:worker.start", function()
       if data == "done" then
         break
       elseif type(data) == "table" then
-        local c_io_coro = CFuncs.start_worker_io_listener_coro(data.fd, data.ptr, data.address)
+        local c_io_coro = CFuncs.start_worker_io_listener_coro(Server, data.fd, data.ptr, data.binding_ptr)
         local resp
         if c_io_coro then
           table.insert(Server.listener_io_c_coroutines, c_io_coro)

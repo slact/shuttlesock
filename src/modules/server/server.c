@@ -148,6 +148,12 @@ static int luaS_create_binding_data(lua_State *L) {
   }
   binding->lua_hostnum = lua_tointeger(L, 2);
   
+  lua_getfield(L, 1, "type");
+  const char *server_type = lua_tostring(L, -1);
+  binding->server_type = shuso_stalloc(&S->stalloc, strlen(server_type)+1);
+  strcpy((char *)binding->server_type, server_type);
+  lua_pop(L, 1);
+  
   lua_pushvalue(L, 1);
   binding->ref = luaL_ref(L, LUA_REGISTRYINDEX);
   
@@ -282,18 +288,16 @@ static int luaS_create_binding_data(lua_State *L) {
   
   lua_pop(L, 1); //pop ["listen"]
   
-  
-  shuso_event_init_t evinit = {
-    .name = "accept",
-    .event = &binding->accept_event,
-    .data_type = "server_accept",
-    .detached = true
-  };
-  shuso_event_initialize(S, shuso_get_module(S, "server"), &binding->accept_event, &evinit);
-  
   lua_pushlightuserdata(L, binding);
   return 1;
 }
+
+typedef struct {
+  shuso_io_t                io;
+  shuso_event_t            *general_accept;
+  shuso_event_t            *specific_accept;
+  shuso_server_binding_t   *binding;
+} shuso_listener_io_data_t;
 
 static void listener_accept_coro_error(shuso_t *S, shuso_io_t *io) {
   shuso_log(S, "socket accept listener error");
@@ -301,7 +305,7 @@ static void listener_accept_coro_error(shuso_t *S, shuso_io_t *io) {
 
 static void listener_accept_coro(shuso_t *S, shuso_io_t *io) {
   
-  
+  shuso_listener_io_data_t *d = io->privdata;
   int rc = 0;
   SHUSO_IO_CORO_BEGIN(io, listener_accept_coro_error);
   rc = listen(io->io_socket.fd, 100);
@@ -313,27 +317,51 @@ static void listener_accept_coro(shuso_t *S, shuso_io_t *io) {
     SHUSO_IO_CORO_YIELD(accept);
     shuso_log(S, "accepted new socket");
     
+    
   }
   SHUSO_IO_CORO_END(io);
 }
 
 static int luaS_start_worker_io_listener_coroutine(lua_State *L) {
   shuso_t *S = shuso_state(L);
-  shuso_io_t *io = shuso_stalloc(&S->stalloc, sizeof(*io));
-  if(!io) {
-    return luaL_error(L, "failed to allocate shuso_io for listener socket");
+  shuso_listener_io_data_t  *data;
+  int                        fd = lua_tointeger(L, 2);
+  shuso_hostinfo_t          *host = (void *)lua_topointer(L, 3);
+  shuso_server_binding_t    *binding = (void *)lua_topointer(L, 3);
+  
+  
+  
+  data = shuso_stalloc(&S->stalloc, sizeof(*data));
+  
+  data->binding = binding;
+  
+  lua_getfield(L, 1, "event_pointer");
+  lua_pushvalue(L, 1);
+  lua_pushliteral(L, "accept");
+  luaS_call(L, 2, 1);
+  data->general_accept = (void *)lua_topointer(L, -1);
+  lua_pop(L, 1);
+  
+  lua_getfield(L, 1, "event_pointer");
+  lua_pushvalue(L, 1);
+  lua_pushfstring(L, "%s.accept", binding->server_type);
+  luaS_call(L, 2, 1);
+  data->specific_accept = (void *)lua_topointer(L, -1);
+  lua_pop(L, 1);
+  
+  if(!data) {
+    return luaL_error(L, "failed to allocate shuso_io data for listener socket");
   }
-  int                 fd = lua_tointeger(L, 1);
-  shuso_hostinfo_t   *host = (void *)lua_topointer(L, 2);
+  
   shuso_socket_t      sock = {
     .fd = fd,
     .host = *host
   };
   
-  shuso_io_init(S, io, &sock, SHUSO_IO_READ, listener_accept_coro, NULL);
-  shuso_io_start(io);
+  shuso_io_init(S, &data->io, &sock, SHUSO_IO_READ, listener_accept_coro, data);
+  shuso_io_start(&data->io);
   
-  lua_pushlightuserdata(L, io);
+  lua_pushlightuserdata(L, &data->io);
   return 1;
 }
 
