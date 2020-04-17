@@ -48,9 +48,6 @@ typedef enum {
   SHUSO_VALUE_BOOL,
 } shuso_setting_value_type_t;
 
-#define SHUTTLESOCK_FIRST_PRIORITY 127
-#define SHUTTLESOCK_LAST_PRIORITY -127
-
 typedef enum {
   //non-positive states MUST be kinds of non-running states
   SHUSO_STATE_DEAD = -5,

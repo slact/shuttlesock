@@ -83,6 +83,9 @@ bool shuso_event_initialize(shuso_t *S, shuso_module_t *mod, shuso_event_t *mev,
     const char *        :shuso_event_by_name_listen_with_priority \
   )(S, evt, callback, pd, priority)
 
+#define SHUTTLESOCK_FIRST_PRIORITY 127
+#define SHUTTLESOCK_LAST_PRIORITY -127
+
 bool shuso_event_by_name_listen_with_priority(shuso_t *S, const char *name, shuso_event_fn *callback, void *pd, int8_t priority);
 bool shuso_event_by_pointer_listen_with_priority(shuso_t *S, shuso_event_t *event, shuso_event_fn *callback, void *pd, int8_t priority);
   
