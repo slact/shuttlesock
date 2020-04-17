@@ -12,7 +12,7 @@ local Server = Module.new {
   name = "server",
   version = require "shuttlesock".VERSION,
   publish = {
-    ["accept"] = {
+    ["maybe_accept"] = {
       data_type = "server_accept"
     },
     ["http.accept"] = {
@@ -21,6 +21,9 @@ local Server = Module.new {
     ["stream.accept"] = {
       data_type = "server_accept"
     }
+  },
+  subscribe = {
+    "~server:maybe_accept"
   },
   raw_hosts = {},
   bindings = {}
@@ -155,6 +158,10 @@ function Server:initialize_config(block)
   table.insert(self.raw_hosts, host)
 end
 
+function Server:initialize()
+  CFuncs.maybe_accept_event_init(self:event_pointer("maybe_accept"))
+end
+
 local function common_parent_block(blocks)
   local parents = {}
   local maxlen = 0
@@ -164,7 +171,7 @@ local function common_parent_block(blocks)
     repeat
       table.insert(pchain, 1, cur)
       cur = cur:parent_block()
-    until not cur
+    until not cur or cur.name == "::ROOT"
     
     table.insert(parents, pchain)
     if maxlen < #pchain then
@@ -234,7 +241,6 @@ Server:subscribe("core:manager.workers_started", function()
         table.insert(unique_binding_blocks[id], host.block)
       end
     end
-    
     Server.bindings = {}
     for id, binding in pairs(unique_bindings) do
       binding.name = id
@@ -251,7 +257,6 @@ Server:subscribe("core:manager.workers_started", function()
       end
       binding.type = host_type
     end
-    
     --require"mm"(Server.bindings)
     
     --for _, binding in pairs(Server.bindings) do

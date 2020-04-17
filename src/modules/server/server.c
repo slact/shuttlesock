@@ -294,8 +294,8 @@ static int luaS_create_binding_data(lua_State *L) {
 
 typedef struct {
   shuso_io_t                io;
-  shuso_event_t            *general_accept;
-  shuso_event_t            *specific_accept;
+  shuso_event_t            *maybe_accept_event;
+  shuso_event_t            *accept_event;
   shuso_server_binding_t   *binding;
 } shuso_listener_io_data_t;
 
@@ -305,7 +305,8 @@ static void listener_accept_coro_error(shuso_t *S, shuso_io_t *io) {
 
 static void listener_accept_coro(shuso_t *S, shuso_io_t *io) {
   
-  shuso_listener_io_data_t *d = io->privdata;
+  shuso_listener_io_data_t   *d = io->privdata;
+  shuso_server_tentative_accept_data_t  maybe_accept_data;
   int rc = 0;
   SHUSO_IO_CORO_BEGIN(io, listener_accept_coro_error);
   rc = listen(io->io_socket.fd, 100);
@@ -315,9 +316,13 @@ static void listener_accept_coro(shuso_t *S, shuso_io_t *io) {
   while(rc == 0) {
     SHUSO_IO_CORO_YIELD(wait, SHUSO_IO_READ);
     SHUSO_IO_CORO_YIELD(accept);
-    shuso_log(S, "accepted new socket");
     
+    memcpy(&maybe_accept_data.sockaddr, &io->sockaddr, sizeof(io->sockaddr));
+    maybe_accept_data.fd = io->result_fd;
+    maybe_accept_data.binding = d->binding;
+    maybe_accept_data.accept_event = d->accept_event;
     
+    shuso_event_publish(S, d->maybe_accept_event, SHUSO_OK, &maybe_accept_data);
   }
   SHUSO_IO_CORO_END(io);
 }
@@ -339,14 +344,14 @@ static int luaS_start_worker_io_listener_coroutine(lua_State *L) {
   lua_pushvalue(L, 1);
   lua_pushliteral(L, "accept");
   luaS_call(L, 2, 1);
-  data->general_accept = (void *)lua_topointer(L, -1);
+  data->maybe_accept_event = (void *)lua_topointer(L, -1);
   lua_pop(L, 1);
   
   lua_getfield(L, 1, "event_pointer");
   lua_pushvalue(L, 1);
   lua_pushfstring(L, "%s.accept", binding->server_type);
   luaS_call(L, 2, 1);
-  data->specific_accept = (void *)lua_topointer(L, -1);
+  data->accept_event = (void *)lua_topointer(L, -1);
   lua_pop(L, 1);
   
   if(!data) {
@@ -533,13 +538,81 @@ static lua_reference_t binding_data_lua_unwrap(lua_State *L, const char *type, i
   return LUA_NOREF;
 }
 
+static void maybe_accept_event_confirm_accept(shuso_t *S, shuso_event_state_t *evs, intptr_t code,  void *d, void *pd) {
+  shuso_server_tentative_accept_data_t *data = d;
+  shuso_server_accept_data_t            accept_data;
+  shuso_socket_t                        socket;
+  
+  socket.fd = data->fd;
+  socket.host.name = NULL;
+  
+  //TODO: udp flag from binding
+  
+  switch(data->sockaddr.any.sa_family) {
+    case AF_INET:
+      socket.host.addr_family = AF_INET;
+      socket.host.addr = data->sockaddr.inet.sin_addr;
+      socket.host.port = data->sockaddr.inet.sin_port;
+      socket.host.sockaddr_in = &data->sockaddr.inet;
+      break;
+#ifdef SHUTTLESOCK_HAVE_IPV6
+    case AF_INET6:
+      socket.host.addr_family = AF_INET6;
+      socket.host.addr6 = data->sockaddr.inet6.sin6_addr;
+      socket.host.port = data->sockaddr.inet6.sin6_port;
+      socket.host.sockaddr_in6 = &data->sockaddr.inet6;
+      break;
+#endif
+    case AF_UNIX:
+      socket.host.addr_family = AF_UNIX;
+      //TODO: get the unix path
+      socket.host.path = NULL;
+      socket.host.port = 0;
+      socket.host.sockaddr_un = NULL;
+      break;
+  }
+  
+  accept_data = (shuso_server_accept_data_t ) {
+    .socket = &socket,
+    .binding = data->binding
+  };
+  
+  shuso_event_publish(S, data->accept_event, SHUSO_OK, &accept_data);
+}
+
+static void no_accept_handler_found(shuso_t *S, shuso_event_state_t *evs, intptr_t code,  void *d, void *pd) {
+  shuso_server_accept_data_t *data = d;
+  close(data->socket->fd);
+  //TODO: from where?
+  shuso_log_info(S, "No handler accepted incoming connection [FROM WHERE?]");
+}
+
+static int luaS_accept_event_init(lua_State *L) {
+  shuso_t *S = shuso_state(L);
+  
+  shuso_event_t *accept_event = (void *)lua_topointer(L, 1);
+  shuso_event_listen_with_priority(S, accept_event, no_accept_handler_found, NULL, SHUTTLESOCK_LAST_PRIORITY);
+  
+  return 0;
+}
+
+static int luaS_maybe_accept_event_init(lua_State *L) {
+  shuso_t *S = shuso_state(L);
+  
+  shuso_event_t *maybe_accept_event = (void *)lua_topointer(L, 1);
+  shuso_event_listen_with_priority(S, maybe_accept_event, maybe_accept_event_confirm_accept, NULL, SHUTTLESOCK_LAST_PRIORITY);
+  
+  return 0;
+}
+
 void shuttlesock_server_module_prepare(shuso_t *S, void *pd) {
   luaL_Reg lib[] = {
     {"getaddrinfo_noresolve", get_addr_info},
     {"create_binding_data", luaS_create_binding_data},
     {"start_worker_io_listener_coro", luaS_start_worker_io_listener_coroutine},
     {"stop_worker_io_listener_coro", luaS_stop_worker_io_listener_coroutine},
-    
+    {"maybe_accept_event_init", luaS_maybe_accept_event_init},
+    {"accept_event_init", luaS_accept_event_init},
     {"create_shared_host_data", luaS_create_shared_host_data},
     {"handle_fd_request", luaS_handle_fd_request},
     {"free_shared_host_data", luaS_free_shared_host_data},
