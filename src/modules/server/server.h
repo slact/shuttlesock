@@ -18,8 +18,6 @@ typedef struct {
     }                  *array;
     shuso_setting_block_t *common_parent_block;
   }                   config;
-  shuso_io_t          io;
-  shuso_event_t       accept_event;
 } shuso_server_binding_t;
 
 typedef struct {

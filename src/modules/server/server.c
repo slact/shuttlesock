@@ -311,12 +311,17 @@ static void listener_accept_coro(shuso_t *S, shuso_io_t *io) {
   SHUSO_IO_CORO_BEGIN(io, listener_accept_coro_error);
   rc = listen(io->io_socket.fd, 100);
   if(rc < 0) {
-    shuso_set_error(S, "failed to listen on that ol' socket");
+    shuso_set_error_errno(S, "failed to listen on %s: %s", d->binding->host.name ? d->binding->host.name : "(?)", strerror(errno));
+  }
+  else {
+    shuso_log_info(S, "Listening on %s", d->binding->host.name ? d->binding->host.name : "(?)");
   }
   while(rc == 0) {
+    shuso_log_debug(S, "WAIT_READ");
     SHUSO_IO_CORO_YIELD(wait, SHUSO_IO_READ);
+    shuso_log_debug(S, "accept()");
     SHUSO_IO_CORO_YIELD(accept);
-    
+    shuso_log_debug(S, "accepted");
     memcpy(&maybe_accept_data.sockaddr, &io->sockaddr, sizeof(io->sockaddr));
     maybe_accept_data.fd = io->result_fd;
     maybe_accept_data.binding = d->binding;
@@ -331,20 +336,18 @@ static int luaS_start_worker_io_listener_coroutine(lua_State *L) {
   shuso_t *S = shuso_state(L);
   shuso_listener_io_data_t  *data;
   int                        fd = lua_tointeger(L, 2);
-  shuso_hostinfo_t          *host = (void *)lua_topointer(L, 3);
   shuso_server_binding_t    *binding = (void *)lua_topointer(L, 3);
-  
-  
+  assert(binding);
   
   data = shuso_stalloc(&S->stalloc, sizeof(*data));
   
   data->binding = binding;
-  
   lua_getfield(L, 1, "event_pointer");
   lua_pushvalue(L, 1);
-  lua_pushliteral(L, "accept");
+  lua_pushliteral(L, "maybe_accept");
   luaS_call(L, 2, 1);
   data->maybe_accept_event = (void *)lua_topointer(L, -1);
+  assert(data->maybe_accept_event);
   lua_pop(L, 1);
   
   lua_getfield(L, 1, "event_pointer");
@@ -352,6 +355,7 @@ static int luaS_start_worker_io_listener_coroutine(lua_State *L) {
   lua_pushfstring(L, "%s.accept", binding->server_type);
   luaS_call(L, 2, 1);
   data->accept_event = (void *)lua_topointer(L, -1);
+  assert(data->accept_event);
   lua_pop(L, 1);
   
   if(!data) {
@@ -360,7 +364,7 @@ static int luaS_start_worker_io_listener_coroutine(lua_State *L) {
   
   shuso_socket_t      sock = {
     .fd = fd,
-    .host = *host
+    .host = binding->host
   };
   
   shuso_io_init(S, &data->io, &sock, SHUSO_IO_READ, listener_accept_coro, data);
@@ -490,15 +494,6 @@ static int luaS_handle_fd_request(lua_State *L) {
   }
   
   shuso_set_nonblocking(fd);
-  
-  if(bind(fd, &sockaddr.sa, sockaddr_len) == -1) {
-    close(fd);
-    lua_pushnil(L);
-    lua_pushfstring(L, "Failed to bind listener socket %s: %s", hostinfo->name ? hostinfo->name : "", strerror(errno));
-    return 2;
-  }
-  
-  
   for(unsigned i=0; i < opts.count; i++) {
     shuso_sockopt_t *opt = &opts.array[i];
     if(!shuso_setsockopt(S, fd, opt)) {
@@ -507,6 +502,14 @@ static int luaS_handle_fd_request(lua_State *L) {
       lua_pushfstring(L, "Failed to set sockopts for listener socket %s: %s", hostinfo->name ? hostinfo->name : "", strerror(errno));
       return 2;
     }
+  }
+  
+  
+  if(bind(fd, &sockaddr.sa, sockaddr_len) == -1) {
+    close(fd);
+    lua_pushnil(L);
+    lua_pushfstring(L, "Failed to bind listener socket %s: %s", hostinfo->name ? hostinfo->name : "", strerror(errno));
+    return 2;
   }
   
   lua_pushinteger(L, fd);

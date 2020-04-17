@@ -251,7 +251,9 @@ Server:subscribe("core:manager.workers_started", function()
       for _, host in pairs(binding.listen) do
         if not host_type then
           host_type = host.type
-        elseif host_type ~= binding.type then
+        elseif host_type ~= host.type then
+          require"mm"(binding)
+          print(host_type, binding.type)
           return nil, host.setting:error("can't listen on the same address as server type '" .. host_type.."'")
         end
       end
@@ -326,7 +328,7 @@ Server:subscribe("core:worker.start", function()
       if data == "done" then
         break
       elseif type(data) == "table" then
-        local c_io_coro = CFuncs.start_worker_io_listener_coro(Server, data.fd, data.ptr, data.binding_ptr)
+        local c_io_coro = CFuncs.start_worker_io_listener_coro(Server, data.fd, data.binding_ptr)
         local resp
         if c_io_coro then
           table.insert(Server.listener_io_c_coroutines, c_io_coro)
