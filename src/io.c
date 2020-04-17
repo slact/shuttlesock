@@ -349,6 +349,7 @@ static void shuso_io_ev_operation(shuso_io_t *io) {
         result = io_ev_connect(io);
         break;
       case SHUSO_IO_OP_ACCEPT:
+        shuso_log_debug(io->S, "SHUSO_IO_OP_ACCEPT");
         io->address_len = sizeof(io->sockaddr);
 #ifdef SHUTTLESOCK_HAVE_ACCEPT4
         result = accept4(io->io_socket.fd, &io->sockaddr.any, &io->address_len, SOCK_NONBLOCK);
@@ -481,10 +482,7 @@ void shuso_io_wait(shuso_io_t *io, int evflags) {
 }
 
 void shuso_io_accept(shuso_io_t *io) {
-  io->opcode = SHUSO_IO_OP_ACCEPT;
-  io->watch_type = SHUSO_IO_WATCH_NONE;
-  io_watch_update(io);
-  return;
+  io_op_run_new(io, SHUSO_IO_OP_ACCEPT, NULL, 0, false, false);
 }
 
 void shuso_io_writev_partial(shuso_io_t *io, struct iovec *iov, int iovcnt) {
