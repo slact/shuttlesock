@@ -1331,7 +1331,7 @@ static bool lua_module_event_interrupt_handler(shuso_t *S, shuso_event_t *event,
 static bool lua_module_initialize(shuso_t *S, shuso_module_t *module) {
   lua_State *L = S->lua.state;
   int top = lua_gettop(L);
-  
+
   lua_module_core_ctx_t *ctx = shuso_stalloc(&S->stalloc, sizeof(*ctx));
   shuso_set_core_context(S, module, ctx);
   ctx->events = NULL;
@@ -1403,14 +1403,10 @@ static bool lua_module_initialize(shuso_t *S, shuso_module_t *module) {
     lua_pushnil(L);
     while(lua_next(L, -2)) {
       const char *event_name = lua_tostring(L, -2);
-      lua_pushnil(L);
-      while(lua_next(L, -2)) {
-        
-        lua_getfield(L, -1, "optional_event_name");
-        if(lua_isstring(L, -1)) {
-          event_name = lua_tostring(L, -1);
-        }
-        lua_pop(L, 1);
+      bool        optional = false;
+      int         listeners_count = luaL_len(L, -1);
+      for(int i=1; i<=listeners_count; i++) {
+        lua_geti(L, -1, i);
         
         lua_getfield(L, -1, "priority");
         int priority = lua_tointeger(L, -1);
@@ -1419,7 +1415,21 @@ static bool lua_module_initialize(shuso_t *S, shuso_module_t *module) {
         lua_getfield(L, -1, "index");
         intptr_t fn_index = lua_tointeger(L, -1);
         lua_pop(L, 1);
+        
+        lua_getfield(L, -1, "optional");
+        optional = lua_toboolean(L, -1);
+        lua_pop(L, 1);
+        
+        if(optional) {
+          lua_pushfstring(L, "~%s", event_name);
+          event_name = lua_tostring(L, -1);
+        }
+        
         shuso_event_listen_with_priority(S, event_name, lua_module_event_listener, (void *)fn_index, priority);
+        if(optional) {
+          lua_pop(L, 1);
+        }
+        
         lua_pop(L, 1);
       }
       lua_pop(L, 1);

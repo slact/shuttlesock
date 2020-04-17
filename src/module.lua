@@ -374,7 +374,7 @@ do
   end
   
   function module:subscribes_to_event(name)
-    return self.events.subscribe[name]
+    return self.events.subscribe[name] or self.events.subscribe["~"..name]
   end
   
   function module:event(name)

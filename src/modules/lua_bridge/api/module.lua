@@ -44,11 +44,21 @@ function Module.wrap(module_name, module_ptr)
   return self
 end
 
+local function event_name_optional_check(name)
+  local opt, evname = name:match("(~?)(.*)")
+  if #opt > 0 then
+    return evname, true
+  else
+    return evname
+  end
+end
+
 local function subscribe_to_event_names(self)
   for k, v in pairs(rawget(self, "subscribe") or {}) do
     if type(k) == "number" then
       assert0(type(v) == "string", "numerically-indexed subscribe event name must be a string")
-      Module.module_subscribers[self][v]={}
+      local name, optional = event_name_optional_check(v)
+      Module.module_subscribers[self][name]={optional=optional}
     elseif type(k) == "string" then
       if type(v) == "function" then
         assert0(self:subscribe(k, v))
@@ -124,7 +134,7 @@ function module:add()
   
   subscribe_to_event_names(self)
   for full_event_name, subscribers in pairs(Module.module_subscribers[self]) do
-    local optional = true
+    local all_subscribers_optional = #subscribers > 0 or subscribers.optional
     for _, sub in ipairs(subscribers) do
       local subscriber = sub.subscriber
       sub.wrapper = function (eventstate_ptr, publisher_module_name, module_name, event_name, code, data)
@@ -135,11 +145,11 @@ function module:add()
       end
       table.insert(Module.event_subscribers, sub.wrapper)
       sub.index = #Module.event_subscribers
-      optional = sub.optional_event_name and optional
+      all_subscribers_optional = sub.optional and all_subscribers_optional
     end
     if not subs_unique[full_event_name] then
       subs_unique[full_event_name] = true
-      table.insert(subs, (optional and "~" or "") .. full_event_name)
+      table.insert(subs, (all_subscribers_optional and "~" or "") .. full_event_name)
     end
   end
 
@@ -209,7 +219,7 @@ function module:subscribe(event_name, subscriber_function, priority)
   
   local optional
   optional, event_name = event_name:match("^(%~?)(.*)")
-  optional = #optional > 0
+  optional = #optional > 0 and true or nil
   
   if lua_modules[self.name] and not Module.module_subscribers[self][event_name] then
     --module already added, but the subscribe event name wasn't declared upfront
@@ -222,7 +232,7 @@ function module:subscribe(event_name, subscriber_function, priority)
   table.insert(Module.module_subscribers[self][event_name], {
     priority = tonumber(priority) or 0,
     subscriber = subscriber_function,
-    optional_event_name = optional and ("~"..event_name) or nil
+    optional = optional,
   })
   return self
 end
