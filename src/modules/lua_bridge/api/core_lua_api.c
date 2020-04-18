@@ -8,6 +8,7 @@
 #include <ares.h>
 #include <errno.h>
 #include <pthread.h>
+#include <math.h>
 #include "ipc_lua_api.h"
 #include <shuttlesock/modules/config/private.h>
 
@@ -2347,6 +2348,451 @@ static int Lua_shuso_spinlock_destroy(lua_State *L) {
   return 1;
 }
 
+//socket fd
+static int Lua_shuso_socket_create(lua_State *L) {
+  int                             fd = -1;
+  int                             family = 0, socktype = 0, protocol = 0;
+  shuso_sockopt_t                 sockopt;
+  const shuso_system_sockopts_t  *sockopt_template;
+  
+  luaL_checkstring(L, 1);
+  luaL_checkstring(L, 2);
+  
+  //socket family
+  if(luaS_streq_literal(L, 1, "AF_UNIX")) {
+    family = AF_UNIX;
+  }
+  else if(luaS_streq_literal(L, 1, "AF_LOCAL")) {
+#ifdef AF_LOCAL
+    family = AF_LOCAL;
+#else
+    family = AF_UNIX;
+#endif
+  }
+  else if(luaS_streq_literal(L, 1, "AF_INET")) {
+    family = AF_INET;
+  }
+  else if(luaS_streq_literal(L, 1, "AF_INET6")) {
+#ifdef SHUTTLESOCK_HAVE_IPV6
+    family = AF_INET6;
+#else
+    lua_pushliteral("Can't create IPv6 socket: IPv6 not supported on this system.");
+    goto fail;
+#endif
+  }
+  else {
+    lua_pushfstring(L, "Can't create socket: Unsupported address family %s", lua_tostring(L, 1));
+    goto fail;
+  }
+  
+  //socket type
+  if(luaS_streq_literal(L, 1, "SOCK_STREAM")) {
+    socktype = SOCK_STREAM;
+  }
+  else if(luaS_streq_literal(L, 1, "SOCK_DGRAM")) {
+    socktype = SOCK_DGRAM;
+  }
+  else if(luaS_streq_literal(L, 1, "SOCK_RAW")) {
+    socktype = SOCK_RAW;
+  }
+  else {
+    lua_pushfstring(L, "Can't create socket: Unsupported socket type %s", lua_tostring(L, 2));
+    goto fail;
+  }
+  
+  //socket protocol -- not supported
+  
+  fd = socket(family, socktype, protocol);
+  if(fd != 0) {
+    lua_pushfstring(L, "Can't create socket (family %s, type %s): %s", lua_tostring(L, 1), lua_tostring(L, 2), strerror(errno));
+    goto fail;
+  }
+  
+  shuso_set_nonblocking(fd);
+  if(lua_istable(L, 3)) {
+    lua_pushnil(L);
+    while(lua_next(L, 3)) {
+      if(!lua_isstring(L, -2)) {
+        goto fail_sockopt_key_not_string;
+      }
+      
+      luaS_push_lua_module_field(L, "shuttlesock.core", "socket_sockopts_table");
+      lua_getfield(L, -1, lua_tostring(L, -3));
+      if(lua_isnil(L, -1)) {
+        goto fail_unknown_sockopt;
+      }
+      sockopt_template = lua_topointer(L, -1);
+      lua_pop(L, 2);
+      
+      
+      socklen_t len = 0;
+      sockopt.level = sockopt_template->level;
+      sockopt.name = sockopt_template->name;
+      
+      switch(sockopt_template->value_type) {
+        case SHUSO_SYSTEM_SOCKOPT_MISSING:
+          goto fail_unavailable_sockopt;
+        
+        case SHUSO_SYSTEM_SOCKOPT_VALUE_TYPE_INT:
+          sockopt.value.integer = lua_tointeger(L, -1);
+          len = sizeof(sockopt.value.integer);
+          break;
+        
+        case SHUSO_SYSTEM_SOCKOPT_VALUE_TYPE_FLAG:
+          sockopt.value.flag = lua_tointeger(L, -1);
+          len = sizeof(sockopt.value.flag);
+          break;
+        
+        case SHUSO_SYSTEM_SOCKOPT_VALUE_TYPE_LINGER:
+          if(lua_isboolean(L, -1) && lua_toboolean(L, -1) == false) {
+            sockopt.value.linger.l_onoff = 0;
+            sockopt.value.linger.l_linger = 0;
+          }
+          else if(lua_isnumber(L, -1)) {
+            sockopt.value.linger.l_onoff = 1;
+            sockopt.value.linger.l_linger = lua_tointeger(L, -1);
+          }
+          else if(lua_istable(L, -1)) {
+            lua_getfield(L, -1, "onoff");
+            sockopt.value.linger.l_onoff = lua_toboolean(L, -1);
+            lua_pop(L, 1);
+            
+            lua_getfield(L, -1, "linger");
+            sockopt.value.linger.l_linger = lua_tointeger(L, -1);
+            lua_pop(L, 1);
+          }
+          len = sizeof(sockopt.value.linger);
+          break;
+        
+        case SHUSO_SYSTEM_SOCKOPT_VALUE_TYPE_TIMEVAL: {
+          double timeval_float = lua_tonumber(L, -1);
+          sockopt.value.timeval.tv_sec = floor(timeval_float);
+          sockopt.value.timeval.tv_usec = (timeval_float - sockopt.value.timeval.tv_sec) * 1000000;
+          len = sizeof(sockopt.value.timeval);
+          break;
+        }
+        default:
+          lua_pushliteral(L, "invalid sockopt");
+          goto fail;
+      }
+      
+      int rc = setsockopt(fd, sockopt.level, sockopt.name, (void *)&sockopt.value, len);
+      if(rc != 0) {
+        goto fail_setsockopt;
+      }
+    }
+  }
+  
+  lua_pushinteger(L, fd);
+  return 1;
+
+fail_setsockopt:
+  lua_pushfstring(L, "Can't create socket: failed to setsockopt %s: %s", sockopt_template->str, strerror(errno));
+  goto fail;
+fail_unknown_sockopt:
+  lua_pushfstring(L, "Can't create socket: unknown sockopt %s", lua_tostring(L, -4));
+  goto fail;
+fail_unavailable_sockopt:
+  lua_pushfstring(L, "Can't create socket: sockopt %s unavailable on this system", sockopt_template->str);
+  goto fail;
+fail_sockopt_key_not_string:
+  lua_pushfstring(L, "Can't create socket: sockopt key must be a string");
+  goto fail;
+fail:
+  lua_pushnil(L);
+  lua_insert(L, -2);
+  assert(lua_isnil(L, -2));
+  assert(lua_isstring(L, -1));
+  return 2;
+}
+
+static int Lua_shuso_socket_destroy(lua_State *L) {
+  int fd = luaL_checkinteger(L, 1);
+  int rc = close(fd);
+  if(rc != 0) {
+    lua_pushnil(L);
+    lua_pushstring(L, strerror(errno));
+    return 2;
+  }
+  lua_pushboolean(L, 1);
+  return 1;
+}
+
+typedef struct {
+  lua_reference_t name_ref;
+  lua_reference_t path_ref;
+  lua_reference_t sockaddr_ref;
+  lua_reference_t data_ref;
+  lua_reference_t handler_ref;
+} shuso_lua_io_data_t;
+
+static int Lua_shuso_io_gc(lua_State *L) {
+  shuso_io_t            *io = luaL_checkudata(L, 1, "shuttlesock.core.io");
+  shuso_lua_io_data_t   *d = io->privdata;
+  
+  if(io->io_socket.fd != -1) {
+    close(io->io_socket.fd);
+    io->io_socket.fd = -1;
+  }
+  
+  if(d->name_ref != LUA_NOREF) {
+    luaL_unref(L, LUA_REGISTRYINDEX, d->name_ref);
+    d->name_ref = LUA_NOREF;
+    io->io_socket.host.name = NULL;
+  }
+  if(d->path_ref != LUA_NOREF) {
+    luaL_unref(L, LUA_REGISTRYINDEX, d->path_ref);
+    d->path_ref = LUA_NOREF;
+    io->io_socket.host.path = NULL;
+  }
+  if(d->sockaddr_ref != LUA_NOREF) {
+    luaL_unref(L, LUA_REGISTRYINDEX, d->sockaddr_ref);
+    d->sockaddr_ref = LUA_NOREF;
+    io->io_socket.host.sockaddr = NULL;
+  }
+  if(d->data_ref != LUA_NOREF) {
+    luaL_unref(L, LUA_REGISTRYINDEX, d->data_ref);
+    d->data_ref = LUA_NOREF;
+  }
+  if(d->handler_ref != LUA_NOREF) {
+    luaL_unref(L, LUA_REGISTRYINDEX, d->handler_ref);
+    d->handler_ref = LUA_NOREF;
+  }
+  return 0;
+}
+static int Lua_shuso_io_op(lua_State *L);
+static int Lua_shuso_io_get_io_fd(lua_State *L);
+static int Lua_shuso_io_get_value(lua_State *L);
+static void iodata_update_data_ref(lua_State *L, shuso_lua_io_data_t *data, int index);
+static int Lua_shuso_io_set_value(lua_State *L);
+
+static int Lua_shuso_io_create(lua_State *L) {
+  struct {
+    shuso_io_t          io;
+    shuso_lua_io_data_t data;
+  } *io_blob;
+  
+  luaL_checktype(L, 1, LUA_TTABLE);
+  luaL_checktype(L, 2, LUA_TFUNCTION);
+  
+  luaL_checkstack(L, 5, NULL);
+  
+  io_blob = lua_newuserdata(L, sizeof(*io_blob));
+  
+  shuso_io_t          *io = &io_blob->io;
+  shuso_lua_io_data_t *data = &io_blob->data;
+  io->privdata = data;
+  
+  luaL_newmetatable(L, "shuttlesock.core.io");
+  luaL_setfuncs(L, (luaL_Reg[]) {
+    {"__gc", Lua_shuso_io_gc},
+    {NULL, NULL}
+  }, 0);
+  //__index
+  lua_newtable(L);
+  luaL_setfuncs(L, (luaL_Reg[]) {
+    {"get_io_fd", Lua_shuso_io_get_io_fd},
+    //{"get_io_socket", Lua_shuso_io_get_socket},
+    {"get_value", Lua_shuso_io_get_value},
+    {"set_value", Lua_shuso_io_set_value},
+    {"op", Lua_shuso_io_op},
+    {NULL, NULL}
+  }, 0);
+  lua_setfield(L, -2, "__index");
+  lua_setmetatable(L, -2);
+  
+  lua_getfield(L, 1, "fd");
+  assert(!lua_isnil(L, -1));
+  io->io_socket.fd = lua_tointeger(L, 1);
+  lua_pop(L, 1);
+  
+  lua_getfield(L, 1, "name");
+  if(lua_isstring(L, -1)) {
+    io->io_socket.host.name = lua_tostring(L, -1);
+    data->name_ref = luaL_ref(L, LUA_REGISTRYINDEX);
+  }
+  else {
+    lua_pop(L, 1);
+    data->name_ref = LUA_NOREF;
+  }
+  
+  lua_getfield(L, 1, "addr_family");
+  if(luaS_streq_literal(L, -1, "AF_INET")) {
+    io->io_socket.host.addr_family = AF_INET;
+    lua_getfield(L, 1, "addr");
+    size_t sz;
+    const char *addr = lua_tolstring(L, -1, &sz);
+    assert(sz == sizeof(io->io_socket.host.addr));
+    memcpy(&io->io_socket.host.addr, addr, sz);
+    lua_pop(L, 1);
+  }
+  else if(luaS_streq_literal(L, -1, "AF_INET6")) {
+#ifdef SHUTTLESOCK_HAVE_IPV6
+    io->io_socket.host.addr_family = AF_INET6;
+    size_t sz;
+    const char *addr6 = lua_tolstring(L, -1, &sz);
+    assert(sz == sizeof(io->io_socket.host.addr6));
+    memcpy(&io->io_socket.host.addr6, (void *)addr6, sz);
+    lua_pop(L, 1);
+#else
+    lua_pushnil(L);
+    lua_pushliteral(L, "Can't create IPv6 io coro: IPv6 is not supported on this system");
+    return 2;
+#endif
+  }
+  else if(luaS_streq_literal(L, -1, "AF_UNIX")) {
+    io->io_socket.host.addr_family = AF_UNIX;
+  }
+  
+  lua_getfield(L, 1, "path");
+  if(lua_isstring(L, -1)) {
+    io->io_socket.host.path = lua_tostring(L, -1);
+    data->path_ref = luaL_ref(L, LUA_REGISTRYINDEX);
+  }
+  else {
+    data->path_ref = LUA_NOREF;
+    lua_pop(L, 1);
+  }
+  
+  lua_getfield(L, 1, "sockaddr");
+  if(!lua_isnil(L, 1)) {
+    io->io_socket.host.sockaddr = (void *)lua_topointer(L, -1);
+    data->sockaddr_ref = luaL_ref(L, LUA_REGISTRYINDEX);
+  }
+  else {
+    data->sockaddr_ref = LUA_NOREF;
+    lua_pop(L, 1);
+  }
+  
+  lua_getfield(L, 1, "udp");
+  io->io_socket.host.udp = lua_toboolean(L, -1);
+  lua_pop(L, 1);
+  
+  lua_getfield(L, 1, "port");
+  io->io_socket.host.port = lua_tointeger(L, -1);
+  lua_pop(L, 1);
+  
+  lua_pushvalue(L, 2);
+  data->handler_ref = luaL_ref(L, LUA_REGISTRYINDEX);
+  data->data_ref = LUA_NOREF;
+  
+  return 1;
+}
+static int Lua_shuso_io_get_io_fd(lua_State *L) {
+  shuso_io_t *io = luaL_checkudata(L, 1, "shuttlesock.core.io");
+  lua_pushinteger(L, io->io_socket.fd);
+  return 1;
+}
+
+static int Lua_shuso_io_get_value(lua_State *L) {
+  shuso_io_t *io = luaL_checkudata(L, 1, "shuttlesock.core.io");
+  if(luaS_streq_literal(L, 2, "buf")) {
+    lua_pushlstring(L, io->buf, io->len);
+    return 1;
+  }
+  if(luaS_streq_literal(L, 2, "iov")) {
+    size_t iovcnt = io->iovcnt;
+    lua_createtable(L, iovcnt, 0);
+    for(size_t i=0; i<iovcnt; i++) {
+      lua_pushlstring(L, io->iov[i].iov_base, io->iov[i].iov_len);
+      lua_rawseti(L, -2, i+1);
+    }
+    return 1;
+  }
+  if(luaS_streq_literal(L, 2, "socket")) {
+    return luaL_error(L, "io_get_value 'socket' not yet implemented");
+  }
+  if(luaS_streq_literal(L, 2, "hostinfo")) {
+    return luaL_error(L, "io_get_value 'hostinfo' not yet implemented");
+  }
+  if(luaS_streq_literal(L, 2, "sockaddr")) {
+    return luaL_error(L, "io_get_value 'sockaddr' not yet implemented");
+  }
+  if(luaS_streq_literal(L, 2, "result")) {
+    lua_pushinteger(L, io->result);
+    return 1;
+  }
+  if(luaS_streq_literal(L, 2, "result_intdata")) {
+    lua_pushinteger(L, io->result_intdata);
+    return 1;
+  }
+  if(luaS_streq_literal(L, 2, "result_fd")) {
+    lua_pushinteger(L, io->result_fd);
+    return 1;
+  }
+  if(luaS_streq_literal(L, 2, "error")) {
+    if(io->error == 0) {
+      //no error
+      lua_pushboolean(L, 0);
+      return 1;
+    }
+    else {
+      lua_pushinteger(L, io->error);
+      lua_pushstring(L, strerror(io->error));
+      return 2;
+    }
+  }
+  return luaL_error(L, "io_get_value '%s' not valid or implemented", lua_tostring(L, 2));
+}
+
+static void iodata_update_data_ref(lua_State *L, shuso_lua_io_data_t *data, int index) {
+  if(data->data_ref != LUA_NOREF) {
+    luaL_unref(L, LUA_REGISTRYINDEX, data->data_ref);
+  }
+  if(index == 0) {
+    data->data_ref = LUA_NOREF;
+  }
+  else {
+    lua_pushvalue(L, index);
+    data->data_ref = luaL_ref(L, LUA_REGISTRYINDEX);
+  }
+}
+
+static int Lua_shuso_io_set_value(lua_State *L) {
+  shuso_io_t          *io = luaL_checkudata(L, 1, "shuttlesock.core.io");
+  shuso_lua_io_data_t *data = io->privdata;
+  
+  luaL_checkstack(L, 4, NULL);
+  if(luaS_streq_literal(L, 2, "buf")) {
+    io->buf = (char *)luaL_checklstring(L, 3, &io->len);
+    iodata_update_data_ref(L, data, 3);
+  }
+  else if(luaS_streq_literal(L, 2, "iov")) {
+    luaL_checktype(L, 3, LUA_TTABLE);
+    size_t   iovcnt = luaL_len(L, 3);
+    struct iovec *iov;
+    
+    lua_createtable(L, 2, 0); //reftable for iovec userdata and string table
+    
+    iov = lua_newuserdata(L, sizeof(iov) * iovcnt);
+    for(size_t i=0; i<iovcnt; i++) {
+      lua_rawgeti(L, 3, i+1);
+      iov[i].iov_base = (char *)lua_tolstring(L, -1, &iov[i].iov_len);
+      lua_pop(L, 1);
+    }
+    lua_rawseti(L, -2, 1);
+    
+    lua_pushvalue(L, 3);
+    lua_rawseti(L, -2, 1);
+    
+    iodata_update_data_ref(L, data, -1);
+    lua_pop(L, 1);
+  }
+  else {
+    return luaL_error(L, "io_set_value '%s' not valid or unimplemented", lua_tostring(L, 2));
+  }
+  
+  lua_pushboolean(L, 1);
+  return 1;
+}
+
+
+static int Lua_shuso_io_op(lua_State *L) {
+  
+  
+  return 0;
+}
+
 luaL_Reg shuttlesock_core_module_methods[] = {
 // creation, destruction
   {"create", Lua_shuso_create},
@@ -2396,6 +2842,13 @@ luaL_Reg shuttlesock_core_module_methods[] = {
   {"config_setting_module_name", Lua_shuso_setting_module_name},
   {"config_setting_values_count", Lua_shuso_setting_values_count},
 
+//socket stuff
+  {"socket_create", Lua_shuso_socket_create},
+  {"socket_destroy", Lua_shuso_socket_destroy},
+  
+//io_coro
+  {"io_create", Lua_shuso_io_create},
+  
 //watchers
   {"new_watcher", Lua_shuso_new_watcher},
   
@@ -2417,7 +2870,7 @@ luaL_Reg shuttlesock_core_module_methods[] = {
   {"log_fatal", Lua_shuso_log_fatal},
 
 //modules
-  {"blocks_cache", Lua_shuso_get_active_module},
+  {"active_module", Lua_shuso_get_active_module},
   {"add_module", Lua_shuso_add_module},
   {"module_pointer", Lua_shuso_module_pointer},
   {"module_name", Lua_shuso_module_name},
@@ -2483,5 +2936,13 @@ int luaS_push_core_module(lua_State *L) {
 
 int luaS_push_system_module(lua_State *L) {
   luaL_newlib(L, shuttlesock_system_module_methods);
+  
+  lua_newtable(L);
+  for(shuso_system_sockopts_t *sockopt = &shuso_system_sockopts[0]; sockopt->str == NULL; sockopt++) {
+    lua_pushlightuserdata(L, sockopt);
+    lua_setfield(L, -2, sockopt->str);
+  }
+  lua_setfield(L, -2, "socket_sockopts_table");
+  
   return 1;
 }
