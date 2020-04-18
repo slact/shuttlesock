@@ -281,37 +281,56 @@ static void io_update_incomplete_op_data(shuso_io_t *io, ssize_t result_sz) {
 
 static int io_ev_connect(shuso_io_t *io) {
   assert(io->hostinfo);
-  assert(io->io_socket.fd != -1);
+  if(io->io_socket.fd == -1) {
+    errno = EBADF;
+    return -1;
+  }
   struct sockaddr      *connect_sockaddr;
-  shuso_hostinfo_t     *host = io->hostinfo;
+  sa_family_t           fam = 0;
+  shuso_hostinfo_t     *host;
   size_t                sockaddr_sz;
   union {
     struct sockaddr        sa;
     struct sockaddr_un     sa_unix;
     struct sockaddr_in     sa_inet;
+#ifdef SHUTTLESOCK_HAVE_IPV6
     struct sockaddr_in6    sa_inet6;
-  }                      sockaddr;
-  if(host->sockaddr) {
-    connect_sockaddr = host->sockaddr;
-    if(connect_sockaddr->sa_family == AF_INET) {
-      sockaddr_sz = sizeof(struct sockaddr_in);
-    }
-    else if(connect_sockaddr->sa_family == AF_INET6) {
-      sockaddr_sz = sizeof(struct sockaddr_in6);
-    }
-    else if(connect_sockaddr->sa_family == AF_UNIX) {
-      sockaddr_sz = sizeof(struct sockaddr_un);
-    }
-    else {
-      raise(SIGABRT);
-      return -1;
-    }
+#endif
+  }                      sockaddr_buf;
+  
+  if(io->io_socket.host.sockaddr) {
+    assert(io->io_socket.host.addr_family == io->io_socket.host.sockaddr->sa_family);
+    connect_sockaddr = io->io_socket.host.sockaddr;
+    fam = io->io_socket.host.addr_family;
   }
   else {
-    if(!shuso_hostinfo_to_sockaddr(io->S, host, &sockaddr.sa, &sockaddr_sz)) {
-      return -1;
+    host = io->hostinfo;
+    if(host->sockaddr) {
+      connect_sockaddr = host->sockaddr;
+      fam = io->io_socket.host.addr_family;
     }
-    connect_sockaddr = &sockaddr.sa;
+    else {
+      if(!shuso_hostinfo_to_sockaddr(io->S, host, &sockaddr_buf.sa, &sockaddr_sz)) {
+        return -1;
+      }
+      connect_sockaddr = &sockaddr_buf.sa;
+      fam = sockaddr_buf.sa.sa_family;
+    }
+  }
+  switch(fam) {
+    case AF_INET:
+      sockaddr_sz = sizeof(struct sockaddr_in);
+      break;
+#ifdef SHUTTLESOCK_HAVE_IPV6
+    case AF_INET6:
+      sockaddr_sz = sizeof(struct sockaddr_in6);
+      break;
+#endif
+    case AF_UNIX:
+      sockaddr_sz = sizeof(struct sockaddr_un);
+      break;
+    default:
+      sockaddr_sz = 0;
   }
   
   return connect(io->io_socket.fd, connect_sockaddr, sockaddr_sz);
@@ -479,6 +498,10 @@ void shuso_io_wait(shuso_io_t *io, int evflags) {
   io->error = 0;
   io->result = 0;
   io_watch_update(io);
+}
+
+void shuso_io_connect(shuso_io_t *io) {
+  io_op_run_new(io, SHUSO_IO_OP_CONNECT, NULL, 0, false, false);
 }
 
 void shuso_io_accept(shuso_io_t *io) {
