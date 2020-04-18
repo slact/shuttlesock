@@ -159,6 +159,7 @@ function Server:initialize_config(block)
 end
 
 function Server:initialize()
+  CFuncs.register_event_data_types()
   CFuncs.maybe_accept_event_init(self:event_pointer("maybe_accept"))
 end
 
