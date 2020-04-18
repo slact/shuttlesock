@@ -6,7 +6,7 @@ set(LIBEV_MIN_VERSION "4.31")
 include(TargetRequirePackage)
 include(CheckCSourceRuns)
 
-function(shuttlesock_link_libev STATIC_BUILD)
+function(shuttlesock_link_libev STATIC_BUILD LIBEV_EXTRA_CFLAGS)
 
   if(NOT STATIC_BUILD)
     target_require_package(shuttlesock PUBLIC ev
@@ -70,7 +70,7 @@ function(shuttlesock_link_libev STATIC_BUILD)
       DOWNLOAD_NO_PROGRESS 1
       DOWNLOAD_DIR "${THIRDPARTY_DOWNLOAD}"
     #  SOURCE_DIR ${LIBEV_DIR}
-      CONFIGURE_COMMAND sh -c "CFLAGS=\"${SHUTTLESOCK_SHARED_CFLAGS} -O${OPTIMIZE_LEVEL} -w\" LDFLAGS=\"${SHUTTLESOCK_SHARED_LDFLAGS}\" CC=\"${SHUTTLESOCK_SHARED_CC}\" ./configure --prefix=\"${THIRDPARTY_PREFIX}\" --enable-shared=no --with-pic=yes"
+      CONFIGURE_COMMAND sh -c "CFLAGS=\"${SHUTTLESOCK_SHARED_CFLAGS} -O${OPTIMIZE_LEVEL} ${LIBEV_EXTRA_CFLAGS} -w\" LDFLAGS=\"${SHUTTLESOCK_SHARED_LDFLAGS}\" CC=\"${SHUTTLESOCK_SHARED_CC}\" ./configure --prefix=\"${THIRDPARTY_PREFIX}\" --enable-shared=no --with-pic=yes"
       PREFIX ${LIBEV_PREFIX_DIR}
       BUILD_COMMAND make ${LIBEV_MAKE_PARALLEL_FLAG}
       INSTALL_COMMAND make install

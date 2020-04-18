@@ -532,6 +532,10 @@ rebuild = Opts.new do
   libev_static :debug_flag,
     cmake_define: {LIBEV_BUILD_STATIC: 1}
   
+  libev_verify :debug_flag,
+    imply: [:libev_static],
+    cmake_define: {LIBEV_BUILD_STATIC_EXTRAFLAGS: "-DEV_VERIFY=3"}
+  
   c_ares_static :debug_flag,
     cmake_define: {C_ARES_BUILD_STATIC: 1}
   

@@ -78,7 +78,7 @@ target_link_libraries(shuttlesock PUBLIC ${CMAKE_THREAD_LIBS_INIT})
 
 #libev
 include(ShuttlesockLibev)
-shuttlesock_link_libev("${LIBEV_BUILD_STATIC}")
+shuttlesock_link_libev("${LIBEV_BUILD_STATIC}" "${LIBEV_BUILD_STATIC_EXTRAFLAGS}")
 
 #Lua 5.3
 include(ShuttlesockLua)
