@@ -35,7 +35,7 @@ typedef enum {
   SHUSO_IO_WATCH_POLL_READWRITE,
 } shuso_io_watch_type_t;
 
-struct shuso_io_s {
+typedef struct shuso_io_s {
   shuso_t          *S;
   shuso_socket_t    io_socket;
   
@@ -85,7 +85,7 @@ struct shuso_io_s {
   shuso_fn_debug_info_t runner;
   shuso_fn_debug_info_t op_caller;
 #endif
-};
+} shuso_io_t;
 
 #ifdef SHUTTLESOCK_DEBUG_IO
 #define shuso_io_init(...) do { \
