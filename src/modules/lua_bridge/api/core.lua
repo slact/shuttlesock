@@ -209,3 +209,14 @@ function core.parse_host(str)
 end
 
 core.event_data_wrappers = {}
+setmetatable(core, {
+  __gxcopy_save_module_state = function()
+    return {
+      event_data_wrappers = core.event_data_wrappers
+    }
+  end,
+  __gxcopy_load_module_state = function(state)
+    core.event_data_wrappers = state.event_data_wrappers
+  end
+})
+
