@@ -599,8 +599,9 @@ describe(lua_api) {
   }
   
   subdesc(listen) {
-    skip("module with listening blocks") {
+    test("module with listening blocks") {
       assert_luaL_dofile(S->lua.state, "module_config_listen.lua");
+      assert_shuso(S, shuso_configure_finish(S));
       shuso_run(S);
       assert_shuso_ran_ok(S);
     }

@@ -2,6 +2,7 @@ local Module = require "shuttlesock.module"
 local Watcher = require "shuttlesock.watcher"
 local Process = require "shuttlesock.process"
 local Shuso = require "shuttlesock"
+local IO = require "shuttlesock.io"
 
 local testmod = Module.new {
   name= "lua_testmod",
@@ -13,9 +14,17 @@ local testmod = Module.new {
 
 testmod:subscribe("core:manager.workers_started", function()
   coroutine.wrap(function()
-    Watcher.timer(0.5):yield()
-    Shuso.stop()
+    Watcher.timer(0.1):yield()
+    local io = IO.new("localhost:2343", function() end)
+    io:start()
   end)()
+end)
+
+testmod:subscribe("server:maybe_accept", function(...)
+  print("MAYBE_ACCEPT", ...)
+end)
+testmod:subscribe("server:http.accept", function(...)
+  print("ACCEPT", ...)
 end)
 
 function testmod:initialize_config(block)
@@ -49,4 +58,3 @@ stream {
 ]]
 
 assert(Shuso.configure_string("test_conf", config))
-assert(Shuso:configure_finish())

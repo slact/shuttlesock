@@ -1,6 +1,6 @@
-local core = ...
+local Core = ...
 
-local is_light_userdata = core.is_light_userdata
+local is_light_userdata = Core.is_light_userdata
 
 local function rawpairs(t)
   
@@ -144,7 +144,7 @@ local function gxcopy_check(val, checked, stack, top)
   return true
 end
 
-function core.gxcopy_check(val, what)
+function Core.gxcopy_check(val, what)
   local checked = {}
   for _, v in pairs(package.loaded) do
     checked[v]=true
@@ -164,59 +164,97 @@ function core.gxcopy_check(val, what)
   return true
 end
 
-function core.parse_host(str)
-  local ipv6, ipv4, host, port
-  
-  ipv6, port = str:match("^%[([^%]]+%]):(%d+)$")
-  if not ipv6 then
-    ipv6 = str:match("^%[([^%]]+%])$")
-    port = nil
-  end
-  if not ipv6 then
-    ipv4, port = str:match("^(%d+%.%d+%.%d+%.%d+):(%d+)$")
-  end
-  if not ipv4 then
-    ipv4 = str:match("^(%d+%.%d+%.%d+%.%d+)$")
-    port = nil
-  end
-  if not ipv4 then
-    host, port = str:match("^(.*):(%d+)$")
-  end
-  if not host then
-    host = str
-    port = nil
+
+
+local function deduplicated_getaddrinfo(addrinfo)
+  local addrs_unique = {}
+  for _, addr in pairs(addrinfo) do
+    addrs_unique[(addr.family or "?")..":"..(addr.address or "?")] = addr
+    addr.socktype = nil
   end
   
-  if host and not host:match("^[%D%-%.]$") or host:match("%.%.") then
-    return nil, 'invalid hostname "' .. host ..'"'
+  local addrs = {}
+  for _, v in pairs(addrs_unique) do
+    table.insert(addrs, v)
   end
   
-  local portnum
-  if port then
-    portnum = tonumber(port)
-    if not portnum or portnum < 1 or portnum > 65535 or math.type(portnum) ~= "integer" then
-      return "invalid port ".. tostring(port)
+  return addrs
+end
+
+function Core.parse_host(str)
+  local ipv4, ipv6, hostname, port
+  local addrinfo, path, err, family
+  if str:match("^unix:.+") then -- unix socket
+    path = str:match("^unix:(.+)")
+    family = "Unix"
+  elseif str:match("^%[.*%]") then --ipv6
+    ipv6, port = str:match("^[(.*)]$"), false
+    if not ipv6 then
+      ipv6, port = str:match("^[(.*)]:(%d+)$")
     end
-    portnum = port
+    if not ipv6 then
+      return "invalid IPv6 format"
+    end
+    addrinfo, err = Core.getaddrinfo_noresolve(ipv6, 6)
+    family = "IPv6"
+  elseif str:match("^%d+%.%d+%.%d+%.%d+") then --ipv4
+    ipv4, port = str:match("^([%d%.]+)$"), false
+    if not ipv4 then
+      ipv4, port = str:match("^([%d%.]+):(%d+)$")
+    end
+    if not ipv4 then
+      return nil, "invalid IPv4 address"
+    end
+    addrinfo, err = Core.getaddrinfo_noresolve(ipv4, 4)
+    family = "IPv4"
+  else -- hostname maybe?
+    hostname, port = str:match("^([%l%u%d%.%-%_]+)$"), false
+    if not hostname then
+      hostname, port = str:match("^([%l%u%d%.%-%_]+):(%d+)$")
+    end
+    if not hostname or hostname:match("%.%.") or hostname:match("%-$") then
+      return nil, "invalid hostname"
+    end
+    addrinfo = nil
   end
+  
+  if err then
+    return nil, err
+  end
+  
+  if addrinfo then
+    addrinfo = deduplicated_getaddrinfo(addrinfo)
+  end
+  
+  if port then
+    port = tonumber(port)
+    if port == nil or (port and (port < 0 or port >= 2^16)) then
+      return nil, "invalid port"
+    end
+  end
+  
+  if not port then port = nil end
   
   return {
-    ipv4 = ipv4,
-    ipv6 = ipv6,
-    port = portnum,
-    hostname = host
+    name = (addrinfo and addrinfo.address) or str,
+    port = port,
+    addrinfo = addrinfo,
+    hostname = hostname,
+    path = path,
+    family = family
   }
 end
 
-core.event_data_wrappers = {}
-setmetatable(core, {
+
+Core.event_data_wrappers = {}
+setmetatable(Core, {
   __gxcopy_save_module_state = function()
     return {
-      event_data_wrappers = core.event_data_wrappers
+      event_data_wrappers = Core.event_data_wrappers
     }
   end,
   __gxcopy_load_module_state = function(state)
-    core.event_data_wrappers = state.event_data_wrappers
+    Core.event_data_wrappers = state.event_data_wrappers
   end
 })
 

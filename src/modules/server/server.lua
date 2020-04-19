@@ -60,83 +60,6 @@ Server.settings = {
   }
 }
 
-local function deduplicated_getaddrinfo(addrinfo)
-  local addrs_unique = {}
-  for _, addr in pairs(addrinfo) do
-    addrs_unique[(addr.family or "?")..":"..(addr.address or "?")] = addr
-    addr.socktype = nil
-  end
-  
-  local addrs = {}
-  for _, v in pairs(addrs_unique) do
-    table.insert(addrs, v)
-  end
-  
-  return addrs
-end
-
-local function parse_host(str)
-  local ipv4, ipv6, hostname, port
-  local addrinfo, path, err
-  if str:match("^unix:.+") then -- unix socket
-    path = str:match("^unix:(.+)")
-  elseif str:match("^%[.*%]") then --ipv6
-    ipv6, port = str:match("^[(.*)]$"), false
-    if not ipv6 then
-      ipv6, port = str:match("^[(.*)]:(%d+)$")
-    end
-    if not ipv6 then
-      return "invalid IPv6 format"
-    end
-    addrinfo, err = CFuncs.getaddrinfo_noresolve(ipv6, 6)
-    
-  elseif str:match("^%d+%.%d+%.%d+%.%d+") then --ipv4
-    ipv4, port = str:match("^([%d%.]+)$"), false
-    if not ipv4 then
-      ipv4, port = str:match("^([%d%.]+):(%d+)$")
-    end
-    if not ipv4 then
-      return nil, "invalid IPv4 address"
-    end
-    addrinfo, err = CFuncs.getaddrinfo_noresolve(ipv4, 4)
-    
-  else -- hostname maybe?
-    hostname, port = str:match("^([%l%u%d%.%-%_]+)$"), false
-    if not hostname then
-      hostname, port = str:match("^([%l%u%d%.%-%_]+):(%d+)$")
-    end
-    if not hostname or hostname:match("%.%.") or hostname:match("%-$") then
-      return nil, "invalid hostname"
-    end
-    addrinfo = nil
-  end
-  
-  if err then
-    return nil, err
-  end
-  
-  if addrinfo then
-    addrinfo = deduplicated_getaddrinfo(addrinfo)
-  end
-  
-  if port then
-    port = tonumber(port)
-    if port == nil or (port and (port < 0 or port >= 2^16)) then
-      return nil, "invalid port"
-    end
-  end
-  
-  if not port then port = nil end
-  
-  return {
-    name = (addrinfo and addrinfo.address) or str,
-    port = port,
-    addrinfo = addrinfo,
-    hostname = hostname,
-    path = path
-  }
-end
-
 function Server:initialize_config(block)
   if not block:match_path("/(http|stream)/server/") then
     return
@@ -147,7 +70,7 @@ function Server:initialize_config(block)
   end
   
   local str = listen:value(1, "string")
-  local host, err = parse_host(str)
+  local host, err = Core.parse_host(str)
   if not host then
     return listen:error(err)
   end
