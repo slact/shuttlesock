@@ -161,12 +161,14 @@ add_core_module("lua_bridge"
     lua_bridge.c
     api/lazy_atomics.c
     api/ipc_lua_api.c
+    api/io_lua.c
     api/core_lua_api.c
   HEADERS
     lua_bridge.h
     PRIVATE private.h
     PRIVATE api/lazy_atomics.h
     PRIVATE api/ipc_lua_api.h
+    PRIVATE api/io_lua.h
   LUA_MODULES
     #API for Lua modules
     "shuttlesock"                 api/shuttlesock.lua
