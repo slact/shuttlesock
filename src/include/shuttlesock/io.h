@@ -49,7 +49,9 @@ typedef struct shuso_io_s {
     union {
       struct sockaddr     any;
       struct sockaddr_in  inet;
+#ifdef SHUTTLESOCK_HAVE_IPV6
       struct sockaddr_in6 inet6;
+#endif
     }                 sockaddr;
   };
   union {
