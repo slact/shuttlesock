@@ -1833,7 +1833,7 @@ static int Lua_shuso_module_event_publish(lua_State *L) {
     }
   }
   
-  assert(evname == event->name);
+  assert(strcmp(evname, event->name) == 0);
   
   const char    *datatype = event->data_type;
   void          *data;
