@@ -18,7 +18,6 @@ static void lua_io_update_data_ref(lua_State *L, shuso_lua_io_data_t *data, int 
 static void lua_io_handler(shuso_t *S, shuso_io_t *io) {
   shuso_lua_io_data_t *data = io->privdata;
   lua_State           *thread = data->coroutine;
-  printf("YEah hey?...\n");
   assert(data->op_complete == false);
   
   assert(thread);
@@ -26,8 +25,13 @@ static void lua_io_handler(shuso_t *S, shuso_io_t *io) {
   if(io->error != 0) {
     lua_pushnil(thread);
     lua_pushstring(thread, strerror(io->error));
-    data->num_results = 2;
-    luaS_printstack(thread, "yep");
+    lua_pushstring(thread, shuso_system_errnoname(io->error));
+    data->num_results = 3;
+    lua_io_update_data_ref(thread, data, 0);
+    if(data->buf_active) {
+      data->buf_active = false;
+      //abandon the buffer: http://lua-users.org/lists/lua-l/2017-03/msg00257.html
+    }
   }
   else {
     switch(data->op) {
@@ -49,7 +53,7 @@ static void lua_io_handler(shuso_t *S, shuso_io_t *io) {
         
         lua_newtable(thread);
         switch(io->sockaddr.any.sa_family) {
-          case AF_INET: {          
+          case AF_INET: {
             lua_pushlstring(thread, (char *)&io->sockaddr.inet.sin_addr, sizeof(io->sockaddr.inet.sin_addr));
             lua_setfield(thread, -2, "addr_binary");
             
@@ -121,7 +125,6 @@ static void lua_io_handler(shuso_t *S, shuso_io_t *io) {
       //TODO: make sure this io userdata gets garbage-collected after the coro is gone
     }
   }
-  luaS_printstack(thread, "after_handler");
 }
 
 static void lua_io_new_op(shuso_io_t *io, shuso_lua_io_data_t *data, shuso_io_opcode_t op) {

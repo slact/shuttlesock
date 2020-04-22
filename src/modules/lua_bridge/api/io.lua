@@ -6,20 +6,16 @@ local IO = {}
 local io = {}
 
 local function io_check_op_completion(self, ...)
-  print("ready?")
   if not self.core:op_completed() then
-    print("yieldplease")
+    assert(self.coroutine == coroutine.running(), "called io yielding function from a foreign coroutine...")
     return coroutine.yield()
   else
-  print("it's ready")
     return ...
   end
 end
 
 function io:connect()
-  print("HIO")
   local ok, err = self.core:op("connect")
-  print("HIO2")
   return io_check_op_completion(self, ok, err)
 end
 
@@ -30,29 +26,55 @@ local function io_write(self, str, n, partial)
   else
     n = #str
   end
-  local bytes_written, err = self.core:op(partial and "write_partial" or "write", str, n)
+  local op = partial and "write_partial" or "write"
+  local bytes_written, err, errno = self.core:op(op, str, n)
+  if not bytes_written and errno == "EAGAIN" then
+    self:wait("w")
+    bytes_written, err = self.core:op(op, str, n)
+  end
+  
   return io_check_op_completion(self, bytes_written, err)
 end
 
 function io:write(str, n)
-  return io_write(str, n, false)
+  return io_write(self, str, n, false)
 end
 
 function io:write_partial(str, n)
-  return io_write(str, n, true)
+  return io_write(self, str, n, true)
 end
 
 local function io_read(self, n, partial)
-  assert(type(n) == "string")
-  local bytes_written, err = self.core:op(partial and "read_partial" or "read", n)
-  return io_check_op_completion(self, bytes_written, err)
+  assert(type(n) == "number")
+  local op = partial and "read_partial" or "read"
+  local string_read, err, errno = self.core:op(op, n)
+  if not string_read and errno == "EAGAIN" then
+    self:wait("r")
+    string_read, err = self.core:op(op, n)
+  end
+  return io_check_op_completion(self, string_read, err)
 end
 
 function io:read(n)
   return io_read(self, n, false)
 end
-function io:read(n)
+function io:read_partial(n)
   return io_read(self, n, true)
+end
+
+function io:wait(rw)
+  if rw == "read" or rw == "r" then
+    rw = "r"
+  elseif rw == "write" or rw == "w" then
+    rw = "w"
+  elseif rw == "readwrite" or rw == "wr" or rw == "rw" then
+    rw = "rw"
+  else
+    error(("invalid rw value '%s' for io:wait()"):format(tostring(rw)))
+  end
+  
+  local ok, err = self.core:op("wait", rw)
+  return io_check_op_completion(self, ok, err)
 end
 
 local io_mt = {
@@ -68,7 +90,6 @@ function IO.wrap(init, io_handler)
     readwrite = "rw"
   elseif type(init) == "string" then
     local host, err = Core.parse_host(init)
-    require"mm"(host)
     if not host then
       return nil, err
     end
@@ -85,19 +106,21 @@ function IO.wrap(init, io_handler)
   
   local self = setmetatable({}, io_mt)
   
-  if not io_handler and coroutine.isyieldable() then
-    local coro = coroutine.running()
-    self.parent_handler_coroutine = coro
-    io_handler = function(...)
-      local ok, err = coroutine.resume(coro)
-      if not ok then
-        error(debug.traceback(coro, err))
-      end
-    end
-  end
-  assert(type(io_handler) == "function", "io_handler coroutine function missing, and not running from yieldable coroutine")
+  local handler_coroutine
+  local handler_is_parent
   
-  self.coroutine = coroutine.create(function()
+  if type(io_handler) == "function" then
+    handler_coroutine = coroutine.create(io_handler)
+  elseif type(io_handler) == "thread" then
+    handler_coroutine = io_handler
+  elseif not io_handler and coroutine.isyieldable() then
+    handler_coroutine = coroutine.running()
+    handler_is_parent = true
+  end
+  assert(type(handler_coroutine) == "thread", "io_handler coroutine function missing, and not running from yieldable coroutine")
+  self.coroutine = handler_coroutine
+  
+  local function initialize()
     if hostname then
       local resolved, err = Core.resolve(hostname)
       if not resolved then
@@ -154,14 +177,20 @@ function IO.wrap(init, io_handler)
     self.init.fd = fd
     
     self.core = assert(Core.io_create(self.init, self.coroutine))
-  end)
+    
+    return self
+  end
   
   return function(...)
-    shuso_coroutine.resume(self.coroutine, self, ...)
-    if self.parent_handler_coroutine then
-      assert(coroutine.status(self.parent_handler_coroutine) == "running")
+    if handler_is_parent then
+      initialize()
       return self, ...
     else
+      local init_coro = coroutine.create(function(...)
+        initialize()
+        return shuso_coroutine.resume(self.coroutine, self, ...)
+      end)
+      shuso_coroutine.resume(init_coro, ...)
       return true
     end
   end
