@@ -5,15 +5,18 @@
 #include <shuttlesock/io.h>
 
 typedef struct {
-  lua_reference_t       self_waiting;
-  lua_reference_t       name;
-  lua_reference_t       path;
-  lua_reference_t       sockaddr;
-  lua_reference_t       data;
-  lua_reference_t       iov;
-  lua_reference_t       handler;
+  struct {
+    lua_reference_t       name;
+    lua_reference_t       path;
+    lua_reference_t       sockaddr;
+    lua_reference_t       data;
+    lua_reference_t       iov;
+    lua_reference_t       coroutine;
+  }                     ref;
+  lua_State            *coroutine;
   shuso_io_opcode_t     op;
-  unsigned              tick;
+  bool                  op_complete;
+  int                   num_results;
   luaL_Buffer           buf;
   bool                  buf_active;
 } shuso_lua_io_data_t;

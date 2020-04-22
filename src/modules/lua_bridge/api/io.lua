@@ -1,27 +1,71 @@
 local Core = require "shuttlesock.core"
 --local Log = require "shuttlesock.log"
-local coroutine = require "shuttlesock.coroutine"
-
+local shuso_coroutine = require "shuttlesock.coroutine"
 local IO = {}
 
 local io = {}
-function io:start()
-  assert(type(self.coroutine) == "thread")
-  coroutine.resume(self.coroutine)
+
+local function io_check_op_completion(self, ...)
+  print("ready?")
+  if not self.core:op_completed() then
+    print("yieldplease")
+    return coroutine.yield()
+  else
+  print("it's ready")
+    return ...
+  end
+end
+
+function io:connect()
+  print("HIO")
+  local ok, err = self.core:op("connect")
+  print("HIO2")
+  return io_check_op_completion(self, ok, err)
+end
+
+local function io_write(self, str, n, partial)
+  assert(type(str) == "string")
+  if n then
+    assert(type(n) == "number")
+  else
+    n = #str
+  end
+  local bytes_written, err = self.core:op(partial and "write_partial" or "write", str, n)
+  return io_check_op_completion(self, bytes_written, err)
+end
+
+function io:write(str, n)
+  return io_write(str, n, false)
+end
+
+function io:write_partial(str, n)
+  return io_write(str, n, true)
+end
+
+local function io_read(self, n, partial)
+  assert(type(n) == "string")
+  local bytes_written, err = self.core:op(partial and "read_partial" or "read", n)
+  return io_check_op_completion(self, bytes_written, err)
+end
+
+function io:read(n)
+  return io_read(self, n, false)
+end
+function io:read(n)
+  return io_read(self, n, true)
 end
 
 local io_mt = {
   __index = io
 }
 
-function IO.new(init, io_handler)
-  assert(type(io_handler) == "function", "IO.new last parameter must be a function for the IO coroutine")
-  
-  local fd, hostname, family, path, name, port, address, address_binary, socktype, sockopts
+function IO.wrap(init, io_handler)
+  local fd, hostname, family, path, name, port, address, address_binary, socktype, sockopts, readwrite
   
   if type(init) == "integer" then
     fd = init
     name = "fd:"..fd
+    readwrite = "rw"
   elseif type(init) == "string" then
     local host, err = Core.parse_host(init)
     require"mm"(host)
@@ -34,15 +78,24 @@ function IO.new(init, io_handler)
     name = host.name
     port = host.port
     sockopts = host.sockopts
+    readwrite = host.readwrite or host.rw or "rw"
   else
     error("not yet implemented")
   end
   
   local self = setmetatable({}, io_mt)
   
-  local run_handler = function()
-    --TODO
+  if not io_handler and coroutine.isyieldable() then
+    local coro = coroutine.running()
+    self.parent_handler_coroutine = coro
+    io_handler = function(...)
+      local ok, err = coroutine.resume(coro)
+      if not ok then
+        error(debug.traceback(coro, err))
+      end
+    end
   end
+  assert(type(io_handler) == "function", "io_handler coroutine function missing, and not running from yieldable coroutine")
   
   self.coroutine = coroutine.create(function()
     if hostname then
@@ -55,23 +108,23 @@ function IO.new(init, io_handler)
       family = addr.family
       address_binary = addr.address_binary
     end
-    if family == "IPv4" or family == "ipv4" then
+    if family == "IPv4" or family == "ipv4" or family == "AF_INET" then
       family = "AF_INET"
-    elseif family == "IPv6" or family == "ipv6" then
+    elseif family == "IPv6" or family == "ipv6" or family == "AF_INET6" then
       family = "AF_INET6"
-    elseif family == "Unix" or family == "unix" then
+    elseif family == "Unix" or family == "unix" or family == "AF_UNIX" then
       family = "AF_UNIX"
-    elseif family == "local" then
+    elseif family == "local" or family == "AF_LOCAL" then
       family = "AF_LOCAL"
     else
       error("failed to start IO coroutine: invalid address family " .. family)
     end
     
-    if socktype == "TCP" or socktype == "tcp" or socktype == "stream" then
+    if socktype == "TCP" or socktype == "tcp" or socktype == "stream"  or socktype == "SOCK_STREAM" then
       socktype = "SOCK_STREAM"
-    elseif socktype == "UDP" or socktype == "udp" or socktype == "dgram" or socktype == "datagram" then
+    elseif socktype == "UDP" or socktype == "udp" or socktype == "dgram" or socktype == "datagram" or socktype == "SOCK_DGRAM" then
       socktype = "SOCK_DGRAM"
-    elseif socktype == "raw" then
+    elseif socktype == "raw" or socktype == "SOCK_RAW" then
       socktype = "SOCK_RAW"
     elseif path then
       socktype = "SOCK_STREAM"
@@ -88,7 +141,8 @@ function IO.new(init, io_handler)
       name = name,
       port = port,
       socktype = socktype,
-      sockopts = sockopts
+      sockopts = sockopts,
+      readwrite = readwrite
     }
     
     local err
@@ -99,17 +153,18 @@ function IO.new(init, io_handler)
     
     self.init.fd = fd
     
-    self.io = assert(Core.io_create(self.init, run_handler))
-    
-    require"mm"(self.init)
-    
-    require"mm"(self.io)
-    
-    
-    
+    self.core = assert(Core.io_create(self.init, self.coroutine))
   end)
   
-  return self
+  return function(...)
+    shuso_coroutine.resume(self.coroutine, self, ...)
+    if self.parent_handler_coroutine then
+      assert(coroutine.status(self.parent_handler_coroutine) == "running")
+      return self, ...
+    else
+      return true
+    end
+  end
 end
 
 return IO
