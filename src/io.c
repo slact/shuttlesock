@@ -102,7 +102,27 @@ void __shuso_io_init_fd(shuso_t *S, shuso_io_t *io, int fd, int readwrite, shuso
 }
 
 
-static bool ev_opcode_match_event_type(shuso_io_opcode_t opcode, int evflags) {
+static bool ev_opcode_finish_match_event_type(shuso_io_opcode_t opcode, int evflags) {
+  switch(opcode) {
+    case SHUSO_IO_OP_NONE:
+    case SHUSO_IO_OP_READV:
+    case SHUSO_IO_OP_READ:
+    case SHUSO_IO_OP_RECVMSG:
+    case SHUSO_IO_OP_WRITEV:
+    case SHUSO_IO_OP_WRITE:
+    case SHUSO_IO_OP_SENDMSG:
+    case SHUSO_IO_OP_ACCEPT:
+    case SHUSO_IO_OP_CLOSE:
+      //should not happen
+      raise(SIGABRT);
+      return false;
+    case SHUSO_IO_OP_CONNECT:
+      return evflags & EV_WRITE;
+  }
+  return false;
+}
+
+static bool ev_opcode_retry_match_event_type(shuso_io_opcode_t opcode, int evflags) {
   switch(opcode) {
     case SHUSO_IO_OP_NONE:
       //should not happen
@@ -139,7 +159,7 @@ static bool ev_watch_poll_match_event_type(shuso_io_watch_type_t watchtype, int 
 
 static void io_ev_watcher_handler(shuso_loop *loop, shuso_ev_io *ev, int evflags) {
   shuso_io_t *io = shuso_ev_data(ev);
-  
+  shuso_log_debug(io->S, "%p io_ev_watcher_handler", io);
   switch((shuso_io_watch_type_t )io->watch_type) {    
     case SHUSO_IO_WATCH_NONE:
       //should never happer
@@ -147,11 +167,13 @@ static void io_ev_watcher_handler(shuso_loop *loop, shuso_ev_io *ev, int evflags
       break;
     
     case SHUSO_IO_WATCH_OP_FINISH:
-      raise(SIGABRT); //should never happen using libev
+      if(ev_opcode_finish_match_event_type(io->opcode, evflags)) {
+        shuso_io_operation(io);
+      }
       break;
       
     case SHUSO_IO_WATCH_OP_RETRY:
-      if(ev_opcode_match_event_type(io->opcode, evflags)) {
+      if(ev_opcode_retry_match_event_type(io->opcode, evflags)) {
         io->watch_type = SHUSO_IO_WATCH_NONE;
         assert(io->opcode != SHUSO_IO_OP_NONE);
         shuso_io_operation(io);
@@ -252,6 +274,12 @@ static void retry_ev_operation(shuso_io_t *io) {
   io_watch_update(io);
 }
 
+static void finish_ev_operation(shuso_io_t *io) {
+  assert(io->watch_type == SHUSO_IO_WATCH_NONE);
+  io->watch_type = SHUSO_IO_WATCH_OP_FINISH;
+  io_watch_update(io);
+}
+
 static void io_update_incomplete_op_data(shuso_io_t *io, ssize_t result_sz) {
   assert(result_sz >= 0);
   switch((shuso_io_opcode_t )io->opcode) {
@@ -280,11 +308,24 @@ static void io_update_incomplete_op_data(shuso_io_t *io, ssize_t result_sz) {
 }
 
 static int io_ev_connect(shuso_io_t *io) {
-  assert(io->hostinfo);
   if(io->io_socket.fd == -1) {
     errno = EBADF;
     return -1;
   }
+  
+  if(io->watch_type == SHUSO_IO_WATCH_OP_FINISH) {
+    int so_val = 0;
+    socklen_t so_val_sz = sizeof(so_val);
+    int rc = getsockopt(io->io_socket.fd, SOL_SOCKET, SO_ERROR, &so_val, &so_val_sz);
+    if(rc == 0 && so_val != 0) {
+      errno = so_val;
+      rc = -1;
+    } 
+    io->watch_type = SHUSO_IO_WATCH_NONE;
+    io_watch_update(io);
+    return rc;
+  }
+  
   struct sockaddr      *connect_sockaddr;
   sa_family_t           fam = 0;
   shuso_hostinfo_t     *host;
@@ -338,8 +379,9 @@ static int io_ev_connect(shuso_io_t *io) {
 
 static void shuso_io_ev_operation(shuso_io_t *io) {
   ssize_t result;
+  shuso_io_opcode_t op = io->opcode;
   do {
-    switch((shuso_io_opcode_t )io->opcode) {
+    switch(op) {
       case SHUSO_IO_OP_NONE:
         //should never happen
         raise(SIGABRT);
@@ -384,28 +426,28 @@ static void shuso_io_ev_operation(shuso_io_t *io) {
         break;
     }
   } while(result == -1 && errno == EINTR);
-  if(result == -1 && (errno == EAGAIN || errno == EWOULDBLOCK) && io->op_repeat_to_completion) {
-    if(result == -1) {
-      result = 0; //-1 means zero bytes processed, in case of EAGAIN, right?
-    }
-    io->result += result;
-    io_update_incomplete_op_data(io, result);
-    assert(io->len > 0);
-    retry_ev_operation(io);
-    return;
-  }
   
   if(result == -1) {
-    io->result = -1;
-    //legit error happened
-    io->result = -1;
-    io->error = errno;
-    io->opcode = SHUSO_IO_OP_NONE;
-    io_run(io);
-    return;
+    if(op == SHUSO_IO_OP_CONNECT && (errno == EAGAIN || errno == EINPROGRESS)) {
+      finish_ev_operation(io);
+      return;
+    }
+    else if(io->op_repeat_to_completion && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+      //-1 means zero bytes processed, in case of EAGAIN, right?
+      io_update_incomplete_op_data(io, 0);
+      assert(io->len > 0);
+      retry_ev_operation(io);
+      return;
+    }
+    else {
+      //legit error happened
+      io->result = -1;
+      io->error = errno;
+    }
   }
-  
-  io->result += result;
+  else {
+    io->result += result;
+  }
   io->opcode = SHUSO_IO_OP_NONE;
   io_run(io);
 }
