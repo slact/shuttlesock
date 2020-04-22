@@ -123,7 +123,9 @@ local function ipc_broadcast(dst, name, data, handler, must_yield)
     end
     assert(Core.ipc_gc_message_data(packed_data))
     rawset(all_waiting_handlers, ipc_send_acknowledged_handler_coro, nil)
-    return run_handler("broadcast", name, handler, #dstprocnums)
+    if handler then
+      return run_handler("broadcast", name, handler, #dstprocnums)
+    end
   end)
   rawset(all_waiting_handlers, ipc_send_acknowledged_handler_coro, "broadcast_handler")
   for _, procnum in ipairs(dstprocnums) do
