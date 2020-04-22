@@ -267,7 +267,6 @@ static void lua_io_op_accept(lua_State *L, shuso_io_t *io) {
 static void lua_io_op_connect(lua_State *L, shuso_io_t *io) {
   shuso_lua_io_data_t *data = io->privdata;
   lua_io_new_op(io, data, SHUSO_IO_OP_CONNECT);
-  shuso_log_debug(io->S, "%p connect", io);
   shuso_io_connect(io);
 }
 static void lua_io_op_wait(lua_State *L, shuso_io_t *io, int index_wait_type) {

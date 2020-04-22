@@ -159,7 +159,6 @@ static bool ev_watch_poll_match_event_type(shuso_io_watch_type_t watchtype, int 
 
 static void io_ev_watcher_handler(shuso_loop *loop, shuso_ev_io *ev, int evflags) {
   shuso_io_t *io = shuso_ev_data(ev);
-  shuso_log_debug(io->S, "%p io_ev_watcher_handler", io);
   switch((shuso_io_watch_type_t )io->watch_type) {    
     case SHUSO_IO_WATCH_NONE:
       //should never happer
@@ -410,7 +409,6 @@ static void shuso_io_ev_operation(shuso_io_t *io) {
         result = io_ev_connect(io);
         break;
       case SHUSO_IO_OP_ACCEPT:
-        shuso_log_debug(io->S, "SHUSO_IO_OP_ACCEPT");
         io->address_len = sizeof(io->sockaddr);
 #ifdef SHUTTLESOCK_HAVE_ACCEPT4
         result = accept4(io->io_socket.fd, &io->sockaddr.any, &io->address_len, SOCK_NONBLOCK);
