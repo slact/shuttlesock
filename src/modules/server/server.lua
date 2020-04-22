@@ -176,8 +176,6 @@ Server:subscribe("core:manager.workers_started", function()
         if not host_type then
           host_type = host.type
         elseif host_type ~= host.type then
-          require"mm"(binding)
-          print(host_type, binding.type)
           return nil, host.setting:error("can't listen on the same address as server type '" .. host_type.."'")
         end
       end
@@ -197,7 +195,6 @@ Server:subscribe("core:manager.workers_started", function()
       local rcvfd = IPC.FD_Receiver.start("server:receive_listener_sockets", 5.0)
       
       for i, binding in ipairs(Server.bindings) do
-
         binding.ptr = assert(CFuncs.create_binding_data(binding, i), "problem creating bind data")
         local shared_ptr = CFuncs.create_shared_host_data(binding.ptr)
         
