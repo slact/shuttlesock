@@ -15,8 +15,10 @@ local testmod = Module.new {
 testmod:subscribe("core:manager.workers_started", function()
   coroutine.wrap(function()
     Watcher.timer(0.1):yield()
-    local io = IO.new("localhost:2343", function() end)
-    io:start()
+    local io = IO.wrap("localhost:2343")()
+    
+    local ok, err = io:connect()
+    print("YESPLEASE", ok, err)
   end)()
 end)
 
