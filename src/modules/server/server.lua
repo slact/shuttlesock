@@ -4,6 +4,7 @@ local coroutine = require "shuttlesock.coroutine"
 local Process = require "shuttlesock.process"
 local IPC = require "shuttlesock.ipc"
 local Log = require "shuttlesock.log"
+local Atomics = require "shuttlesock.atomics"
 
 -- luacheck: ignore CFuncs
 local CFuncs = require "shuttlesock.modules.core.server.cfuncs"
@@ -20,7 +21,11 @@ local Server = Module.new {
     },
     ["stream.accept"] = {
       data_type = "server_accept"
-    }
+    },
+    "start",
+    "master.start",
+    "manager.start",
+    "worker.start"
   },
   subscribe = {
     "~server:maybe_accept"
@@ -60,6 +65,14 @@ Server.settings = {
   }
 }
 
+function Server:initialize()
+  CFuncs.register_event_data_types()
+  CFuncs.maybe_accept_event_init(self:event_pointer("maybe_accept"))
+  self.shared = Atomics.new("done", "failed")
+  self.shared.done = 0
+  self.shared.failed = 0
+end
+
 function Server:initialize_config(block)
   if not block:match_path("/(http|stream)/server/") then
     return
@@ -79,11 +92,6 @@ function Server:initialize_config(block)
   host.type = block:parent_block().name
   host.setting = listen
   table.insert(self.raw_hosts, host)
-end
-
-function Server:initialize()
-  CFuncs.register_event_data_types()
-  CFuncs.maybe_accept_event_init(self:event_pointer("maybe_accept"))
 end
 
 local function common_parent_block(blocks)
@@ -115,6 +123,12 @@ local function common_parent_block(blocks)
     end
     last_common = cur
   end
+end
+
+local function publish_server_started_event(ok)
+  print("PUBPLEASE", ok)
+  Server:publish("start", true)
+  Server:publish(Process.type()..".start", true)
 end
 
 Server:subscribe("core:manager.workers_started", function()
@@ -237,6 +251,10 @@ Server:subscribe("core:manager.workers_started", function()
     IPC.send("master", "server:create_listener_sockets", "done")
     Server.startup_finished = true
   end)
+  IPC.receive("server:workers_started", "any", function(ok)
+    IPC.send("all", "server:start", ok or true)
+  end)
+  IPC.receive("server:start", "manager", publish_server_started_event)
   coroutine.resume(coro)
 end)
 
@@ -264,8 +282,13 @@ Server:subscribe("core:worker.start", function()
     end
     receiver:stop()
     Server.startup_finished = true
+    Server.shared:increment("done", 1)
+    if Server.shared.done == Process.count_workers() then
+      IPC.send("manager", "server:workers_started", true)
+    end
   end)
   
+  IPC.receive("server:start", "manager", publish_server_started_event)
   coroutine.resume(coro)
 end)
 
@@ -301,6 +324,7 @@ Server:subscribe("core:master.start", function()
     rcv:stop()
     Server.startup_finished = true
   end)
+  IPC.receive("server:start", "manager", publish_server_started_event)
   coroutine.resume(coro)
 end)
 
