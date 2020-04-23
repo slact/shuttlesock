@@ -467,7 +467,6 @@ int Lua_shuso_io_create(lua_State *L) {
     socket.host.name = NULL;
     data->ref.name = LUA_NOREF;
   }
-  luaS_mm(L, 1);
   lua_getfield(L, 1, "addr_family");
   if(luaS_streq_literal(L, -1, "AF_INET")) {
     socket.host.addr_family = AF_INET;
