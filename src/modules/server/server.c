@@ -7,12 +7,12 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <errno.h>
+#include <shuttlesock/modules/config/private.h>
 
 static int luaS_create_binding_data(lua_State *L) {
   shuso_t                  *S = shuso_state(L);
   shuso_server_binding_t   *binding = shuso_stalloc(&S->stalloc, sizeof(*binding));
   const char               *name;
-  
   if(!binding) {
     return luaL_error(L, "failed to allocate memory for server binding");
   }
@@ -24,12 +24,26 @@ static int luaS_create_binding_data(lua_State *L) {
   strcpy((char *)binding->server_type, server_type);
   lua_pop(L, 1);
   
-  lua_pushvalue(L, 1);
-  binding->ref = luaL_ref(L, LUA_REGISTRYINDEX);
-  
   lua_getfield(L, 1, "name");
   name = lua_tostring(L, -1);
   lua_pop(L, 1); //pop ["name"]
+  
+  bool udp = false;
+  lua_getfield(L, 1, "UDP");
+  if(lua_toboolean(L, -1)) {
+    udp = true;
+  }
+  lua_pop(L, 1);
+  lua_getfield(L, 1, "udp");
+  if(lua_toboolean(L, -1)) {
+    udp = true;
+  }
+  lua_pop(L, 1);
+  lua_getfield(L, 1, "socktype");
+  if(lua_isstring(L, -1) && luaS_streq_literal(L, -1, "dgram")) {
+    udp = true;
+  }
+  lua_pop(L, 1);
   
   lua_getfield(L, 1, "address");
   
@@ -96,6 +110,7 @@ static int luaS_create_binding_data(lua_State *L) {
   shuso_hostinfo_t *host = &binding->host;
   
   host->name = name;
+  host->udp = udp;
   
   host->sockaddr = shuso_stalloc(&S->stalloc, sizeof(sockaddr));
   if(!host->sockaddr) {
@@ -119,7 +134,14 @@ static int luaS_create_binding_data(lua_State *L) {
   }
 #endif
   lua_pop(L, 1); //pop ["address"]
-
+  lua_getfield(L, 1, "common_parent_block");
+  assert(lua_istable(L, -1));
+  lua_getfield(L, -1, "ptr");
+  assert(lua_islightuserdata(L, -1) || lua_isuserdata(L, -1));
+  binding->config.common_parent_block = (void *)lua_topointer(L, -1);
+  lua_pop(L, 2);
+  assert(binding->config.common_parent_block);
+  
   lua_getfield(L, 1, "listen");
   int listen_count = luaL_len(L, -1);
   binding->config.count = listen_count;
@@ -127,16 +149,6 @@ static int luaS_create_binding_data(lua_State *L) {
   if(!binding->config.array) {
     return luaL_error(L, "couldn't allocate server host config array");
   }
-  
-  lua_getfield(L, -1, "common_parent_block");
-  if(!lua_isnil(L, -1)) {
-    lua_getfield(L, -1, "ptr");
-    if(lua_islightuserdata(L, -1) || lua_isuserdata(L, -1)) {
-      binding->config.common_parent_block = (void *)lua_topointer(L, -1);
-    }
-    lua_pop(L, 1);
-  }
-  lua_pop(L, 1);
   
   for(int j=0; j<listen_count; j++) {
     
@@ -150,7 +162,7 @@ static int luaS_create_binding_data(lua_State *L) {
     
     lua_getfield(L, -1, "setting");
     lua_getfield(L, -1, "ptr");
-    binding->config.array[j].block = (void *)lua_topointer(L, -1);
+    binding->config.array[j].setting = (void *)lua_topointer(L, -1);
     lua_pop(L, 2); //pop .setting.ptr
     
     lua_pop(L, 1); //pop listen[i]
@@ -159,6 +171,98 @@ static int luaS_create_binding_data(lua_State *L) {
   lua_pop(L, 1); //pop ["listen"]
   
   lua_pushlightuserdata(L, binding);
+  return 1;
+}
+
+static int luaS_create_binding_table_from_ptr(lua_State *L) {
+  luaL_checktype(L, 1, LUA_TLIGHTUSERDATA);
+  const shuso_server_binding_t *binding = lua_topointer(L, 1);
+  
+  lua_newtable(L);
+  
+  lua_pushstring(L, binding->server_type);
+  lua_setfield(L, -2, "type");
+  
+  if(binding->host.name) {
+    lua_pushstring(L, binding->host.name);
+    lua_setfield(L, -2, "name");
+  }
+  
+  lua_newtable(L);
+  switch(binding->host.addr_family) {
+    case AF_INET: {
+      lua_pushliteral(L, "IPv4");
+      lua_setfield(L, -2, "family");
+      
+      lua_pushlstring(L, (const char *)&binding->host.addr, sizeof(binding->host.addr));
+      lua_setfield(L, -2, "address_binary");
+      
+      char addr[INET_ADDRSTRLEN];
+      inet_ntop(AF_INET, &binding->host.addr, addr, INET_ADDRSTRLEN);
+      lua_pushstring(L, addr);
+      lua_setfield(L, -2, "address");
+      
+      lua_pushinteger(L, binding->host.port);
+      lua_setfield(L, -2, "port");
+      break;
+    }
+#ifdef SHUTTLESOCK_HAVE_IPV6
+    case AF_INET6: {
+      lua_pushliteral(L, "IPv6");
+      lua_setfield(L, -2, "family");
+      
+      lua_pushlstring(L, (const char*)&binding->host.addr6, sizeof(binding->host.addr6));
+      lua_setfield(L, -2, "address_binary");
+      
+      char addr[INET6_ADDRSTRLEN];
+      inet_ntop(AF_INET, &binding->host.addr6, addr, INET6_ADDRSTRLEN);
+      lua_pushstring(L, addr);
+      lua_setfield(L, -2, "address");
+      
+      lua_pushinteger(L, binding->host.port);
+      lua_setfield(L, -2, "port");
+      break;
+    }
+#endif
+    case AF_UNIX:
+      lua_pushliteral(L, "unix");
+      lua_setfield(L, -2, "family");
+      
+      lua_pushstring(L, binding->host.path);
+      lua_setfield(L, -2, "path");
+      break;
+  }
+  lua_setfield(L, -2, "address");
+  
+  lua_newtable(L);
+  for(unsigned i=0; i<binding->config.count; i++) {
+    lua_newtable(L);
+    lua_pushstring(L, binding->server_type);
+    lua_setfield(L, -2, "type");
+    
+    luaS_push_lua_module_field(L, "shuttlesock.config", "setting");
+    lua_pushlightuserdata(L, binding->config.array[i].setting);
+    luaS_call(L, 1, 1);
+    assert(lua_istable(L, -1));
+    lua_setfield(L, -2, "setting");
+    
+    luaS_push_lua_module_field(L, "shuttlesock.config", "block");
+    lua_pushlightuserdata(L, binding->config.array[i].block);
+    luaS_call(L, 1, 1);
+    assert(lua_istable(L, -1));
+    
+    lua_setfield(L, -2, "block");
+    lua_rawseti(L, -2, i+1);
+  }
+  lua_setfield(L, -2, "listen");
+  
+  if(binding->config.common_parent_block) {
+    luaS_push_lua_module_field(L, "shuttlesock.config", "block");
+    lua_pushlightuserdata(L, binding->config.common_parent_block);
+    luaS_call(L, 1, 1);
+    lua_setfield(L, -2, "common_parent_block");
+  }
+  
   return 1;
 }
 
@@ -181,17 +285,15 @@ static void listener_accept_coro(shuso_t *S, shuso_io_t *io) {
   SHUSO_IO_CORO_BEGIN(io, listener_accept_coro_error);
   rc = listen(io->io_socket.fd, 100);
   if(rc < 0) {
+    raise(SIGABRT);
     shuso_set_error_errno(S, "failed to listen on %s: %s", d->binding->host.name ? d->binding->host.name : "(?)", strerror(errno));
   }
   else {
     shuso_log_info(S, "Listening on %s", d->binding->host.name ? d->binding->host.name : "(?)");
   }
   while(rc == 0) {
-    shuso_log_debug(S, "WAIT_READ");
     SHUSO_IO_CORO_YIELD(wait, SHUSO_IO_READ);
-    shuso_log_debug(S, "accept()");
     SHUSO_IO_CORO_YIELD(accept);
-    shuso_log_debug(S, "accepted");
     memcpy(&maybe_accept_data.sockaddr, &io->sockaddr, sizeof(io->sockaddr));
     maybe_accept_data.fd = io->result_fd;
     maybe_accept_data.binding = d->binding;
@@ -395,8 +497,10 @@ static int luaS_free_shared_host_data(lua_State *L) {
 static bool binding_data_lua_wrap(lua_State *L, const char *type, void *data) {
   assert(strcmp(type, "server_binding") == 0);
   shuso_server_binding_t *binding = data;
-  lua_checkstack(L, 1);
-  lua_rawgeti(L, LUA_REGISTRYINDEX, binding->ref);
+  lua_checkstack(L, 3);
+  luaS_push_lua_module_field(L, "shuttlesock.modules.core.server", "get_binding");
+  lua_pushlightuserdata(L, binding);
+  luaS_call(L, 1, 1);
   return true;
 }
 
@@ -554,7 +658,6 @@ static bool lua_event_data_socket_wrap(lua_State *L, const char *type, void *dat
       lua_setfield(L, -2, "path");
       break;
   }
-  lua_setfield(L, -2, "family");
   
   assert(lua_gettop(L) == top+1);
   
@@ -709,7 +812,9 @@ static bool lua_event_accept_data_wrap(lua_State *L, const char *type, void *dat
   lua_event_data_socket_wrap(L, "shuso_socket", accept->socket);
   lua_setfield(L, -2, "socket");
   
-  lua_rawgeti(L, LUA_REGISTRYINDEX, accept->binding->ref);
+  luaS_push_lua_module_field(L, "shuttlesock.modules.core.server", "get_binding");
+  lua_pushlightuserdata(L, accept->binding);
+  luaS_call(L, 1, 1);
   assert(lua_istable(L, -1));
   
   lua_setfield(L, -2, "binding");
@@ -720,6 +825,85 @@ static bool lua_event_accept_data_wrap(lua_State *L, const char *type, void *dat
 }
 
 static bool lua_event_accept_data_wrap_cleanup(lua_State *L, const char *type, void *data) {
+  return true;
+}
+
+static bool lua_event_maybe_accept_data_wrap(lua_State *L, const char *type, void *evdata) {
+  shuso_server_tentative_accept_data_t *data = evdata;
+  int top = lua_gettop(L);
+  lua_checkstack(L, 3);
+  
+  lua_newtable(L);
+  
+  lua_pushinteger(L, data->fd);
+  lua_setfield(L, -2, "fd");
+  
+  if(data->accept_event) {
+    lua_pushstring(L, data->accept_event->name);
+    lua_setfield(L, -2, "accept_event_name");
+    
+    lua_pushlightuserdata(L, data->accept_event);
+    lua_setfield(L, -2, "accept_event_ptr");
+  }
+  
+  
+  switch(data->sockaddr.any.sa_family) {
+    case AF_INET: {
+      lua_pushliteral(L, "IPv4");
+      lua_setfield(L, -2, "family");
+      
+      lua_pushlstring(L, (char *)&data->sockaddr.inet.sin_addr, sizeof(data->sockaddr.inet.sin_addr));
+      lua_setfield(L, -2, "address_binary");
+      
+      char  address_str[INET_ADDRSTRLEN];
+      if(inet_ntop(AF_INET, (char *)&data->sockaddr.inet.sin_addr, address_str, INET_ADDRSTRLEN)) {
+        lua_pushstring(L, address_str);
+        lua_setfield(L, -2, "address");
+      }
+      
+      lua_pushinteger(L, ntohs(data->sockaddr.inet.sin_port));
+      lua_setfield(L, -2, "port");
+      
+      break;
+    }
+#ifdef SHUTTLESOCK_HAVE_IPV6
+    case AF_INET6: {
+      lua_pushliteral(L, "IPv6");
+      lua_setfield(L, -2, "family");
+      
+      lua_pushlstring(L, (char *)&data->sockaddr.inet6.sin6_addr, sizeof(data->sockaddr.inet6.sin6_addr));
+      lua_setfield(L, -2, "address_binary");
+      char address_str[INET6_ADDRSTRLEN];
+      if(inet_ntop(AF_INET6, (char *)&data->sockaddr.inet6.sin6_addr, address_str, INET6_ADDRSTRLEN)) {
+        lua_pushstring(L, address_str);
+        lua_setfield(L, -2, "address");
+      }
+      
+      lua_pushinteger(L, ntohs(data->sockaddr.inet6.sin6_port));
+      lua_setfield(L, -2, "port");
+      
+      break;
+    }
+#endif
+    case AF_UNIX:
+      lua_pushliteral(L, "unix");
+      lua_setfield(L, -2, "family");
+      break;
+  }
+  
+  luaS_push_lua_module_field(L, "shuttlesock.modules.core.server", "get_binding");
+  lua_pushlightuserdata(L, data->binding);
+  luaS_call(L, 1, 1);
+  assert(lua_istable(L, -1));
+  
+  lua_setfield(L, -2, "binding");
+  
+  assert(lua_gettop(L) == top+1);
+  //TODO: shuso_server_binding_t
+  return true;
+}
+
+static bool lua_event_maybe_accept_data_wrap_cleanup(lua_State *L, const char *type, void *data) {
   return true;
 }
 
@@ -742,6 +926,12 @@ static int register_event_data_types(lua_State *L) {
     .wrap =           lua_event_accept_data_wrap,
     .wrap_cleanup =   lua_event_accept_data_wrap_cleanup,
   });
+  
+  ok = ok && shuso_lua_event_register_data_wrapper(S, "server_maybe_accept", &(shuso_lua_event_data_wrapper_t ){
+    .wrap =           lua_event_maybe_accept_data_wrap,
+    .wrap_cleanup =   lua_event_maybe_accept_data_wrap_cleanup,
+  });
+    
   lua_pushboolean(L, ok);
   return 1;
 }
@@ -750,6 +940,7 @@ void shuttlesock_server_module_prepare(shuso_t *S, void *pd) {
   luaL_Reg lib[] = {
     {"register_event_data_types", register_event_data_types},
     {"create_binding_data", luaS_create_binding_data},
+    {"create_binding_table_from_ptr", luaS_create_binding_table_from_ptr},
     {"start_worker_io_listener_coro", luaS_start_worker_io_listener_coroutine},
     {"stop_worker_io_listener_coro", luaS_stop_worker_io_listener_coroutine},
     {"maybe_accept_event_init", luaS_maybe_accept_event_init},
@@ -757,6 +948,7 @@ void shuttlesock_server_module_prepare(shuso_t *S, void *pd) {
     {"create_shared_host_data", luaS_create_shared_host_data},
     {"handle_fd_request", luaS_handle_fd_request},
     {"free_shared_host_data", luaS_free_shared_host_data},
+
     {NULL, NULL}
   };
   

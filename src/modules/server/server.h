@@ -7,7 +7,6 @@ void shuttlesock_server_module_prepare(shuso_t *S, void *pd);
 
 typedef struct {
   int                 lua_hostnum;
-  lua_reference_t     ref;
   const char         *server_type;
   shuso_hostinfo_t    host;
   struct {

@@ -14,7 +14,7 @@ local Server = Module.new {
   version = require "shuttlesock".VERSION,
   publish = {
     ["maybe_accept"] = {
-      data_type = "server_accept"
+      data_type = "server_maybe_accept"
     },
     ["http.accept"] = {
       data_type = "server_accept"
@@ -31,7 +31,8 @@ local Server = Module.new {
     "~server:maybe_accept"
   },
   raw_hosts = {},
-  bindings = {}
+  bindings = {},
+  bindings_by_ptr = {}
 }
 
 Server.settings = {
@@ -94,9 +95,27 @@ function Server:initialize_config(block)
   table.insert(self.raw_hosts, host)
 end
 
+function Server:get_binding(id)
+  if self ~= Server then --allow Server.get_binding() invocation
+    id = self
+  end
+  if type(id) == "userdata" then
+    local binding = Server.bindings_by_ptr[id]
+    if not binding then --create lua data from C struct
+      binding = CFuncs.create_binding_table_from_ptr(id)
+      table.insert(Server.bindings, binding)
+      Server.bindings_by_ptr[id] = binding
+    end
+    return binding
+  end
+end
+
 local function common_parent_block(blocks)
   local parents = {}
   local maxlen = 0
+  if #blocks == 1 then
+    return blocks[1]
+  end
   for _, block in pairs(blocks) do
     local cur = block
     local pchain = {}
@@ -123,10 +142,10 @@ local function common_parent_block(blocks)
     end
     last_common = cur
   end
+  return nil
 end
 
 local function publish_server_started_event(ok)
-  print("PUBPLEASE", ok)
   Server:publish("start", true)
   Server:publish(Process.type()..".start", true)
 end
@@ -182,7 +201,7 @@ Server:subscribe("core:manager.workers_started", function()
     Server.bindings = {}
     for id, binding in pairs(unique_bindings) do
       binding.name = id
-      binding.common_parent_block = common_parent_block(unique_binding_blocks[id])
+      binding.common_parent_block = assert(common_parent_block(unique_binding_blocks[id]))
       table.insert(Server.bindings, binding)
       
       local host_type
@@ -195,14 +214,12 @@ Server:subscribe("core:manager.workers_started", function()
       end
       binding.type = host_type
     end
-    --require"mm"(Server.bindings)
     
     --for _, binding in pairs(Server.bindings) do
     --
     --end
     
     local worker_procnums = Process.worker_procnums()
-    
     if #Server.bindings > 0 then
       
       local rcv = IPC.Receiver.start("server:create_listener_sockets", "master")
@@ -210,6 +227,8 @@ Server:subscribe("core:manager.workers_started", function()
       
       for i, binding in ipairs(Server.bindings) do
         binding.ptr = assert(CFuncs.create_binding_data(binding, i), "problem creating bind data")
+        Server.bindings_by_ptr[binding.ptr]=binding
+        
         local shared_ptr = CFuncs.create_shared_host_data(binding.ptr)
         
         local msg = {
@@ -239,7 +258,6 @@ Server:subscribe("core:manager.workers_started", function()
         local receiver = IPC.Receiver.start("server:listener_socket_transfer", worker)
         for _, binding in ipairs(Server.bindings) do
           local fd = assert(table.remove(binding.sockets), "not enough listener sockets opened. weird")
-          --print("uuuh send " .. binding.name .. " fd: " .. fd .. " to worker " .. worker)
           IPC.send(worker, "server:listener_socket_transfer", {name = binding.name, fd = fd, address = binding.address, binding_ptr = binding.ptr})
           local resp = receiver:yield()
           assert(resp == "ok", resp)

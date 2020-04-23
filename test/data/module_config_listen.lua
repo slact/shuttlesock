@@ -12,21 +12,21 @@ local testmod = Module.new {
 }
 
 
-testmod:subscribe("core:manager.workers_started", function()
+testmod:subscribe("server:manager.start", function()
   coroutine.wrap(function()
-    Watcher.timer(0.1):yield()
-    local io = IO.wrap("localhost:2343")()
-    
-    local ok, err = io:connect()
-    print("YESPLEASE", ok, err)
+    local io = assert(IO.wrap("localhost:21595")())
+    assert(io:connect())
   end)()
 end)
 
-testmod:subscribe("server:maybe_accept", function(...)
-  print("MAYBE_ACCEPT", ...)
+testmod:subscribe("server:maybe_accept", function(self, event, rc, data)
+  print("MAYBE_ACCEPT")
+  require"mm"(event)
 end)
-testmod:subscribe("server:http.accept", function(...)
-  print("ACCEPT", ...)
+
+testmod:subscribe("server:http.accept", function(self, event, rc, data)
+  print("ACCEPT")
+  require"mm"(event)
 end)
 
 function testmod:initialize_config(block)
@@ -52,7 +52,7 @@ http {
  
 stream {
   server {
-    listen 127.0.0.3:5050;
+    listen 127.0.0.1:5050;
   }
 }
 
