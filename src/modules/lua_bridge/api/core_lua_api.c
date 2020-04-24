@@ -2353,8 +2353,6 @@ static int Lua_shuso_spinlock_destroy(lua_State *L) {
 static int Lua_shuso_fd_create(lua_State *L) {
   int                             fd = -1;
   int                             family = 0, socktype = 0, protocol = 0;
-  shuso_sockopt_t                 sockopt;
-  const shuso_system_sockopts_t  *sockopt_template;
   
   luaL_checkstring(L, 1);
   luaL_checkstring(L, 2);
@@ -2411,94 +2409,28 @@ static int Lua_shuso_fd_create(lua_State *L) {
   
   shuso_set_nonblocking(fd);
   if(lua_istable(L, 3)) {
+    luaL_checkstack(L, 5, NULL);
     lua_pushnil(L);
     while(lua_next(L, 3)) {
       if(!lua_isstring(L, -2)) {
-        goto fail_sockopt_key_not_string;
+        lua_pushfstring(L, "Can't create socket: sockopt key is not a string");
+        goto fail;
       }
-      
-      luaS_push_lua_module_field(L, "shuttlesock.core", "socket_sockopts_table");
-      lua_getfield(L, -1, lua_tostring(L, -3));
-      if(lua_isnil(L, -1)) {
-        goto fail_unknown_sockopt;
+      luaS_push_lua_module_field(L, "shuttlesock.core", "fd_setsockopt");
+      lua_pushinteger(L, fd);
+      lua_pushvalue(L, -4);
+      luaS_call(L, 2, 2);
+      if(lua_isnil(L, -2)) {
+        lua_pushfstring(L, "Can't create socket: %s", lua_tostring(L, -1));
+        goto fail;
       }
-      sockopt_template = lua_topointer(L, -1);
       lua_pop(L, 2);
-      
-      
-      socklen_t len = 0;
-      sockopt.level = sockopt_template->level;
-      sockopt.name = sockopt_template->name;
-      
-      switch(sockopt_template->value_type) {
-        case SHUSO_SYSTEM_SOCKOPT_MISSING:
-          goto fail_unavailable_sockopt;
-        
-        case SHUSO_SYSTEM_SOCKOPT_VALUE_TYPE_INT:
-          sockopt.value.integer = lua_tointeger(L, -1);
-          len = sizeof(sockopt.value.integer);
-          break;
-        
-        case SHUSO_SYSTEM_SOCKOPT_VALUE_TYPE_FLAG:
-          sockopt.value.flag = lua_tointeger(L, -1);
-          len = sizeof(sockopt.value.flag);
-          break;
-        
-        case SHUSO_SYSTEM_SOCKOPT_VALUE_TYPE_LINGER:
-          if(lua_isboolean(L, -1) && lua_toboolean(L, -1) == false) {
-            sockopt.value.linger.l_onoff = 0;
-            sockopt.value.linger.l_linger = 0;
-          }
-          else if(lua_isnumber(L, -1)) {
-            sockopt.value.linger.l_onoff = 1;
-            sockopt.value.linger.l_linger = lua_tointeger(L, -1);
-          }
-          else if(lua_istable(L, -1)) {
-            lua_getfield(L, -1, "onoff");
-            sockopt.value.linger.l_onoff = lua_toboolean(L, -1);
-            lua_pop(L, 1);
-            
-            lua_getfield(L, -1, "linger");
-            sockopt.value.linger.l_linger = lua_tointeger(L, -1);
-            lua_pop(L, 1);
-          }
-          len = sizeof(sockopt.value.linger);
-          break;
-        
-        case SHUSO_SYSTEM_SOCKOPT_VALUE_TYPE_TIMEVAL: {
-          double timeval_float = lua_tonumber(L, -1);
-          sockopt.value.timeval.tv_sec = floor(timeval_float);
-          sockopt.value.timeval.tv_usec = (timeval_float - sockopt.value.timeval.tv_sec) * 1000000;
-          len = sizeof(sockopt.value.timeval);
-          break;
-        }
-        default:
-          lua_pushliteral(L, "invalid sockopt");
-          goto fail;
-      }
-      
-      int rc = setsockopt(fd, sockopt.level, sockopt.name, (void *)&sockopt.value, len);
-      if(rc != 0) {
-        goto fail_setsockopt;
-      }
     }
   }
   
   lua_pushinteger(L, fd);
   return 1;
 
-fail_setsockopt:
-  lua_pushfstring(L, "Can't create socket: failed to setsockopt %s: %s", sockopt_template->str, strerror(errno));
-  goto fail;
-fail_unknown_sockopt:
-  lua_pushfstring(L, "Can't create socket: unknown sockopt %s", lua_tostring(L, -4));
-  goto fail;
-fail_unavailable_sockopt:
-  lua_pushfstring(L, "Can't create socket: sockopt %s unavailable on this system", sockopt_template->str);
-  goto fail;
-fail_sockopt_key_not_string:
-  lua_pushfstring(L, "Can't create socket: sockopt key must be a string");
-  goto fail;
 fail:
   lua_pushnil(L);
   lua_insert(L, -2);
@@ -2517,6 +2449,176 @@ static int Lua_shuso_fd_destroy(lua_State *L) {
   }
   lua_pushboolean(L, 1);
   return 1;
+}
+
+static int Lua_shuso_fd_setsockopt(lua_State *L) {
+  shuso_sockopt_t                 sockopt;
+  const shuso_system_sockopts_t  *sockopt_template;
+  
+  int fd = luaL_checkinteger(L, 1);
+  const char *sockopt_str = luaL_checkstring(L, 2);
+  luaL_checkany(L, 3);
+  
+  luaS_push_lua_module_field(L, "shuttlesock.system", "socket_sockopts_table");
+  lua_getfield(L, -1, sockopt_str);
+  if(lua_isnil(L, -1)) {
+    lua_pushnil(L);
+    lua_pushfstring(L, "unknown sockopt '%s'", sockopt_str);
+    return 2;
+  }
+  sockopt_template = lua_topointer(L, -1);
+  lua_pop(L, 2);
+  
+  socklen_t len = 0;
+  sockopt.level = sockopt_template->level;
+  sockopt.name = sockopt_template->name;
+  
+  switch(sockopt_template->value_type) {
+    case SHUSO_SYSTEM_SOCKOPT_MISSING:
+      lua_pushnil(L);
+      lua_pushfstring(L, "sockopt '%s' unsupported on this system", sockopt_str);
+      return 2;
+      break;
+    
+    case SHUSO_SYSTEM_SOCKOPT_VALUE_TYPE_INT:
+      sockopt.value.integer = lua_tointeger(L, 3);
+      len = sizeof(sockopt.value.integer);
+      break;
+    
+    case SHUSO_SYSTEM_SOCKOPT_VALUE_TYPE_FLAG:
+      sockopt.value.flag = lua_toboolean(L, 3);
+      len = sizeof(sockopt.value.flag);
+      break;
+    
+    case SHUSO_SYSTEM_SOCKOPT_VALUE_TYPE_LINGER:
+      if(lua_isboolean(L, 3) && lua_toboolean(L, 3) == false) {
+        sockopt.value.linger.l_onoff = 0;
+        sockopt.value.linger.l_linger = 0;
+      }
+      else if(lua_isnumber(L, 3)) {
+        sockopt.value.linger.l_onoff = 1;
+        sockopt.value.linger.l_linger = lua_tointeger(L, 3);
+      }
+      else if(lua_istable(L, 3)) {
+        lua_getfield(L, 3, "onoff");
+        sockopt.value.linger.l_onoff = lua_toboolean(L, -1);
+        lua_pop(L, 1);
+        
+        lua_getfield(L, 3, "linger");
+        sockopt.value.linger.l_linger = lua_tointeger(L, -1);
+        lua_pop(L, 1);
+      }
+      len = sizeof(sockopt.value.linger);
+      break;
+    
+    case SHUSO_SYSTEM_SOCKOPT_VALUE_TYPE_TIMEVAL: {
+      double timeval_float = lua_tonumber(L, 3);
+      sockopt.value.timeval.tv_sec = floor(timeval_float);
+      sockopt.value.timeval.tv_usec = (timeval_float - sockopt.value.timeval.tv_sec) * 1000000;
+      len = sizeof(sockopt.value.timeval);
+      break;
+    }
+    default:
+      lua_pushnil(L);
+      lua_pushfstring(L, "invalid sockopt '%s'", sockopt_str);
+      return 2;
+  }
+  
+  int rc = setsockopt(fd, sockopt.level, sockopt.name, (void *)&sockopt.value, len);
+  if(rc != 0) {
+    lua_pushnil(L);
+    lua_pushfstring(L, "setsockopt '%s' failed: %s", sockopt_str, strerror(errno));
+    return 2;
+  }
+  
+  lua_pushboolean(L, 1);
+  return 1;
+}
+
+static int Lua_shuso_fd_getsockopt(lua_State *L) {
+  shuso_sockopt_t                 sockopt;
+  const shuso_system_sockopts_t  *sockopt_template;
+  int                             fd = luaL_checkinteger(L, 1);
+  const char                     *sockopt_str = luaL_checkstring(L, 2);
+  socklen_t                       len;
+  luaS_push_lua_module_field(L, "shuttlesock.system", "socket_sockopts_table");
+  lua_getfield(L, -1, sockopt_str);
+  sockopt_template = lua_topointer(L, -1);
+  if(lua_isnil(L, -1)) {
+    lua_pushnil(L);
+    lua_pushfstring(L, "unknown sockopt '%s'", sockopt_str);
+    return 2;
+  }
+  lua_pop(L, 2);
+  
+  sockopt.level = sockopt_template->level;
+  sockopt.name = sockopt_template->name;
+  
+  shuso_system_sockopt_type_t sotype = sockopt_template->value_type;
+  
+  
+  switch(sotype) {
+    case SHUSO_SYSTEM_SOCKOPT_MISSING:
+      lua_pushnil(L);
+      lua_pushfstring(L, "sockopt '%s' unsupported on this system", sockopt_str);
+      return 2;
+      break;
+    case SHUSO_SYSTEM_SOCKOPT_VALUE_TYPE_INT:
+      len = sizeof(sockopt.value.integer);
+      break;
+    case SHUSO_SYSTEM_SOCKOPT_VALUE_TYPE_FLAG:
+      len = sizeof(sockopt.value.flag);
+      break;
+    case SHUSO_SYSTEM_SOCKOPT_VALUE_TYPE_LINGER:
+      len = sizeof(sockopt.value.linger);
+      break;
+    case SHUSO_SYSTEM_SOCKOPT_VALUE_TYPE_TIMEVAL:
+      len = sizeof(sockopt.value.timeval);
+      break;
+  }
+  
+  int rc = getsockopt(fd, sockopt.level, sockopt.name, (void *)&sockopt.value, &len);
+  if(rc != 0) {
+    lua_pushnil(L);
+    lua_pushfstring(L, "getsockopt '%s' failed: %s", sockopt_str, strerror(errno));
+    return 2;
+  }
+  
+  switch(sotype) {
+    case SHUSO_SYSTEM_SOCKOPT_MISSING:
+      return 0;
+    case SHUSO_SYSTEM_SOCKOPT_VALUE_TYPE_INT:
+      if(sockopt.name == SO_ERROR) {
+        if(sockopt.value.integer == 0) { //no error
+          lua_pushboolean(L, false);
+        }
+        else {
+          lua_pushstring(L, shuso_system_errnoname(sockopt.value.integer));
+        }
+        lua_pushstring(L, strerror(sockopt.value.integer));
+        return 2;
+      }
+      lua_pushinteger(L, sockopt.value.integer);
+      return 1;
+    case SHUSO_SYSTEM_SOCKOPT_VALUE_TYPE_FLAG:
+      lua_pushboolean(L, sockopt.value.flag);
+      return 1;
+    case SHUSO_SYSTEM_SOCKOPT_VALUE_TYPE_LINGER:
+      lua_newtable(L);
+      lua_pushboolean(L, sockopt.value.linger.l_onoff);
+      lua_setfield(L, -2, "onoff");
+      lua_pushinteger(L, sockopt.value.linger.l_linger);
+      lua_setfield(L, -2, "linger");
+      return 1;
+    case SHUSO_SYSTEM_SOCKOPT_VALUE_TYPE_TIMEVAL: {
+      double val = sockopt.value.timeval.tv_sec;
+      val += (double )sockopt.value.timeval.tv_sec / 1000000.0;
+      lua_pushnumber(L, val);
+      return 1;
+    }
+  }
+  
+  return 0;
 }
 
 static int Lua_shuso_getaddrinfo_noresolve(lua_State *L) {
@@ -2701,6 +2803,8 @@ luaL_Reg shuttlesock_core_module_methods[] = {
 //socket stuff
   {"fd_create", Lua_shuso_fd_create},
   {"fd_destroy", Lua_shuso_fd_destroy},
+  {"fd_getsockopt", Lua_shuso_fd_getsockopt},
+  {"fd_setsockopt", Lua_shuso_fd_setsockopt},
   
 //io_coro
   {"io_create", Lua_shuso_io_create},
@@ -2792,10 +2896,11 @@ int luaS_push_core_module(lua_State *L) {
 }
 
 int luaS_push_system_module(lua_State *L) {
+  
   luaL_newlib(L, shuttlesock_system_module_methods);
   
   lua_newtable(L);
-  for(shuso_system_sockopts_t *sockopt = &shuso_system_sockopts[0]; sockopt->str == NULL; sockopt++) {
+  for(shuso_system_sockopts_t *sockopt = &shuso_system_sockopts[0]; sockopt->str != NULL; sockopt++) {
     lua_pushlightuserdata(L, sockopt);
     lua_setfield(L, -2, sockopt->str);
   }

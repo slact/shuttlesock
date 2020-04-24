@@ -11,19 +11,19 @@ typedef struct {
   bool        initialized;
 } shuso_system_setup_t;
 
+typedef enum {
+  SHUSO_SYSTEM_SOCKOPT_MISSING = 0,
+  SHUSO_SYSTEM_SOCKOPT_VALUE_TYPE_INT,
+  SHUSO_SYSTEM_SOCKOPT_VALUE_TYPE_FLAG,
+  SHUSO_SYSTEM_SOCKOPT_VALUE_TYPE_LINGER,
+  SHUSO_SYSTEM_SOCKOPT_VALUE_TYPE_TIMEVAL,
+} shuso_system_sockopt_type_t;
 
 typedef struct {
   const char  *str;
   int          level;
   int          name;
-  enum {
-    SHUSO_SYSTEM_SOCKOPT_MISSING = 0,
-    SHUSO_SYSTEM_SOCKOPT_VALUE_TYPE_INT,
-    SHUSO_SYSTEM_SOCKOPT_VALUE_TYPE_FLAG,
-    SHUSO_SYSTEM_SOCKOPT_VALUE_TYPE_LINGER,
-    SHUSO_SYSTEM_SOCKOPT_VALUE_TYPE_TIMEVAL,
-  }
-  value_type;
+  shuso_system_sockopt_type_t value_type;
 } shuso_system_sockopts_t;
 extern shuso_system_sockopts_t shuso_system_sockopts[];
 

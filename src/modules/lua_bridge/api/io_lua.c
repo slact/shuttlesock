@@ -52,44 +52,49 @@ static void lua_io_handler(shuso_t *S, shuso_io_t *io) {
         lua_pushinteger(thread, io->result_fd);
         
         lua_newtable(thread);
-        switch(io->sockaddr.any.sa_family) {
-          case AF_INET: {
-            lua_pushlstring(thread, (char *)&io->sockaddr.inet.sin_addr, sizeof(io->sockaddr.inet.sin_addr));
-            lua_setfield(thread, -2, "addr_binary");
+        if(!io->sockaddr) {
+          lua_pushnil(thread);
+        }
+        else {
+          switch(io->sockaddr->any.sa_family) {
+            case AF_INET: {
+              lua_pushlstring(thread, (char *)&io->sockaddr->in.sin_addr, sizeof(io->sockaddr->in.sin_addr));
+              lua_setfield(thread, -2, "addr_binary");
+              
+              char str[INET_ADDRSTRLEN];
+              inet_ntop(AF_INET, &io->sockaddr->in, str, INET_ADDRSTRLEN);
+              lua_pushstring(thread, str);
+              lua_setfield(thread, -2, "address");
+              
+              lua_pushliteral(thread, "IPv4");
+              lua_setfield(thread, -2, "family");
+              
+              lua_pushinteger(thread, ntohs(io->sockaddr->in.sin_port));
+              lua_setfield(thread, -2, "port");
+              break;
+            }
+            case AF_INET6: {
+              lua_pushlstring(thread, (char *)&io->sockaddr->in6.sin6_addr, sizeof(io->sockaddr->in6.sin6_addr));
+              lua_setfield(thread, -2, "addr_binary");
+              
+              char str[INET6_ADDRSTRLEN];
+              inet_ntop(AF_INET6, &io->sockaddr->in6, str, INET6_ADDRSTRLEN);
+              lua_pushstring(thread, str);
+              lua_setfield(thread, -2, "address");
+              
+              lua_pushliteral(thread, "IPv6");
+              lua_setfield(thread, -2, "family");
+              
+              lua_pushinteger(thread, ntohs(io->sockaddr->in6.sin6_port));
+              lua_setfield(thread, -2, "port");
+              break;
+            }
             
-            char str[INET_ADDRSTRLEN];
-            inet_ntop(AF_INET, &io->sockaddr, str, INET_ADDRSTRLEN);
-            lua_pushstring(thread, str);
-            lua_setfield(thread, -2, "address");
-            
-            lua_pushliteral(thread, "IPv4");
-            lua_setfield(thread, -2, "family");
-            
-            lua_pushinteger(thread, ntohs(io->sockaddr.inet.sin_port));
-            lua_setfield(thread, -2, "port");
-            break;
+            case AF_UNIX:
+              raise(SIGABRT);
+              //TODO
+              break;
           }
-          case AF_INET6: {
-            lua_pushlstring(thread, (char *)&io->sockaddr.inet6.sin6_addr, sizeof(io->sockaddr.inet6.sin6_addr));
-            lua_setfield(thread, -2, "addr_binary");
-            
-            char str[INET6_ADDRSTRLEN];
-            inet_ntop(AF_INET6, &io->sockaddr, str, INET6_ADDRSTRLEN);
-            lua_pushstring(thread, str);
-            lua_setfield(thread, -2, "address");
-            
-            lua_pushliteral(thread, "IPv6");
-            lua_setfield(thread, -2, "family");
-            
-            lua_pushinteger(thread, ntohs(io->sockaddr.inet6.sin6_port));
-            lua_setfield(thread, -2, "port");
-            break;
-          }
-          
-          case AF_UNIX:
-            raise(SIGABRT);
-            //TODO
-            break;
         }
         data->num_results = 2;
         break;
@@ -101,6 +106,11 @@ static void lua_io_handler(shuso_t *S, shuso_io_t *io) {
         break;
       
       case SHUSO_IO_OP_NONE:
+        lua_pushboolean(thread, 1);
+        data->num_results = 1;
+        break;
+        
+      case SHUSO_IO_OP_CLOSE:
         lua_pushboolean(thread, 1);
         data->num_results = 1;
         break;
@@ -272,6 +282,13 @@ static void lua_io_op_connect(lua_State *L, shuso_io_t *io) {
   lua_io_new_op(io, data, SHUSO_IO_OP_CONNECT);
   shuso_io_connect(io);
 }
+
+static void lua_io_op_close(lua_State *L, shuso_io_t *io) {
+  shuso_lua_io_data_t *data = io->privdata;
+  lua_io_new_op(io, data, SHUSO_IO_OP_CLOSE);
+  shuso_io_close(io);
+}
+
 static void lua_io_op_wait(lua_State *L, shuso_io_t *io, int index_wait_type) {
   shuso_lua_io_data_t *data = io->privdata;
   int evflags = 0;
@@ -328,6 +345,9 @@ static int Lua_shuso_io_op(lua_State *L) {
   }
   else if(luaS_streq_literal(L, 2, "wait")) {
     lua_io_op_wait(L, io, 3);
+  }
+  else if(luaS_streq_literal(L, 2, "close")) {
+    lua_io_op_close(L, io);
   }
   
   return data->num_results;

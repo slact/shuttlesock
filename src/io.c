@@ -113,6 +113,7 @@ static bool ev_opcode_finish_match_event_type(shuso_io_opcode_t opcode, int evfl
     case SHUSO_IO_OP_SENDMSG:
     case SHUSO_IO_OP_ACCEPT:
     case SHUSO_IO_OP_CLOSE:
+    case SHUSO_IO_OP_SHUTDOWN:
       //should not happen
       raise(SIGABRT);
       return false;
@@ -142,6 +143,7 @@ static bool ev_opcode_retry_match_event_type(shuso_io_opcode_t opcode, int evfla
     case SHUSO_IO_OP_ACCEPT:
     case SHUSO_IO_OP_CONNECT:
     case SHUSO_IO_OP_CLOSE:
+    case SHUSO_IO_OP_SHUTDOWN:
       return true;
   }
   return false;
@@ -286,6 +288,7 @@ static void io_update_incomplete_op_data(shuso_io_t *io, ssize_t result_sz) {
       case SHUSO_IO_OP_CONNECT:
       case SHUSO_IO_OP_ACCEPT:
       case SHUSO_IO_OP_CLOSE:
+      case SHUSO_IO_OP_SHUTDOWN:
         return;
         
       case SHUSO_IO_OP_READ:
@@ -379,6 +382,9 @@ static int io_ev_connect(shuso_io_t *io) {
 static void shuso_io_ev_operation(shuso_io_t *io) {
   ssize_t result;
   shuso_io_opcode_t op = io->opcode;
+  
+  shuso_sockaddr_t        sockaddr;
+  
   do {
     switch(op) {
       case SHUSO_IO_OP_NONE:
@@ -409,11 +415,12 @@ static void shuso_io_ev_operation(shuso_io_t *io) {
         result = io_ev_connect(io);
         break;
       case SHUSO_IO_OP_ACCEPT:
-        io->address_len = sizeof(io->sockaddr);
+        io->address_len = sizeof(sockaddr);
+        io->sockaddr = &sockaddr;
 #ifdef SHUTTLESOCK_HAVE_ACCEPT4
-        result = accept4(io->io_socket.fd, &io->sockaddr.any, &io->address_len, SOCK_NONBLOCK);
+        result = accept4(io->io_socket.fd, &io->sockaddr->any, &io->address_len, SOCK_NONBLOCK);
 #else
-        result = accept(io->io_socket.fd, &io->sockaddr.any, &io->address_len);
+        result = accept(io->io_socket.fd, &io->sockaddr->any, &io->address_len);
         if(result != -1) {
           fcntl(result, F_SETFL, O_NONBLOCK);
         }
@@ -421,6 +428,9 @@ static void shuso_io_ev_operation(shuso_io_t *io) {
         break;
       case SHUSO_IO_OP_CLOSE:
         result = close(io->io_socket.fd);
+        break;
+      case SHUSO_IO_OP_SHUTDOWN:
+        result = shutdown(io->io_socket.fd, io->flags);
         break;
     }
   } while(result == -1 && errno == EINTR);
@@ -463,6 +473,8 @@ static void shuso_io_operation(shuso_io_t *io) {
     case SHUSO_IO_OP_SENDMSG:
       assert(io->readwrite & SHUSO_IO_WRITE);
       break;
+    default:
+      break;
   }
 #endif
   if(io->use_io_uring) {
@@ -487,7 +499,9 @@ static void io_op_run_new(shuso_io_t *io, int opcode, void *init_buf, ssize_t in
   }
   io->op_repeat_to_completion = !partial;
   io->op_registered_memory_buffer = registered;
-  
+  if(opcode == SHUSO_IO_OP_CLOSE) {
+    raise(SIGSTOP);
+  }
   shuso_io_operation(io);
 }
 
@@ -543,7 +557,22 @@ void shuso_io_wait(shuso_io_t *io, int evflags) {
 void shuso_io_connect(shuso_io_t *io) {
   io_op_run_new(io, SHUSO_IO_OP_CONNECT, NULL, 0, false, false);
 }
-
+void shuso_io_shutdown(shuso_io_t *io, int rw) {
+  int how = 0;
+  if(rw == (SHUSO_IO_READ | SHUSO_IO_WRITE)) {
+    how = SHUT_RDWR;
+  }
+  else if(rw == SHUSO_IO_READ) {
+    how = SHUT_RD;
+  }
+  else if(rw == SHUSO_IO_WRITE) {
+    how = SHUT_WR;
+  }
+  io_op_run_new(io, SHUSO_IO_OP_CLOSE, NULL, how, false, false);
+}
+void shuso_io_close(shuso_io_t *io) {
+  io_op_run_new(io, SHUSO_IO_OP_CLOSE, NULL, 0, false, false);
+}
 void shuso_io_accept(shuso_io_t *io) {
   io_op_run_new(io, SHUSO_IO_OP_ACCEPT, NULL, 0, false, false);
 }

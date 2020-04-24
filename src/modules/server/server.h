@@ -27,8 +27,9 @@ typedef struct {
 typedef struct {
   union {
     struct sockaddr     any;
-    struct sockaddr_in  inet;
-    struct sockaddr_in6 inet6;
+    struct sockaddr_in  in;
+    struct sockaddr_in6 in6;
+    struct sockaddr_un  un;
   }                 sockaddr;
   int                     fd;
   shuso_event_t          *accept_event;

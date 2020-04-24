@@ -23,7 +23,8 @@ typedef enum {
   SHUSO_IO_OP_RECVMSG,
   SHUSO_IO_OP_ACCEPT,
   SHUSO_IO_OP_CONNECT,
-  SHUSO_IO_OP_CLOSE
+  SHUSO_IO_OP_CLOSE,
+  SHUSO_IO_OP_SHUTDOWN
 } shuso_io_opcode_t;
 
 typedef enum {
@@ -46,13 +47,7 @@ typedef struct shuso_io_s {
     shuso_socket_t   *socket;
     shuso_hostinfo_t *hostinfo; 
     void             *result_data;
-    union {
-      struct sockaddr     any;
-      struct sockaddr_in  inet;
-#ifdef SHUTTLESOCK_HAVE_IPV6
-      struct sockaddr_in6 inet6;
-#endif
-    }                 sockaddr;
+    shuso_sockaddr_t *sockaddr;
   };
   union {
     size_t            iovcnt;
@@ -157,6 +152,8 @@ void shuso_io_read_partial(shuso_io_t *io, void *buf, size_t len);
 
 void shuso_io_connect(shuso_io_t *io);
 void shuso_io_accept(shuso_io_t *io);
+void shuso_io_close(shuso_io_t *io);
+void shuso_io_shutdown(shuso_io_t *io, int rw);
 
 void shuso_io_sendmsg(shuso_io_t *io, struct msghdr *msg, int flags);
 void shuso_io_recvmsg(shuso_io_t *io, struct msghdr *msg, int flags);

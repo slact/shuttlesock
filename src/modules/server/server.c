@@ -523,20 +523,21 @@ static void maybe_accept_event_confirm_accept(shuso_t *S, shuso_event_state_t *e
   socket.host.name = NULL;
   
   //TODO: udp flag from binding
+  socket.host.udp = false;
   
   switch(data->sockaddr.any.sa_family) {
     case AF_INET:
       socket.host.addr_family = AF_INET;
-      socket.host.addr = data->sockaddr.inet.sin_addr;
-      socket.host.port = data->sockaddr.inet.sin_port;
-      socket.host.sockaddr_in = &data->sockaddr.inet;
+      socket.host.addr = data->sockaddr.in.sin_addr;
+      socket.host.port = data->sockaddr.in.sin_port;
+      socket.host.sockaddr_in = &data->sockaddr.in;
       break;
 #ifdef SHUTTLESOCK_HAVE_IPV6
     case AF_INET6:
       socket.host.addr_family = AF_INET6;
-      socket.host.addr6 = data->sockaddr.inet6.sin6_addr;
-      socket.host.port = data->sockaddr.inet6.sin6_port;
-      socket.host.sockaddr_in6 = &data->sockaddr.inet6;
+      socket.host.addr6 = data->sockaddr.in6.sin6_addr;
+      socket.host.port = data->sockaddr.in6.sin6_port;
+      socket.host.sockaddr_in6 = &data->sockaddr.in6;
       break;
 #endif
     case AF_UNIX:
@@ -852,16 +853,16 @@ static bool lua_event_maybe_accept_data_wrap(lua_State *L, const char *type, voi
       lua_pushliteral(L, "IPv4");
       lua_setfield(L, -2, "family");
       
-      lua_pushlstring(L, (char *)&data->sockaddr.inet.sin_addr, sizeof(data->sockaddr.inet.sin_addr));
+      lua_pushlstring(L, (char *)&data->sockaddr.in.sin_addr, sizeof(data->sockaddr.in.sin_addr));
       lua_setfield(L, -2, "address_binary");
       
       char  address_str[INET_ADDRSTRLEN];
-      if(inet_ntop(AF_INET, (char *)&data->sockaddr.inet.sin_addr, address_str, INET_ADDRSTRLEN)) {
+      if(inet_ntop(AF_INET, (char *)&data->sockaddr.in.sin_addr, address_str, INET_ADDRSTRLEN)) {
         lua_pushstring(L, address_str);
         lua_setfield(L, -2, "address");
       }
       
-      lua_pushinteger(L, ntohs(data->sockaddr.inet.sin_port));
+      lua_pushinteger(L, ntohs(data->sockaddr.in.sin_port));
       lua_setfield(L, -2, "port");
       
       break;
@@ -871,15 +872,15 @@ static bool lua_event_maybe_accept_data_wrap(lua_State *L, const char *type, voi
       lua_pushliteral(L, "IPv6");
       lua_setfield(L, -2, "family");
       
-      lua_pushlstring(L, (char *)&data->sockaddr.inet6.sin6_addr, sizeof(data->sockaddr.inet6.sin6_addr));
+      lua_pushlstring(L, (char *)&data->sockaddr.in6.sin6_addr, sizeof(data->sockaddr.in6.sin6_addr));
       lua_setfield(L, -2, "address_binary");
       char address_str[INET6_ADDRSTRLEN];
-      if(inet_ntop(AF_INET6, (char *)&data->sockaddr.inet6.sin6_addr, address_str, INET6_ADDRSTRLEN)) {
+      if(inet_ntop(AF_INET6, (char *)&data->sockaddr.in6.sin6_addr, address_str, INET6_ADDRSTRLEN)) {
         lua_pushstring(L, address_str);
         lua_setfield(L, -2, "address");
       }
       
-      lua_pushinteger(L, ntohs(data->sockaddr.inet6.sin6_port));
+      lua_pushinteger(L, ntohs(data->sockaddr.in6.sin6_port));
       lua_setfield(L, -2, "port");
       
       break;

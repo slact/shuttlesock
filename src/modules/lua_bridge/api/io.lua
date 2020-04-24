@@ -19,6 +19,30 @@ function io:connect()
   return io_check_op_completion(self, ok, err)
 end
 
+function io:accept()
+  local ok, err = self.core:op("accept")
+  return io_check_op_completion(self, ok, err)
+end
+
+function io:close()
+  local ok, err = self.core:op("close")
+  return io_check_op_completion(self, ok, err)
+end
+
+function io:shutdown(how)
+  if how == "SHUT_RD" or how == "read" or how == "r" then
+    how = "r"
+  elseif how == "SHUT_WR" or how == "write" or how == "w" then
+    how = "w"
+  elseif how == "SHUT_RDWR" or how == "readwrite" or how == "rw" or how == "wr" then
+    how = "rw"
+  else
+    error(("invalid 'how' value %s"):format(tostring(how)))
+  end
+  local ok, err = self.core:op("shutdown", how)
+  return io_check_op_completion(self, ok, err)
+end
+
 local function io_write(self, str, n, partial)
   assert(type(str) == "string")
   if n then
@@ -42,6 +66,16 @@ end
 
 function io:write_partial(str, n)
   return io_write(self, str, n, true)
+end
+
+function io:setsockopt(sockopt, val)
+  local fd = self.core:get_io_fd()
+  return Core.fd_setsockopt(fd, sockopt, val)
+end
+
+function io:getsockopt(sockopt)
+  local fd = self.core:get_io_fd()
+  return Core.fd_getsockopt(fd, sockopt)
 end
 
 local function io_read(self, n, partial)
@@ -100,8 +134,30 @@ function IO.wrap(init, io_handler)
     port = host.port
     sockopts = host.sockopts
     readwrite = host.readwrite or host.rw or "rw"
+  elseif type(init) == "table" then
+    fd = init.fd
+    hostname = init.hostname
+    family = init.family
+    path = init.path
+    name = init.name
+    port = init.port
+    address = init.address
+    address_binary = init.address_binary
+    socktype = init.socktype
+    sockopts = init.sockopts
+    readwrite = init.readwrite or init.rw or "rw"
+    
+    if not name then
+      if path then
+        name = "unix:"..path
+      elseif address and port then
+        name = address .. ":"..port
+      elseif address then
+        name = address
+      end
+    end
   else
-    error("not yet implemented")
+    error("invalid IP init type " .. type(init))
   end
   
   local self = setmetatable({}, io_mt)
@@ -168,13 +224,17 @@ function IO.wrap(init, io_handler)
       readwrite = readwrite
     }
     
-    local err
-    fd, err = Core.fd_create(family, socktype, sockopts)
-    if not fd then
-      error(err)
+    if not fd or fd == -1 then
+      local err
+      fd, err = Core.fd_create(family, socktype, sockopts)
+      if not fd then
+        error(err)
+      end
+      
+      self.init.fd = fd
+    else
+      self.init.fd = fd
     end
-    
-    self.init.fd = fd
     
     self.core = assert(Core.io_create(self.init, self.coroutine))
     

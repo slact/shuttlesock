@@ -93,6 +93,16 @@ typedef struct shuso_module_setting_s shuso_module_setting_t;
 typedef struct shuso_event_state_s shuso_event_state_t;
 
 typedef struct shuso_sockopts_s shuso_sockopts_t;
+
+typedef union {
+  struct sockaddr     any;
+  struct sockaddr_in  in;
+#ifdef SHUTTLESOCK_HAVE_IPV6
+  struct sockaddr_in6 in6;
+#endif
+  struct sockaddr_un  un;
+} shuso_sockaddr_t;
+
 typedef struct shuso_hostinfo_s {
   const char        *name;
   union {
@@ -119,6 +129,8 @@ typedef struct shuso_socket_s {
   int               fd;
   shuso_hostinfo_t  host;
 } shuso_socket_t;
+
+typedef struct shuso_connection_s shuso_connection_t;
 
 typedef void shuso_socket_fn(shuso_t *S, shuso_socket_t *socket);
 typedef void shuso_socket_listener_fn(shuso_t *S, shuso_socket_t *socket, void *pd);
