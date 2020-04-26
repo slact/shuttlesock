@@ -53,7 +53,6 @@ typedef struct shuso_io_s {
     size_t            iovcnt;
     size_t            len;
     int               flags;
-    socklen_t         address_len;
     int               result_intdata;
   };
   
@@ -151,7 +150,7 @@ void shuso_io_write_partial(shuso_io_t *io, const void *buf, size_t len);
 void shuso_io_read_partial(shuso_io_t *io, void *buf, size_t len);
 
 void shuso_io_connect(shuso_io_t *io);
-void shuso_io_accept(shuso_io_t *io);
+void shuso_io_accept(shuso_io_t *io, shuso_sockaddr_t *sockaddr_buffer, socklen_t socklen);
 void shuso_io_close(shuso_io_t *io);
 void shuso_io_shutdown(shuso_io_t *io, int rw);
 

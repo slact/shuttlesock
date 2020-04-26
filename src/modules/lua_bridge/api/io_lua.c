@@ -91,11 +91,15 @@ static void lua_io_handler(shuso_t *S, shuso_io_t *io) {
             }
             
             case AF_UNIX:
-              raise(SIGABRT);
-              //TODO
+              lua_pushliteral(thread, "Unix");
+              lua_setfield(thread, -2, "family");
+              
+              lua_pushstring(thread, io->sockaddr->un.sun_path);
+              lua_setfield(thread, -2, "path");
               break;
           }
         }
+        lua_io_update_data_ref(thread, data, 0);
         data->num_results = 2;
         break;
       }
@@ -273,8 +277,11 @@ static void lua_io_op_write(lua_State *L, shuso_io_t *io, int index_str, int ind
 
 static void lua_io_op_accept(lua_State *L, shuso_io_t *io) {
   shuso_lua_io_data_t *data = io->privdata;
+  shuso_sockaddr_t    *sockaddr;
+  sockaddr = lua_newuserdata(L, sizeof(*sockaddr));
+  lua_io_update_data_ref(L, data, -1);
   lua_io_new_op(io, data, SHUSO_IO_OP_ACCEPT);
-  shuso_io_accept(io);
+  shuso_io_accept(io, sockaddr, sizeof(*sockaddr));
 }
 
 static void lua_io_op_connect(lua_State *L, shuso_io_t *io) {

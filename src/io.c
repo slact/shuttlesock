@@ -383,8 +383,6 @@ static void shuso_io_ev_operation(shuso_io_t *io) {
   ssize_t result;
   shuso_io_opcode_t op = io->opcode;
   
-  shuso_sockaddr_t        sockaddr;
-  
   do {
     switch(op) {
       case SHUSO_IO_OP_NONE:
@@ -414,18 +412,21 @@ static void shuso_io_ev_operation(shuso_io_t *io) {
       case SHUSO_IO_OP_CONNECT:
         result = io_ev_connect(io);
         break;
-      case SHUSO_IO_OP_ACCEPT:
-        io->address_len = sizeof(sockaddr);
-        io->sockaddr = &sockaddr;
+      case SHUSO_IO_OP_ACCEPT: {
+        socklen_t         socklen = io->len;
+        assert(socklen == sizeof(*io->sockaddr));
+        assert(io->sockaddr != NULL);
 #ifdef SHUTTLESOCK_HAVE_ACCEPT4
-        result = accept4(io->io_socket.fd, &io->sockaddr->any, &io->address_len, SOCK_NONBLOCK);
+        result = accept4(io->io_socket.fd, &io->sockaddr->any, &socklen, SOCK_NONBLOCK);
 #else
-        result = accept(io->io_socket.fd, &io->sockaddr->any, &io->address_len);
+        result = accept(io->io_socket.fd, &io->sockaddr->any, &socklen);
         if(result != -1) {
           fcntl(result, F_SETFL, O_NONBLOCK);
         }
 #endif
+        io->len = socklen;
         break;
+      }
       case SHUSO_IO_OP_CLOSE:
         result = close(io->io_socket.fd);
         break;
@@ -485,17 +486,25 @@ static void shuso_io_operation(shuso_io_t *io) {
   }
 }
 
-static void io_op_run_new(shuso_io_t *io, int opcode, void *init_buf, ssize_t init_len, bool partial, bool registered) {
+static void io_op_run_new(shuso_io_t *io, int opcode, void *init_ptr, ssize_t init_len, bool partial, bool registered) {
   io->result = 0;
   io->error = 0;
   io->opcode = opcode;
-  if(opcode == SHUSO_IO_OP_READV || opcode == SHUSO_IO_OP_WRITEV) {
-    io->iov = init_buf;
-    io->iovcnt = init_len;
-  }
-  else {
-    io->buf = init_buf;
-    io->len = init_len;
+  switch(opcode) {
+    case SHUSO_IO_OP_READV:
+    case SHUSO_IO_OP_WRITEV:
+      io->iov = init_ptr;
+      io->iovcnt = init_len;
+      break;
+    case SHUSO_IO_OP_ACCEPT:
+      io->sockaddr = init_ptr;
+      io->len = init_len;
+      assert(init_len == sizeof(*io->sockaddr));
+      break;
+    default:
+      io->buf = init_ptr;
+      io->len = init_len;
+      break;
   }
   io->op_repeat_to_completion = !partial;
   io->op_registered_memory_buffer = registered;
@@ -573,8 +582,9 @@ void shuso_io_shutdown(shuso_io_t *io, int rw) {
 void shuso_io_close(shuso_io_t *io) {
   io_op_run_new(io, SHUSO_IO_OP_CLOSE, NULL, 0, false, false);
 }
-void shuso_io_accept(shuso_io_t *io) {
-  io_op_run_new(io, SHUSO_IO_OP_ACCEPT, NULL, 0, false, false);
+void shuso_io_accept(shuso_io_t *io, shuso_sockaddr_t *sockaddr_buffer, socklen_t len) {
+  assert(len == sizeof(*sockaddr_buffer));
+  io_op_run_new(io, SHUSO_IO_OP_ACCEPT, sockaddr_buffer, len, false, false);
 }
 
 void shuso_io_writev_partial(shuso_io_t *io, struct iovec *iov, int iovcnt) {

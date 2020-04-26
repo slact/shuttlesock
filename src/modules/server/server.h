@@ -25,12 +25,7 @@ typedef struct {
 } shuso_server_accept_data_t;
 
 typedef struct {
-  union {
-    struct sockaddr     any;
-    struct sockaddr_in  in;
-    struct sockaddr_in6 in6;
-    struct sockaddr_un  un;
-  }                 sockaddr;
+  shuso_sockaddr_t       *sockaddr;
   int                     fd;
   shuso_event_t          *accept_event;
   shuso_server_binding_t *binding;

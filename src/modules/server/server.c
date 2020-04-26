@@ -271,6 +271,8 @@ typedef struct {
   shuso_event_t            *maybe_accept_event;
   shuso_event_t            *accept_event;
   shuso_server_binding_t   *binding;
+  shuso_sockaddr_t          sockaddr;
+  socklen_t                 sockaddr_len;
 } shuso_listener_io_data_t;
 
 static void listener_accept_coro_error(shuso_t *S, shuso_io_t *io) {
@@ -293,8 +295,8 @@ static void listener_accept_coro(shuso_t *S, shuso_io_t *io) {
   }
   while(rc == 0) {
     SHUSO_IO_CORO_YIELD(wait, SHUSO_IO_READ);
-    SHUSO_IO_CORO_YIELD(accept);
-    memcpy(&maybe_accept_data.sockaddr, &io->sockaddr, sizeof(io->sockaddr));
+    SHUSO_IO_CORO_YIELD(accept, &d->sockaddr, sizeof(d->sockaddr));
+    maybe_accept_data.sockaddr = &d->sockaddr;
     maybe_accept_data.fd = io->result_fd;
     maybe_accept_data.binding = d->binding;
     maybe_accept_data.accept_event = d->accept_event;
@@ -525,27 +527,26 @@ static void maybe_accept_event_confirm_accept(shuso_t *S, shuso_event_state_t *e
   //TODO: udp flag from binding
   socket.host.udp = false;
   
-  switch(data->sockaddr.any.sa_family) {
+  switch(data->sockaddr->any.sa_family) {
     case AF_INET:
       socket.host.addr_family = AF_INET;
-      socket.host.addr = data->sockaddr.in.sin_addr;
-      socket.host.port = data->sockaddr.in.sin_port;
-      socket.host.sockaddr_in = &data->sockaddr.in;
+      socket.host.addr = data->sockaddr->in.sin_addr;
+      socket.host.port = data->sockaddr->in.sin_port;
+      socket.host.sockaddr_in = &data->sockaddr->in;
       break;
 #ifdef SHUTTLESOCK_HAVE_IPV6
     case AF_INET6:
       socket.host.addr_family = AF_INET6;
-      socket.host.addr6 = data->sockaddr.in6.sin6_addr;
-      socket.host.port = data->sockaddr.in6.sin6_port;
-      socket.host.sockaddr_in6 = &data->sockaddr.in6;
+      socket.host.addr6 = data->sockaddr->in6.sin6_addr;
+      socket.host.port = data->sockaddr->in6.sin6_port;
+      socket.host.sockaddr_in6 = &data->sockaddr->in6;
       break;
 #endif
     case AF_UNIX:
       socket.host.addr_family = AF_UNIX;
-      //TODO: get the unix path
-      socket.host.path = NULL;
+      socket.host.path = data->sockaddr->un.sun_path;
       socket.host.port = 0;
-      socket.host.sockaddr_un = NULL;
+      socket.host.sockaddr_un = &data->sockaddr->un;
       break;
   }
   
@@ -847,22 +848,21 @@ static bool lua_event_maybe_accept_data_wrap(lua_State *L, const char *type, voi
     lua_setfield(L, -2, "accept_event_ptr");
   }
   
-  
-  switch(data->sockaddr.any.sa_family) {
+  switch(data->sockaddr->any.sa_family) {
     case AF_INET: {
       lua_pushliteral(L, "IPv4");
       lua_setfield(L, -2, "family");
       
-      lua_pushlstring(L, (char *)&data->sockaddr.in.sin_addr, sizeof(data->sockaddr.in.sin_addr));
+      lua_pushlstring(L, (char *)&data->sockaddr->in.sin_addr, sizeof(data->sockaddr->in.sin_addr));
       lua_setfield(L, -2, "address_binary");
       
       char  address_str[INET_ADDRSTRLEN];
-      if(inet_ntop(AF_INET, (char *)&data->sockaddr.in.sin_addr, address_str, INET_ADDRSTRLEN)) {
+      if(inet_ntop(AF_INET, (char *)&data->sockaddr->in.sin_addr, address_str, INET_ADDRSTRLEN)) {
         lua_pushstring(L, address_str);
         lua_setfield(L, -2, "address");
       }
       
-      lua_pushinteger(L, ntohs(data->sockaddr.in.sin_port));
+      lua_pushinteger(L, ntohs(data->sockaddr->in.sin_port));
       lua_setfield(L, -2, "port");
       
       break;
@@ -872,15 +872,15 @@ static bool lua_event_maybe_accept_data_wrap(lua_State *L, const char *type, voi
       lua_pushliteral(L, "IPv6");
       lua_setfield(L, -2, "family");
       
-      lua_pushlstring(L, (char *)&data->sockaddr.in6.sin6_addr, sizeof(data->sockaddr.in6.sin6_addr));
+      lua_pushlstring(L, (char *)&data->sockaddr->in6.sin6_addr, sizeof(data->sockaddr->in6.sin6_addr));
       lua_setfield(L, -2, "address_binary");
       char address_str[INET6_ADDRSTRLEN];
-      if(inet_ntop(AF_INET6, (char *)&data->sockaddr.in6.sin6_addr, address_str, INET6_ADDRSTRLEN)) {
+      if(inet_ntop(AF_INET6, (char *)&data->sockaddr->in6.sin6_addr, address_str, INET6_ADDRSTRLEN)) {
         lua_pushstring(L, address_str);
         lua_setfield(L, -2, "address");
       }
       
-      lua_pushinteger(L, ntohs(data->sockaddr.in6.sin6_port));
+      lua_pushinteger(L, ntohs(data->sockaddr->in6.sin6_port));
       lua_setfield(L, -2, "port");
       
       break;
@@ -889,6 +889,9 @@ static bool lua_event_maybe_accept_data_wrap(lua_State *L, const char *type, voi
     case AF_UNIX:
       lua_pushliteral(L, "unix");
       lua_setfield(L, -2, "family");
+      
+      lua_pushstring(L, data->sockaddr->un.sun_path);
+      lua_setfield(L, -2, "path");
       break;
   }
   
