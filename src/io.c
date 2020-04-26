@@ -107,10 +107,14 @@ static bool ev_opcode_finish_match_event_type(shuso_io_opcode_t opcode, int evfl
     case SHUSO_IO_OP_NONE:
     case SHUSO_IO_OP_READV:
     case SHUSO_IO_OP_READ:
+    case SHUSO_IO_OP_RECVFROM:
     case SHUSO_IO_OP_RECVMSG:
+    case SHUSO_IO_OP_RECV:
     case SHUSO_IO_OP_WRITEV:
     case SHUSO_IO_OP_WRITE:
+    case SHUSO_IO_OP_SENDTO:
     case SHUSO_IO_OP_SENDMSG:
+    case SHUSO_IO_OP_SEND:
     case SHUSO_IO_OP_ACCEPT:
     case SHUSO_IO_OP_CLOSE:
     case SHUSO_IO_OP_SHUTDOWN:
@@ -132,12 +136,16 @@ static bool ev_opcode_retry_match_event_type(shuso_io_opcode_t opcode, int evfla
     
     case SHUSO_IO_OP_READV:
     case SHUSO_IO_OP_READ:
+    case SHUSO_IO_OP_RECVFROM:
     case SHUSO_IO_OP_RECVMSG:
+    case SHUSO_IO_OP_RECV:
       return evflags & EV_READ;
     
     case SHUSO_IO_OP_WRITEV:
     case SHUSO_IO_OP_WRITE:
+    case SHUSO_IO_OP_SENDTO:
     case SHUSO_IO_OP_SENDMSG:
+    case SHUSO_IO_OP_SEND:
       return evflags & EV_WRITE;
       
     case SHUSO_IO_OP_ACCEPT:
@@ -288,6 +296,8 @@ static bool io_op_update_and_check_completion(shuso_io_t *io, ssize_t result_sz)
     case SHUSO_IO_OP_WRITE:
     case SHUSO_IO_OP_SENDTO:
     case SHUSO_IO_OP_RECVFROM:
+    case SHUSO_IO_OP_SEND:
+    case SHUSO_IO_OP_RECV:
       io->buf = &io->buf[result_sz];
       io->len -= result_sz;
       assert(io->len >= 0);
@@ -374,6 +384,21 @@ static int io_ev_connect(shuso_io_t *io) {
   return connect(io->io_socket.fd, connect_sockaddr, sockaddr_sz);
 }
 
+static socklen_t af_sockaddrlen(sa_family_t fam) {
+  switch(fam) {
+    case AF_INET:
+      return sizeof(struct sockaddr_in);
+#ifdef SHUTTLESOCK_HAVE_IPV6
+    case AF_INET6:
+      return sizeof(struct sockaddr_in6);
+#endif
+    case AF_UNIX:
+      return sizeof(struct sockaddr_un);
+  }
+  //unknown
+  return 0;
+}
+
 static void shuso_io_ev_operation(shuso_io_t *io) {
   ssize_t result;
   shuso_io_opcode_t op = io->opcode;
@@ -384,7 +409,7 @@ static void shuso_io_ev_operation(shuso_io_t *io) {
         //should never happen
         raise(SIGABRT);
         break;
-        
+      
       case SHUSO_IO_OP_READ:
         result = read(io->io_socket.fd, io->buf, io->len);
         break;
@@ -398,11 +423,27 @@ static void shuso_io_ev_operation(shuso_io_t *io) {
       case SHUSO_IO_OP_WRITEV:
         result = writev(io->io_socket.fd, io->iov, io->iovcnt);
         break;
+      case SHUSO_IO_OP_RECVFROM: {
+        assert(io->sockaddr);
+        socklen_t sockaddrlen = af_sockaddrlen(io->sockaddr->any.sa_family);
+        result = recvfrom(io->io_socket.fd, io->buf, io->len, io->flags, &io->sockaddr->any, &sockaddrlen);
+        break;
+      }
+      case SHUSO_IO_OP_RECV:
+        result = recv(io->io_socket.fd, io->buf, io->len, io->flags);
+        break;
       case SHUSO_IO_OP_RECVMSG:
         result = recvmsg(io->io_socket.fd, io->msg, io->flags);
         break;
       case SHUSO_IO_OP_SENDMSG:
         result = sendmsg(io->io_socket.fd, io->msg, io->flags);
+        break;
+      case SHUSO_IO_OP_SENDTO: 
+        assert(io->sockaddr);
+        result = sendto(io->io_socket.fd, io->buf, io->len, io->flags, &io->sockaddr->any, af_sockaddrlen(io->sockaddr->any.sa_family));
+        break;
+      case SHUSO_IO_OP_SEND:
+        result = send(io->io_socket.fd, io->buf, io->len, io->flags);
         break;
       case SHUSO_IO_OP_CONNECT:
         result = io_ev_connect(io);
@@ -600,6 +641,44 @@ void shuso_io_readv(shuso_io_t *io, struct iovec *iov, int iovcnt) {
   io_op_run_new(io, SHUSO_IO_OP_READV, iov, iovcnt, false, false);
 }
 
+void shuso_io_sendto_partial(shuso_io_t *io, const void *buf, size_t len, shuso_sockaddr_t *to, int flags) {
+  io->flags = flags;
+  io->sockaddr = to;
+  io_op_run_new(io, SHUSO_IO_OP_SENDTO, (void *)buf, len, true, false);
+}
+void shuso_io_sendto(shuso_io_t *io, const void *buf, size_t len, shuso_sockaddr_t *to, int flags) {
+  io->flags = flags;
+  io->sockaddr = to;
+  io_op_run_new(io, SHUSO_IO_OP_SENDTO, (void *)buf, len, false, false);
+}
+void shuso_io_recvfrom_partial(shuso_io_t *io, void *buf, size_t len, shuso_sockaddr_t *from, int flags) {
+  io->flags = flags;
+  io->sockaddr = from;
+  io_op_run_new(io, SHUSO_IO_OP_RECVFROM, buf, len, true, false);
+}
+void shuso_io_recvfrom(shuso_io_t *io, void *buf, size_t len, shuso_sockaddr_t *from, int flags) {
+  io->flags = flags;
+  io->sockaddr = from;
+  io_op_run_new(io, SHUSO_IO_OP_RECVFROM, buf, len, false, false);
+}
+
+void shuso_io_send_partial(shuso_io_t *io, const void *buf, size_t len, int flags) {
+  io->flags = flags;
+  io_op_run_new(io, SHUSO_IO_OP_SEND, (void *)buf, len, true, false);
+}
+void shuso_io_send(shuso_io_t *io, const void *buf, size_t len, int flags) {
+  io->flags = flags;
+  io_op_run_new(io, SHUSO_IO_OP_SEND, (void *)buf, len, false, false);
+}
+void shuso_io_recv_partial(shuso_io_t *io, void *buf, size_t len, int flags) {
+  io->flags = flags;
+  io_op_run_new(io, SHUSO_IO_OP_RECV, buf, len, true, false);
+}
+void shuso_io_recv(shuso_io_t *io, void *buf, size_t len, int flags) {
+  io->flags = flags;
+  io_op_run_new(io, SHUSO_IO_OP_RECV, buf, len, false, false);
+}
+
 void shuso_io_write_partial(shuso_io_t *io, const void *buf, size_t len) {
   io_op_run_new(io, SHUSO_IO_OP_WRITE, (void *)buf, len, true, false);
 }
@@ -614,9 +693,11 @@ void shuso_io_read(shuso_io_t *io, void *buf, size_t len) {
 }
 
 void shuso_io_sendmsg(shuso_io_t *io, struct msghdr *msg, int flags) {
-  io_op_run_new(io, SHUSO_IO_OP_SENDMSG, msg, flags, false, false);
+  io->flags = flags;
+  io_op_run_new(io, SHUSO_IO_OP_SENDMSG, msg, 0, false, false);
 }
 void shuso_io_recvmsg(shuso_io_t *io, struct msghdr *msg, int flags) {
-  io_op_run_new(io, SHUSO_IO_OP_RECVMSG, msg, flags, false, false);
+  io->flags = flags;
+  io_op_run_new(io, SHUSO_IO_OP_RECVMSG, msg, 0, false, false);
 }
 

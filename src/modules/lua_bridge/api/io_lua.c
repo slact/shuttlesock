@@ -182,8 +182,12 @@ static int Lua_shuso_io_get_value(lua_State *L) {
     lua_pushinteger(L, io->result);
     return 1;
   }
-  if(luaS_streq_literal(L, 2, "result_intdata")) {
-    lua_pushinteger(L, io->result_intdata);
+  if(luaS_streq_literal(L, 2, "flags")) {
+    lua_pushinteger(L, io->flags);
+    return 1;
+  }
+  if(luaS_streq_literal(L, 2, "intdata")) {
+    lua_pushinteger(L, io->intdata);
     return 1;
   }
   if(luaS_streq_literal(L, 2, "result_fd")) {
@@ -212,7 +216,9 @@ static int Lua_shuso_io_set_value(lua_State *L) {
   
   luaL_checkstack(L, 4, NULL);
   if(luaS_streq_literal(L, 2, "buf")) {
-    io->buf = (char *)luaL_checklstring(L, 3, &io->len);
+    size_t strlen;
+    io->buf = (char *)luaL_checklstring(L, 3, &strlen);
+    io->len = strlen;
     lua_io_update_data_ref(L, data, 3);
   }
   else if(luaS_streq_literal(L, 2, "iov")) {

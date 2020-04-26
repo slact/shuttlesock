@@ -20,7 +20,11 @@ typedef enum {
   SHUSO_IO_OP_READ,
   SHUSO_IO_OP_WRITE,
   SHUSO_IO_OP_SENDMSG,
+  SHUSO_IO_OP_SENDTO,
+  SHUSO_IO_OP_SEND,
   SHUSO_IO_OP_RECVMSG,
+  SHUSO_IO_OP_RECVFROM,
+  SHUSO_IO_OP_RECV,
   SHUSO_IO_OP_ACCEPT,
   SHUSO_IO_OP_CONNECT,
   SHUSO_IO_OP_CLOSE,
@@ -47,14 +51,14 @@ typedef struct shuso_io_s {
     shuso_socket_t   *socket;
     shuso_hostinfo_t *hostinfo; 
     void             *result_data;
-    shuso_sockaddr_t *sockaddr;
   };
+  shuso_sockaddr_t *sockaddr; //needs to be separate because sendto/recvfrom use a buffer _and_ a sockaddr
   union {
     size_t            iovcnt;
-    size_t            len;
-    int               flags;
-    int               result_intdata;
+    ssize_t           len;
+    int               intdata;
   };
+  int               flags; //needs to be separate because sendto/recvfrom takes flags _and_ a length
   
   union {
     ssize_t           result;
@@ -148,6 +152,15 @@ void shuso_io_read(shuso_io_t *io, void *buf, size_t len);
 
 void shuso_io_write_partial(shuso_io_t *io, const void *buf, size_t len);
 void shuso_io_read_partial(shuso_io_t *io, void *buf, size_t len);
+
+void shuso_io_send(shuso_io_t *io, const void *buf, size_t len, int flags);
+void shuso_io_recv(shuso_io_t *io, void *buf, size_t len, int flags);
+
+void shuso_io_sendto(shuso_io_t *io, const void *buf, size_t len, shuso_sockaddr_t *to, int flags);
+void shuso_io_sendto_partial(shuso_io_t *io, const void *buf, size_t len, shuso_sockaddr_t *to, int flags);
+
+void shuso_io_recvfrom_partial(shuso_io_t *io, void *buf, size_t len, shuso_sockaddr_t *from, int flags);
+void shuso_io_recvfrom(shuso_io_t *io, void *buf, size_t len, shuso_sockaddr_t *from, int flags);
 
 void shuso_io_connect(shuso_io_t *io);
 void shuso_io_accept(shuso_io_t *io, shuso_sockaddr_t *sockaddr_buffer, socklen_t socklen);
