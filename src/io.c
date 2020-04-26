@@ -239,7 +239,7 @@ void shuso_io_resume_msg(shuso_io_t *io, struct msghdr *msg, int flags) {
 
 void shuso_io_resume_data(shuso_io_t *io, void *data, int intdata) {
   io->result_data = data;
-  io->result_intdata = intdata;
+  io->intdata = intdata;
   io_run(io);
 }
 
@@ -253,60 +253,55 @@ static size_t iovec_size(const struct iovec *iov, size_t iovcnt) {
 }
 */
 
-static void iovec_update_after_incomplete_operation(struct iovec **iov_ptr, size_t *iovcnt_ptr, ssize_t written) {
+static bool io_iovec_op_update_and_check_completion(struct iovec **iov_ptr, size_t *iovcnt_ptr, ssize_t written) {
+  //returns true if operation is complete (iovec now empty)
   size_t         iovcnt = *iovcnt_ptr;
-  size_t         remaining = written;
+  size_t         chomped = written;
   struct iovec  *iov = *iov_ptr;
-  for(size_t i=0; i<iovcnt; i++) {
-    if(remaining < iov[i].iov_len) {
+  size_t         i;
+  for(i=0; i < iovcnt; i++) {
+    if(chomped < iov[i].iov_len) {
       *iov_ptr = &iov[i];
-      iov[i].iov_len -= remaining;
+      iov[i].iov_len -= chomped;
       *iovcnt_ptr = iovcnt - i;
-      return;
+      return false;
+    }
+    else {
+      assert(chomped >= iov[i].iov_len);
+      chomped -= iov[i].iov_len;
     }
   }
-  //this should not happen as long as the number of bytes written < size(iovec_data);
-  abort();
+  *iovcnt_ptr = 0;
+  return true;
 }
 
-static void retry_ev_operation(shuso_io_t *io) {
-  assert(io->watch_type == SHUSO_IO_WATCH_NONE);
-  io->watch_type = SHUSO_IO_WATCH_OP_RETRY;
-  io_watch_update(io);
-}
-
-static void finish_ev_operation(shuso_io_t *io) {
-  assert(io->watch_type == SHUSO_IO_WATCH_NONE);
-  io->watch_type = SHUSO_IO_WATCH_OP_FINISH;
-  io_watch_update(io);
-}
-
-static void io_update_incomplete_op_data(shuso_io_t *io, ssize_t result_sz) {
-  assert(result_sz >= 0);
+static bool io_op_update_and_check_completion(shuso_io_t *io, ssize_t result_sz) {
   switch((shuso_io_opcode_t )io->opcode) {
-      case SHUSO_IO_OP_NONE:
-      case SHUSO_IO_OP_CONNECT:
-      case SHUSO_IO_OP_ACCEPT:
-      case SHUSO_IO_OP_CLOSE:
-      case SHUSO_IO_OP_SHUTDOWN:
-        return;
-        
-      case SHUSO_IO_OP_READ:
-      case SHUSO_IO_OP_WRITE:
-        io->buf = &io->buf[result_sz];
-        io->len -= result_sz;
-        return;
-        
-      case SHUSO_IO_OP_READV:
-      case SHUSO_IO_OP_WRITEV:
-        iovec_update_after_incomplete_operation(&io->iov, &io->iovcnt, result_sz);
-        return;
-        
-      case SHUSO_IO_OP_RECVMSG:
-      case SHUSO_IO_OP_SENDMSG:
-        iovec_update_after_incomplete_operation(&io->msg->msg_iov, &io->msg->msg_iovlen, result_sz);
-        return;
-    }
+    case SHUSO_IO_OP_NONE:
+    case SHUSO_IO_OP_CONNECT:
+    case SHUSO_IO_OP_ACCEPT:
+    case SHUSO_IO_OP_CLOSE:
+    case SHUSO_IO_OP_SHUTDOWN:
+      return true;
+      
+    case SHUSO_IO_OP_READ:
+    case SHUSO_IO_OP_WRITE:
+    case SHUSO_IO_OP_SENDTO:
+    case SHUSO_IO_OP_RECVFROM:
+      io->buf = &io->buf[result_sz];
+      io->len -= result_sz;
+      assert(io->len >= 0);
+      return io->len == 0;
+      
+    case SHUSO_IO_OP_READV:
+    case SHUSO_IO_OP_WRITEV:
+      return io_iovec_op_update_and_check_completion(&io->iov, &io->iovcnt, result_sz);
+      
+    case SHUSO_IO_OP_RECVMSG:
+    case SHUSO_IO_OP_SENDMSG:
+      return io_iovec_op_update_and_check_completion(&io->msg->msg_iov, &io->msg->msg_iovlen, result_sz);
+  }
+  return true;
 }
 
 static int io_ev_connect(shuso_io_t *io) {
@@ -438,27 +433,32 @@ static void shuso_io_ev_operation(shuso_io_t *io) {
   
   if(result == -1) {
     if(op == SHUSO_IO_OP_CONNECT && (errno == EAGAIN || errno == EINPROGRESS)) {
-      finish_ev_operation(io);
+      io->watch_type = SHUSO_IO_WATCH_OP_FINISH;
+      io_watch_update(io);
       return;
     }
-    else if(io->op_repeat_to_completion && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+    else if(errno == EAGAIN || errno == EWOULDBLOCK) {
       //-1 means zero bytes processed, in case of EAGAIN, right?
-      io_update_incomplete_op_data(io, 0);
-      assert(io->len > 0);
-      retry_ev_operation(io);
+      io->watch_type = SHUSO_IO_WATCH_OP_RETRY;
+      io_watch_update(io);
       return;
     }
     else {
       //legit error happened
       io->result = -1;
       io->error = errno;
+      io_run(io);
+      return;
     }
   }
-  else {
-    io->result += result;
+  else if(io->op_repeat_to_completion && !io_op_update_and_check_completion(io, result)) {
+    io->watch_type = SHUSO_IO_WATCH_OP_RETRY;
+    io_watch_update(io);
+    return;
   }
-  io->opcode = SHUSO_IO_OP_NONE;
+  io->result = result;
   io_run(io);
+  return;
 }
 
 static void shuso_io_operation(shuso_io_t *io) {
