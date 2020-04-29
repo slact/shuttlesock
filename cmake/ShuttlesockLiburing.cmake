@@ -1,5 +1,5 @@
-set(LIBURING_RELEASE_VERSION 0.3)
-set(LIBURING_RELEASE_MD5 "")
+set(LIBURING_RELEASE_VERSION 0.6)
+set(LIBURING_RELEASE_MD5 "e99b34d961e933faa694328f266949a9")
 
 
 function(shuttlesock_link_liburing STATIC_BUILD)
@@ -9,9 +9,43 @@ function(shuttlesock_link_liburing STATIC_BUILD)
       HEADER_NAME liburing.h
       OPTIONAL LIBURING_FOUND
       DRY_RUN
+      INCLUDE_PATH_VAR liburing_include_path
+      LINK_LIB_VAR liburing_lib_path
     )
+    
     if(LIBURING_FOUND)
-      target_require_package(shuttlesock PUBLIC uring HEADER_NAME liburing.h QUIET)
+      if(NOT DEFINED LIBURING_HAS_OPCODE_SUPPORTED)
+        message(STATUS "Check if liburing has io_uring_opcode_supported()")
+        cmake_push_check_state(RESET)
+        set(CMAKE_REQUIRED_QUIET 1)
+        set(CMAKE_REQUIRED_INCLUDES ${liburing_include_path})
+        set(CMAKE_REQUIRED_LIBRARIES ${liburing_lib_path})
+        check_c_source_runs("
+          #include <stdlib.h>
+          #include <liburing.h>
+          int main(void) {
+            struct io_uring_probe *probe = io_uring_get_probe();
+            int ret = io_uring_opcode_supported(probe, IORING_OP_NOP);
+            free(probe);
+            return ret == 1 ? 0 : 1;
+          }
+        " LIBURING_HAS_OPCODE_SUPPORTED)
+        set(LIBURING_HAS_OPCODE_SUPPORTED "${LIBURING_HAS_OPCODE_SUPPORTED}" CACHE INTERNAL "")
+        cmake_reset_check_state()
+        if(LIBURING_HAS_OPCODE_SUPPORTED)
+          message(STATUS "Check if liburing has io_uring_opcode_supported() - yes")
+          set(${result_var} YES PARENT_SCOPE)
+        else()
+          message(STATUS "Check if liburing has io_uring_opcode_supported() - no. Will build from source.")
+          set(${result_var} NO PARENT_SCOPE)
+        endif()
+      endif()
+      
+      if(LIBURING_HAS_OPCODE_SUPPORTED)
+        target_require_package(shuttlesock PUBLIC uring HEADER_NAME liburing.h QUIET)
+      else()
+        set(STATIC_BUILD "YES")
+      endif()
     else()
       message(STATUS "liburing not found. Will build from source.")
       set(STATIC_BUILD ON)
@@ -30,7 +64,7 @@ function(shuttlesock_link_liburing STATIC_BUILD)
     include(ExternalProject)
     ExternalProject_Add(liburing
       URL "https://git.kernel.dk/cgit/liburing/snapshot/liburing-${LIBURING_RELEASE_VERSION}.tar.gz"
-      URL_MD5 ""
+      URL_MD5 "${LIBURING_RELEASE_MD5}"
       DOWNLOAD_NO_PROGRESS 1
       PREFIX ${LIBURING_PREFIX_DIR}
       DOWNLOAD_DIR "${THIRDPARTY_DOWNLOAD}"
