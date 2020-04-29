@@ -129,6 +129,23 @@ static bool event_listen_continue(shuso_t *S, lua_State *L, int nargs, bool opti
   return true;
 }
 
+/*
+static const char *event_interrupt_action_string(shuso_event_interrupt_t interrupt) {
+   switch(interrupt) {
+    case SHUSO_EVENT_NO_INTERRUPT:
+      return "not interrupted";
+    case SHUSO_EVENT_PAUSE:
+      return "paused";
+    case SHUSO_EVENT_CANCEL:
+      return "canceled";
+    case SHUSO_EVENT_DELAY:
+      return "delayed";
+    default:
+      return "<?>";
+  } 
+}
+*/
+
 typedef struct {
   shuso_event_t             *event;
   shuso_event_state_t        state;
@@ -186,7 +203,7 @@ static bool fire_event(shuso_t *S, shuso_event_t *event, int listener_start_inde
     event->fired_count++;
   }
 #endif
-  shuso_log_debug(S, "event %s:%s started", publisher->name, event->name);
+  //shuso_log_debug(S, "event %s:%s started", publisher->name, event->name);
   
   const shuso_module_t *prev_active_module = S->active_module;
   if(event->interrupt_handler == NULL) {
@@ -207,44 +224,39 @@ static bool fire_event(shuso_t *S, shuso_event_t *event, int listener_start_inde
   }
   S->active_module = prev_active_module;
   
-  const char *interrupt_action;
-  
   switch(cev.interrupt) {
     case SHUSO_EVENT_NO_INTERRUPT:
-      shuso_log_debug(S, "event %s:%s finished", publisher->name, event->name);
+      //shuso_log_debug(S, "event %s:%s finished", publisher->name, event->name);
 #ifdef SHUTTLESOCK_DEBUG_MODULE_SYSTEM
       event->interrupt_state = SHUSO_EVENT_NO_INTERRUPT;
 #endif
       return true;
     case SHUSO_EVENT_PAUSE:
-      interrupt_action = "paused";
 #ifdef SHUTTLESOCK_DEBUG_MODULE_SYSTEM
       event->interrupt_state = SHUSO_EVENT_PAUSE;
 #endif
       break;
     case SHUSO_EVENT_CANCEL:
-      interrupt_action = "canceled";
 #ifdef SHUTTLESOCK_DEBUG_MODULE_SYSTEM
       event->interrupt_state = SHUSO_EVENT_NO_INTERRUPT;
 #endif
       break;
     case SHUSO_EVENT_DELAY:
-      interrupt_action = "delayed";
 #ifdef SHUTTLESOCK_DEBUG_MODULE_SYSTEM
       event->interrupt_state = SHUSO_EVENT_DELAY;
 #endif
       break;
     default:
-      interrupt_action = "<?>";
       break;
   }
-  
+  /*
   if(cev.interrupt_reason) {
-    shuso_log_debug(S, "event %s:%s %s by module %s: %s", cev.state.publisher->name, cev.event->name, interrupt_action, cev.state.module->name, cev.interrupt_reason);
+    shuso_log_debug(S, "event %s:%s %s by module %s: %s", cev.state.publisher->name, cev.event->name, event_interrupt_action_string(cev.interrupt), cev.state.module->name, cev.interrupt_reason);
   }
   else {
-    shuso_log_debug(S, "event %s:%s %s by module %s", cev.state.publisher->name, cev.event->name, interrupt_action, cev.state.module->name);
+    shuso_log_debug(S, "event %s:%s %s by module %s", cev.state.publisher->name, cev.event->name, event_interrupt_action_string(cev.interrupt), cev.state.module->name);
   }
+  */
   return false;
 }
 

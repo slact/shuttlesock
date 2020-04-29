@@ -1098,7 +1098,20 @@ static shuso_process_t *lua_shuso_checkprocnum(lua_State *L, int index) {
       return NULL;
     }
     lua_pop(L, 2);
-    proc = &S->common->process.worker[lua_tointeger(L, index)];
+    
+    int i = lua_tointeger(L, index);
+    if(i>=0) {
+      proc = &S->common->process.worker[lua_tointeger(L, index)];
+    }
+    else if(i == SHUTTLESOCK_MANAGER) {
+      proc = &S->common->process.manager;
+    }
+    else if(i == SHUTTLESOCK_MASTER) {
+      proc = &S->common->process.master;
+    }
+    else {
+      proc = NULL;
+    }
   }
   return proc;
 }
