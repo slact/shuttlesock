@@ -66,6 +66,10 @@ bool luaS_streq(lua_State *L, int index, const char *str);
 #define luaS_streq_literal(L, index, str) \
  (lua_pushliteral(L, str) && luaS_streq(L, index < 0 ? index - 1 : index, NULL))
 
+bool luaS_streq_any(lua_State *L, int index, int nstrings, ...);
+ 
+void luaS_getfield_any(lua_State *L, int index, int names, ...);
+
 int luaS_table_concat(lua_State *L, const char *delimeter); //table.concat the table at the top of the stack, popping it and pushing the concatenated string
 int luaS_table_count(lua_State *L, int idx); //count all non-nil elements in table. O(n)
 
@@ -81,6 +85,12 @@ bool luaS_get_pointer_ref(lua_State *L, const char *pointer_table_name, const vo
 int luaS_traceback_error_handler(lua_State *L); //sets Lua error + traceback as the shuttlesock error message
 int luaS_passthru_error_handler(lua_State *L); //just returns the error
 
+//socket stuff
+int luaS_sockaddr_lua_to_c(lua_State *L);
+int luaS_sockaddr_c_to_lua(lua_State *L);
+int luaS_sockaddr_family_lua_to_c(lua_State *L, int strindex);
+int luaS_string_to_socktype(lua_State *L, int strindex);
+void luaS_pushstring_from_socktype(lua_State *L, int socktype);
 
 //serialize function (no upvalues!!)
 int luaS_function_dump(lua_State *L);

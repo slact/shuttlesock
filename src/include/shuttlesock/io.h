@@ -69,6 +69,7 @@ typedef struct shuso_io_s {
   shuso_io_fn      *error_handler;
   void             *privdata;
   uint16_t          handler_stage;
+  uint8_t           closed;
   
   //everything else is private, more or less
   shuso_ev_io       watcher;

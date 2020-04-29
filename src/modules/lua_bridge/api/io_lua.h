@@ -16,6 +16,7 @@ typedef struct {
   lua_State            *coroutine;
   shuso_io_opcode_t     op;
   bool                  op_complete;
+  bool                  op_partial;
   int                   num_results;
   luaL_Buffer           buf;
   bool                  buf_active;

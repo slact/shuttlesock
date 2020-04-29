@@ -1139,7 +1139,7 @@ static void lua_receive_fd_callback(shuso_t *S, bool ok, uintptr_t ref, int fd, 
   luaS_call(L, 3, 0);
 }
 
-int Lua_shuso_ipc_receive_fd_finish(lua_State *L) {
+int Lua_shuso_ipc_receive_fd_stop(lua_State *L) {
   int ref = luaL_checkinteger(L, 1);
   
   if(!shuso_ipc_receive_fd_finish(shuso_state(L), ref)) {
@@ -2478,7 +2478,6 @@ static int Lua_shuso_fd_setsockopt(lua_State *L) {
       lua_pushnil(L);
       lua_pushfstring(L, "sockopt '%s' unsupported on this system", sockopt_str);
       return 2;
-      break;
     
     case SHUSO_SYSTEM_SOCKOPT_VALUE_TYPE_INT:
       sockopt.value.integer = lua_tointeger(L, 3);
@@ -2562,7 +2561,7 @@ static int Lua_shuso_fd_getsockopt(lua_State *L) {
       lua_pushnil(L);
       lua_pushfstring(L, "sockopt '%s' unsupported on this system", sockopt_str);
       return 2;
-      break;
+    
     case SHUSO_SYSTEM_SOCKOPT_VALUE_TYPE_INT:
       len = sizeof(sockopt.value.integer);
       break;
@@ -2585,8 +2584,6 @@ static int Lua_shuso_fd_getsockopt(lua_State *L) {
   }
   
   switch(sotype) {
-    case SHUSO_SYSTEM_SOCKOPT_MISSING:
-      return 0;
     case SHUSO_SYSTEM_SOCKOPT_VALUE_TYPE_INT:
       if(sockopt.name == SO_ERROR) {
         if(sockopt.value.integer == 0) { //no error
@@ -2616,53 +2613,38 @@ static int Lua_shuso_fd_getsockopt(lua_State *L) {
       lua_pushnumber(L, val);
       return 1;
     }
+    
+    default:
+      return 0;
   }
-  
-  return 0;
 }
 
 static int Lua_shuso_getaddrinfo_noresolve(lua_State *L) {
   const char    *ip_str = luaL_checkstring(L, 1);
-  bool           ipv4 = false, ipv6 = false;
+  struct addrinfo hints = {
+    .ai_flags = AI_NUMERICHOST | AI_PASSIVE,
+    .ai_family = AF_UNSPEC
+  };
+  
   if(lua_checkstack(L, 2)) {
-    const char *str = lua_tostring(L, 2);
-    if(str) {
-      if(strcasecmp(str, "ipv4") == 0) {
-        ipv4 = true;
-      }
-      if(strcasecmp(str, "ipv6") == 0) {
-        ipv6 = true;
-      }
+    if(lua_isstring(L, 2)) {
+      hints.ai_family = luaS_sockaddr_family_lua_to_c(L, 2);
     }
     else if(lua_isnumber(L, 2)) {
       int ipnum = lua_tonumber(L, 2);
       if(ipnum == 4) {
-        ipv4 = true;
+        hints.ai_family = AF_INET;
       }
       else if(ipnum == 6) {
-        ipv6 = true;
+  #ifndef SHUTTLESOCK_HAVE_IPV6
+        lua_pushnil(L);
+        lua_pushstring(L, "IPv6 Not supported");
+        return 2;
+#else
+        hints.ai_family = AF_INET6;
+#endif
       }
     }
-  }
-  
-  struct addrinfo hints = {
-    .ai_flags = AI_NUMERICHOST | AI_PASSIVE,
-  };
-  
-  if(ipv4) {
-    hints.ai_family = AF_INET;
-  }
-  if(ipv6) {
-#ifndef SHUTTLESOCK_HAVE_IPV6
-    lua_pushnil(L);
-    lua_pushstring(L, "IPv6 Not supported");
-    return 2;
-#else
-    hints.ai_family = AF_INET6;
-#endif
-  }
-  if(!ipv4 && !ipv6) {
-    hints.ai_family = AF_UNSPEC;
   }
   
   struct addrinfo *res = NULL;
@@ -2687,62 +2669,17 @@ static int Lua_shuso_getaddrinfo_noresolve(lua_State *L) {
     
     lua_newtable(L);
     
-    switch(rp->ai_socktype) {
-      case SOCK_STREAM:
-        lua_pushliteral(L, "stream");
-        break;
-      case SOCK_DGRAM:
-        lua_pushliteral(L, "dgram");
-        break;
-      case SOCK_SEQPACKET:
-        lua_pushliteral(L, "seqpacket");
-        break;
-      case SOCK_RAW:
-        lua_pushliteral(L, "raw");
-        break;
-      case SOCK_RDM:
-        lua_pushliteral(L, "rdm");
-        break;
-      default:
-        lua_pushliteral(L, "unknown");
-        break;
-    }
-    lua_setfield(L, -2, "socktype");
+    luaS_pushstring_from_socktype(L, rp->ai_socktype);
+    lua_setfield(L, -2, "type");
     
-    if(rp->ai_family == AF_INET) {
-      lua_pushliteral(L, "IPv4");
-      lua_setfield(L, -2, "family");
-      
-      struct sockaddr_in *sa = (struct sockaddr_in *)rp->ai_addr;
-      lua_pushlstring(L, (char *)&sa->sin_addr.s_addr, sizeof(sa->sin_addr.s_addr));
-      lua_setfield(L, -2, "address_binary");
-      
-      char  address_str[INET_ADDRSTRLEN];
-      if(inet_ntop(AF_INET, (char *)&sa->sin_addr.s_addr, address_str, sizeof(address_str)) == NULL) {
-        freeaddrinfo(res);
-        return luaL_error(L, "inet_ntop failed on address in list. this is very weird");
-      }
-      lua_pushstring(L, address_str);
-      lua_setfield(L, -2, "address");
+    lua_pushcfunction(L, luaS_sockaddr_c_to_lua);
+    lua_pushlightuserdata(L, rp->ai_addr);
+    lua_pushvalue(L, -3);
+    luaS_call(L, 2, 2);
+    if(lua_isnil(L, -2)) {
+      return 2;
     }
-#ifdef SHUTTLESOCK_HAVE_IPV6
-    else if(rp->ai_family == AF_INET6) {
-      lua_pushliteral(L, "IPv6");
-      lua_setfield(L, -2, "family");
-      
-      struct sockaddr_in6 *sa = (struct sockaddr_in6 *)rp->ai_addr;
-      lua_pushlstring(L, (char *)sa->sin6_addr.s6_addr, sizeof(sa->sin6_addr.s6_addr));
-      lua_setfield(L, -2, "address_binary");
-      
-      char  address_str[INET6_ADDRSTRLEN];
-      if(inet_ntop(AF_INET6, (char *)sa->sin6_addr.s6_addr, address_str, sizeof(address_str)) == NULL) {
-        freeaddrinfo(res);
-        return luaL_error(L, "inet_ntop failed on address in list. this is very weird");
-      }
-      lua_pushstring(L, address_str);
-      lua_setfield(L, -2, "address");
-    }
-#endif
+    lua_pop(L, 2);
     
     lua_seti(L, -2, i);
     i++;
@@ -2847,7 +2784,7 @@ luaL_Reg shuttlesock_core_module_methods[] = {
 //ipc
   {"ipc_send_fd", Lua_shuso_ipc_send_fd},
   {"ipc_receive_fd_start", Lua_shuso_ipc_receive_fd_start},
-  {"ipc_receive_fd_finish", Lua_shuso_ipc_receive_fd_finish},
+  {"ipc_receive_fd_stop", Lua_shuso_ipc_receive_fd_stop},
   //{"open_listener_sockets", Lua_shuso_ipc_open_listener_sockets},
   {"ipc_send_message", luaS_ipc_send_message},
   {"ipc_pack_message_data", Lua_shuso_ipc_pack_message_data},

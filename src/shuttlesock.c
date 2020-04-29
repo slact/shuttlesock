@@ -978,12 +978,7 @@ bool shuso_set_log_fd(shuso_t *S, int fd) {
   return true;
 }
 
-void shuso_listen(shuso_t *S, shuso_hostinfo_t *bind, shuso_handler_fn handler, shuso_handler_fn cleanup, void *pd) {
-  assert(S->procnum == SHUTTLESOCK_MASTER);
-  //TODO
-}
-
-
+/*
 bool shuso_hostinfo_to_sockaddr(shuso_t *S, shuso_hostinfo_t *hostinfo, struct sockaddr *sockaddr, size_t *sa_sz) {
   if(hostinfo->addr_family == AF_INET) {
     struct sockaddr_in *sa = (struct sockaddr_in *)sockaddr;
@@ -1049,3 +1044,4 @@ bool shuso_hostinfo_to_sockaddr(shuso_t *S, shuso_hostinfo_t *hostinfo, struct s
   
   return true;
 }
+*/

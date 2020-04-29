@@ -88,9 +88,18 @@ function Server:initialize_config(block)
   if not host then
     return listen:error(err)
   end
-
+  
+  host.socket_type = "TCP"
+  for _, val in listen:each_value(2, "string") do
+    if val == "udp" or val == "UDP" then
+      host.socket_type = "UDP"
+    elseif val == "tcp" or val == "TCP" then
+      host.socket_type = "TCP"
+    end
+  end
+  
   host.block = block
-  host.type = block:parent_block().name
+  host.server_type = block:parent_block().name
   host.setting = listen
   table.insert(self.raw_hosts, host)
 end
@@ -174,6 +183,9 @@ Server:subscribe("core:manager.workers_started", function()
           }
         }
       end
+      for _, addr in ipairs(addrs) do
+        addr.type = host.socket_type
+      end
       host.addresses = addrs
       if not addrs or err then
         return nil, host.setting:error(err or "failed to process host")
@@ -185,34 +197,44 @@ Server:subscribe("core:manager.workers_started", function()
       for _, addr in ipairs(host.addresses) do
         addr.port = host.port
         local id
+        local name
         if addr.address then
-          id = addr.address ..":"..addr.port or "default"
+          name = addr.port and (addr.address ..":"..addr.port) or addr.address
+          id = (host.socket_type or "") ..":".. (host.server_type or "") .. ":" ..  name
         elseif addr.path then
           id = addr.path
+          name = addr.path
         else
           return nil, host.setting:error("can't figure out internal id")
         end
         unique_bindings[id]=unique_bindings[id] or {address = addr, listen = {}}
-        table.insert(unique_bindings[id].listen, {block = host.block, setting = host.setting, type=host.type})
+        table.insert(unique_bindings[id].listen, {
+          name = name,
+          block = host.block,
+          setting = host.setting,
+          server_type = host.server_type,
+          socket_type = host.type or host.socket_type or "TCP"
+        })
         unique_binding_blocks[id] = unique_binding_blocks[id] or {}
         table.insert(unique_binding_blocks[id], host.block)
       end
     end
     Server.bindings = {}
     for id, binding in pairs(unique_bindings) do
-      binding.name = id
       binding.common_parent_block = assert(common_parent_block(unique_binding_blocks[id]))
       table.insert(Server.bindings, binding)
       
-      local host_type
+      local host_server_type, host_binding_name
       for _, host in pairs(binding.listen) do
-        if not host_type then
-          host_type = host.type
-        elseif host_type ~= host.type then
-          return nil, host.setting:error("can't listen on the same address as server type '" .. host_type.."'")
+        host_binding_name = host.name
+        if not host_server_type then
+          host_server_type = host.server_type
+        elseif host_server_type ~= host.server_type then
+          return nil, host.setting:error("can't listen on the same address as server type '" .. host_server_type .. "'")
         end
       end
-      binding.type = host_type
+      binding.name = host_binding_name
+      binding.server_type = host_server_type
     end
     
     --for _, binding in pairs(Server.bindings) do
@@ -226,6 +248,7 @@ Server:subscribe("core:manager.workers_started", function()
       local rcvfd = IPC.FD_Receiver.start("server:receive_listener_sockets", 5.0)
       
       for i, binding in ipairs(Server.bindings) do
+        
         binding.ptr = assert(CFuncs.create_binding_data(binding, i), "problem creating bind data")
         Server.bindings_by_ptr[binding.ptr]=binding
         

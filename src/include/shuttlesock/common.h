@@ -105,24 +105,9 @@ typedef union {
 
 typedef struct shuso_hostinfo_s {
   const char        *name;
-  union {
-#ifdef SHUTTLESOCK_HAVE_IPV6
-    struct in6_addr addr6;
-#endif
-    struct in_addr  addr;
-    const char     *path;
-  };
-  sa_family_t       addr_family; //address family: AF_INET/AF_INET6/AF_UNIX
-  uint16_t          port; //CPU-native port
-  int               udp:1; //TCP or UDP?
-  union {
-    struct sockaddr     *sockaddr;
-    struct sockaddr_in  *sockaddr_in;
-#ifdef SHUTTLESOCK_HAVE_IPV6
-    struct sockaddr_in6 *sockaddr_in6;
-#endif
-    struct sockaddr_un  *sockaddr_un;
-  };
+  sa_family_t       family; //address family: AF_INET/AF_INET6/AF_UNIX
+  int               type; //socket type: SOCK_STREAM/SOCK_DGRAM/SOCK_RAW
+  shuso_sockaddr_t *sockaddr;
 } shuso_hostinfo_t;
 
 typedef struct shuso_socket_s {

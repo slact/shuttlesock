@@ -5,6 +5,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <glob.h>
+#include <arpa/inet.h>
 
 #define SHUTTLESOCK_DEBUG_CRASH_ON_LUA_ERROR 1
 
@@ -1304,6 +1305,30 @@ bool luaS_streq(lua_State *L, int index, const char *str) {
   lua_pop(L, 1);
   return equal;
 }
+
+bool luaS_streq_any(lua_State *L, int index, int nstrings, ...) {
+  const char      *str;
+  va_list          ap;
+  
+  luaL_checkstack(L, 1, NULL);
+  index = lua_absindex(L, index);
+  
+  va_start(ap, nstrings);
+  
+  for(int i = 0; i < nstrings; i++) {
+    str = va_arg(ap, const char *);
+    lua_pushstring(L, str);
+    if(lua_compare(L, index, -1, LUA_OPEQ)) {
+      lua_pop(L, 1);
+      va_end(ap);
+      return true;
+    }
+    lua_pop(L, 1);
+  }
+  va_end(ap);
+  return false;
+}
+
 int luaS_table_count(lua_State *L, int idx) {
   luaL_checkstack(L, 3, NULL);
   int absidx = lua_absindex(L, idx);
@@ -1396,6 +1421,23 @@ bool luaS_get_pointer_ref(lua_State *L, const char *pointer_table_name, const vo
   return true;
 }
 
+void luaS_getfield_any(lua_State *L, int table_index, int names_count, ...) {
+  va_list       ap;
+  const char   *name;
+  va_start(ap, names_count);
+  for(int i = 0; i < names_count; i++) {
+    name = va_arg(ap, const char *);
+    lua_getfield(L, table_index, name);
+    if(!lua_isnil(L, -1)) {
+      va_end(ap);
+      return;
+    }
+    lua_pop(L, 1);
+  }
+  va_end(ap);
+  lua_pushnil(L);  
+}
+
 void luaS_push_runstate(lua_State *L, shuso_runstate_t state) {
   luaL_checkstack(L, 1, NULL);
   switch(state) {
@@ -1432,4 +1474,297 @@ void luaS_push_runstate(lua_State *L, shuso_runstate_t state) {
   lua_pushnil(L);
   return;
 #endif
+}
+
+int luaS_sockaddr_family_lua_to_c(lua_State *L, int strindex) {
+  if(luaS_streq_any(L, strindex, 3, "AF_INET", "IPv4", "ipv4")) {
+    return AF_INET;
+  }
+#ifdef SHUTTLESOCK_HAVE_IPV6
+  else if(luaS_streq_any(L, strindex, 3, "AF_INET6", "IPv6", "ipv6")) {
+    return AF_INET6;
+  }
+#endif
+  else if(luaS_streq_any(L, strindex, 5, "AF_UNIX", "Unix", "unix", "AF_LOCAL", "local")) {
+    return AF_UNIX;
+  }
+  return AF_UNSPEC;
+}
+
+int luaS_sockaddr_lua_to_c(lua_State *L) {
+  luaL_checktype(L, 1, LUA_TTABLE);
+  shuso_sockaddr_t    *sockaddr = NULL;
+  
+  if(lua_gettop(L) >= 2) {
+    int satype = lua_type(L, 2);
+    if(satype != LUA_TLIGHTUSERDATA && satype != LUA_TUSERDATA) {
+      lua_pushnil(L);
+      lua_pushstring(L, "invalid sockaddr pointer, must be a userdata if present");
+      return 2;
+    }
+    sockaddr = (void *)lua_topointer(L, 2);
+    if(!sockaddr) {
+      lua_pushnil(L);
+      lua_pushstring(L, "NULL sockaddr pointer in light userdata");
+      return 2;
+    }
+  }
+  
+  luaS_getfield_any(L, 1, 3, "addr_family", "address_family", "family");
+  sa_family_t   fam = luaS_sockaddr_family_lua_to_c(L, -1);
+  lua_pop(L, 1);
+  
+  bool          get_addr_and_port = false;
+  bool          get_path = false;
+  socklen_t     sockaddr_len;
+  
+  if(fam == AF_INET) {
+    sockaddr_len = sizeof(struct sockaddr_in);
+    get_addr_and_port = true;
+  }
+#ifdef SHUTTLESOCK_HAVE_IPV6
+  else if(fam == AF_INET6) {
+    sockaddr_len = sizeof(struct sockaddr_in6);
+    get_addr_and_port = true;
+  }
+#endif
+  else if(fam == AF_UNIX) {
+    sockaddr_len =sizeof(struct sockaddr_in6);
+    get_path = true;
+  }
+  else {
+    lua_pushnil(L);
+    lua_pushfstring(L, "invalid addr_family: %s", lua_isstring(L, -1) ? lua_tostring(L, -1) : "<?>");
+    return 2;
+  }
+  
+  if(sockaddr == NULL) {
+    sockaddr = lua_newuserdata(L, sockaddr_len);
+  }
+  
+  sockaddr->any.sa_family = fam;
+  
+  if(get_addr_and_port) {
+    const char   *addr_binary = NULL, *addr_str = NULL;
+    size_t        addr_binary_sz;
+    uint16_t      port;
+    lua_getfield(L, 1, "port");
+    if(lua_isnil(L, -1)) {
+      lua_pushnil(L);
+      lua_pushstring(L, "port missing");
+      return 2;
+    }
+    port = lua_tointeger(L, -1);
+    lua_pop(L, 1);
+#ifdef SHUTTLESOCK_HAVE_IPV6
+    if(fam == AF_INET6) {
+      sockaddr->in6.sin6_port = htons(port);
+    }
+#endif
+    if(fam == AF_INET) {
+      sockaddr->in.sin_port = htons(port);
+    }
+    
+    luaS_getfield_any(L, 1, 2, "addr_binary", "address_binary");
+    if(lua_isstring(L, -1)) {
+      addr_binary = lua_tolstring(L, -1, &addr_binary_sz);
+    }
+    lua_pop(L, 1);
+    
+    luaS_getfield_any(L, 1, 2, "addr", "address");
+    if(lua_isstring(L, -1)) {
+      addr_str = lua_tostring(L, -1);
+    }
+    lua_pop(L, 1);
+    
+    if(addr_binary) {
+  #ifdef SHUTTLESOCK_HAVE_IPV6
+      if(fam == AF_INET6) {
+        if(addr_binary_sz > sizeof(sockaddr->in6.sin6_addr)) {
+          addr_binary_sz = sizeof(sockaddr->in6.sin6_addr);
+        }
+        memcpy(&sockaddr->in6.sin6_addr, addr_binary, addr_binary_sz);
+      }
+#endif
+      if(fam == AF_INET) {
+        if(addr_binary_sz > sizeof(sockaddr->in.sin_addr)) {
+          addr_binary_sz = sizeof(sockaddr->in.sin_addr);
+        }
+        memcpy(&sockaddr->in.sin_addr, addr_binary, addr_binary_sz);
+      }
+    }
+    else if(!addr_binary && !addr_str) {
+      lua_pushnil(L);
+      lua_pushstring(L, "address and address_binary missing from sockaddr table");
+      return 2;
+    }
+    else if(addr_str) {
+      int rc = -1;
+#ifdef SHUTTLESOCK_HAVE_IPV6
+      if(fam == AF_INET6) {
+        rc = inet_pton(fam, addr_str, &sockaddr->in6.sin6_addr);
+      }
+#endif
+      if(fam == AF_INET) {
+        rc = inet_pton(fam, addr_str, &sockaddr->in.sin_addr);
+      }
+      if(rc != 1) {
+        lua_pushnil(L);
+        return luaL_error(L, "invalid address string");
+      }
+    }
+  }
+  if(get_path) {
+    assert(fam == AF_UNIX);
+    size_t sz;
+    lua_getfield(L, 1, "path");
+    if(lua_isnil(L, -1)) {
+      lua_pushnil(L);
+      lua_pushliteral(L, "path missing for Unix address family");
+      return 2;
+    }
+    const char *str = luaL_tolstring(L, -1, &sz);
+    sz++; // final null byte
+    if(sz > sizeof(sockaddr->un.sun_path)) {
+      lua_pushnil(L);
+      lua_pushliteral(L, "Unix socket path is too long");
+      return 2;
+    }
+    memcpy(sockaddr->un.sun_path, str, sz);
+    lua_pop(L, 1);
+  }
+  
+  return 1;
+}
+
+int luaS_sockaddr_c_to_lua(lua_State *L) {
+  luaL_checkany(L, 1);
+  if(lua_type(L, 1) != LUA_TLIGHTUSERDATA && lua_type(L, 1) != LUA_TUSERDATA) {
+    lua_pushnil(L);
+    lua_pushstring(L, "First argument isn't a userdata or light userdata");
+    return 2;
+  }
+  
+  const shuso_sockaddr_t  *sockaddr = lua_topointer(L, 1);
+  if(sockaddr == NULL) {
+    lua_pushnil(L);
+    lua_pushstring(L, "sockaddr pointer can't be NULL");
+    return 2;
+  }
+  
+  int tindex;
+  if(lua_gettop(L) >= 2) {
+    luaL_checktype(L, 2, LUA_TTABLE);
+    tindex = 2;
+  }
+  else {
+    lua_newtable(L);
+    tindex = lua_gettop(L);
+  }
+  
+  switch(sockaddr->any.sa_family) {
+    case AF_INET: {
+      lua_pushliteral(L, "IPv4");
+      lua_setfield(L, tindex, "family");
+      
+      lua_pushinteger(L, ntohs(sockaddr->in.sin_port));
+      lua_setfield(L, tindex, "port");
+      
+      lua_pushlstring(L, (char *)&sockaddr->in.sin_addr.s_addr, sizeof(sockaddr->in.sin_addr.s_addr));
+      lua_setfield(L, tindex, "address_binary");
+    
+      char  address_str[INET_ADDRSTRLEN];
+      if(inet_ntop(AF_INET, (char *)&sockaddr->in.sin_addr, address_str, INET_ADDRSTRLEN) == NULL) {
+        lua_pushnil(L);
+        lua_pushliteral(L, "Invalid IPv4 binary address");
+        return 2;
+      }
+      lua_pushstring(L, address_str);
+      lua_setfield(L, tindex, "address");
+      
+      break;
+    }
+    
+#ifdef SHUTTLESOCK_HAVE_IPV6
+    case AF_INET6: {
+      lua_pushliteral(L, "IPv6");
+      lua_setfield(L, -2, "family");
+      
+      lua_pushinteger(L, ntohs(sockaddr->in6.sin6_port));
+      lua_setfield(L, tindex, "port");
+      
+      lua_pushlstring(L, (char *)&sockaddr->in6.sin6_addr.s6_addr, sizeof(sockaddr->in6.sin6_addr.s6_addr));
+      lua_setfield(L, -2, "address_binary");
+      char address_str[INET6_ADDRSTRLEN];
+      if(inet_ntop(AF_INET6, (char *)&sockaddr->in6.sin6_addr, address_str, INET6_ADDRSTRLEN) == NULL) {
+        lua_pushnil(L);
+        lua_pushliteral(L, "Invalid IPv6 binary address");
+        return 2;
+      }
+      lua_pushstring(L, address_str);
+      lua_setfield(L, -2, "address");
+      break;
+    }
+#endif
+    case AF_UNIX:
+      lua_pushliteral(L, "Unix");
+      lua_setfield(L, -2, "family");
+      
+      lua_pushstring(L, sockaddr->un.sun_path);
+      lua_setfield(L, -2, "path");
+      break;
+  }
+  
+  lua_pushvalue(L, tindex);
+  return 1;
+}
+
+int luaS_string_to_socktype(lua_State *L, int strindex) {
+  if(luaS_streq_any(L, strindex, 5, "stream", "STREAM", "SOCK_STREAM", "tcp", "TCP")) {
+    return SOCK_STREAM;
+  }
+  else if(luaS_streq_any(L, strindex, 6, "dgram", "DGRAM", "datagram", "SOCK_DGRAM", "udp", "UDP")) {
+    return SOCK_DGRAM;
+  }
+  else if(luaS_streq_any(L, strindex, 3, "raw", "RAW", "SOCK_RAW")) {
+    return SOCK_RAW;
+  }
+#ifdef SOCK_SEQPACKET
+  else if(luaS_streq_any(L, strindex, 2, "seqpacket", "SOCK_SEQPACKET")) {
+    return SOCK_SEQPACKET;
+  }
+#endif
+#ifdef SOCK_RDM
+  else if(luaS_streq_any(L, strindex, 3, "rdm", "RDM", "SOCK_RDM")) {
+    return SOCK_RDM;
+  }
+#endif
+  return 0;
+}
+
+void luaS_pushstring_from_socktype(lua_State *L, int socktype) {
+  switch(socktype) {
+    case SOCK_STREAM:
+      lua_pushliteral(L, "stream");
+      break;
+    case SOCK_DGRAM:
+      lua_pushliteral(L, "dgram");
+      break;
+#ifdef SOCK_SEQPACKET
+    case SOCK_SEQPACKET:
+      lua_pushliteral(L, "seqpacket");
+      break;
+#endif
+    case SOCK_RAW:
+      lua_pushliteral(L, "raw");
+      break;
+#ifdef SOCK_RDM
+    case SOCK_RDM:
+      lua_pushliteral(L, "rdm");
+      break;
+#endif
+    default:
+      lua_pushnil(L);
+      break;
+  }
 }

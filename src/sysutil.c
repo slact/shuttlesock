@@ -1079,7 +1079,20 @@ const char *shuso_system_errnoname(int errno_) {
   return 0;
 }
   
-
+socklen_t shuso_sockaddr_len(shuso_sockaddr_t *sa) {
+  switch(sa->any.sa_family) {
+    case AF_INET:
+      return sizeof(struct sockaddr_in);
+#ifdef SHUTTLESOCK_HAVE_IPV6
+    case AF_INET6:
+      return sizeof(struct sockaddr_in6);
+#endif
+    case AF_UNIX:
+      return sizeof(struct sockaddr_un);
+  }
+  return 0;
+}
+  
 void shuso_system_initialize(void) {
   if(!shuso_system.initialized) {
     //NOT THREAD-SAFE!!

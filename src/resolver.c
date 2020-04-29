@@ -110,25 +110,31 @@ bool shuso_resolver_init(shuso_t *S, shuso_config_t *cf, shuso_resolver_t *resol
     for(int i=0; i<hosts_count; i++) {
       if(i>0) hosts[i-1].next=&hosts[i];
       hosts[i].next = NULL;
-      hosts[i].family = cf_host[i].addr_family;
+      hosts[i].family = cf_host[i].sockaddr->any.sa_family;
       switch(hosts[i].family) {
         case AF_INET:
-          hosts[i].addr.addr4 = cf_host[i].addr;
+          hosts[i].addr.addr4 = cf_host[i].sockaddr->in.sin_addr;
+          if(cf_host[i].type == SOCK_STREAM) {
+            hosts[i].tcp_port = cf_host[i].sockaddr->in.sin_port;
+          }
+          else if(cf_host[i].type == SOCK_DGRAM) {
+            hosts[i].udp_port = cf_host[i].sockaddr->in.sin_port;
+          }
           break;
+#ifdef SHUTTLESOCK_HAVE_IPV6
         case AF_INET6:
-          memcpy(&hosts[i].addr.addr6, &cf_host[i].addr6, sizeof(cf_host[i].addr6));
+          memcpy(&hosts[i].addr.addr6, &cf_host[i].sockaddr->in6.sin6_addr, sizeof(struct in6_addr));
+          if(cf_host[i].type == SOCK_STREAM) {
+            hosts[i].tcp_port = cf_host[i].sockaddr->in6.sin6_port;
+          }
+          else if(cf_host[i].type == SOCK_DGRAM) {
+            hosts[i].udp_port = cf_host[i].sockaddr->in6.sin6_port;
+          }
           break;
+#endif
         default:
           err = "DNS resolver initialization failed: unexpected address family, must be AF_INET of AF_INET6";
           goto fail;
-      }
-      if(cf_host[i].port != 0) {
-        if(cf_host[i].udp) {
-          hosts[i].udp_port = htons(cf_host[i].port);
-        }
-        else {
-          hosts[i].tcp_port = htons(cf_host[i].port);
-        }
       }
     }
     if((rc = ares_set_servers_ports(resolver->channel, hosts)) != ARES_SUCCESS) {

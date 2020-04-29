@@ -68,6 +68,7 @@ void __shuso_io_init_socket(shuso_t *S, shuso_io_t *io, shuso_socket_t *sock, in
     .handler = coro,
     .watch_type = SHUSO_IO_WATCH_NONE,
     .error = 0,
+    .closed = 0,
     .readwrite = readwrite
   };
   if(sock) {
@@ -333,38 +334,15 @@ static int io_ev_connect(shuso_io_t *io) {
     return rc;
   }
   
-  struct sockaddr      *connect_sockaddr;
+  shuso_sockaddr_t     *connect_sockaddr;
   sa_family_t           fam = 0;
-  shuso_hostinfo_t     *host;
   size_t                sockaddr_sz;
-  union {
-    struct sockaddr        sa;
-    struct sockaddr_un     sa_unix;
-    struct sockaddr_in     sa_inet;
-#ifdef SHUTTLESOCK_HAVE_IPV6
-    struct sockaddr_in6    sa_inet6;
-#endif
-  }                      sockaddr_buf;
   
-  if(io->io_socket.host.sockaddr) {
-    assert(io->io_socket.host.addr_family == io->io_socket.host.sockaddr->sa_family);
-    connect_sockaddr = io->io_socket.host.sockaddr;
-    fam = io->io_socket.host.addr_family;
-  }
-  else {
-    host = io->hostinfo;
-    if(host->sockaddr) {
-      connect_sockaddr = host->sockaddr;
-      fam = io->io_socket.host.addr_family;
-    }
-    else {
-      if(!shuso_hostinfo_to_sockaddr(io->S, host, &sockaddr_buf.sa, &sockaddr_sz)) {
-        return -1;
-      }
-      connect_sockaddr = &sockaddr_buf.sa;
-      fam = sockaddr_buf.sa.sa_family;
-    }
-  }
+  assert(io->io_socket.host.sockaddr);
+  
+  connect_sockaddr = io->io_socket.host.sockaddr;
+  fam = io->io_socket.host.sockaddr->any.sa_family;
+  
   switch(fam) {
     case AF_INET:
       sockaddr_sz = sizeof(struct sockaddr_in);
@@ -381,7 +359,7 @@ static int io_ev_connect(shuso_io_t *io) {
       sockaddr_sz = 0;
   }
   
-  return connect(io->io_socket.fd, connect_sockaddr, sockaddr_sz);
+  return connect(io->io_socket.fd, &connect_sockaddr->any, sockaddr_sz);
 }
 
 static socklen_t af_sockaddrlen(sa_family_t fam) {
@@ -472,6 +450,37 @@ static void shuso_io_ev_operation(shuso_io_t *io) {
     }
   } while(result == -1 && errno == EINTR);
   
+  //if we got a 0 from a read or write operation, mark this thing closed
+  switch(op) {
+    case SHUSO_IO_OP_READ:
+    case SHUSO_IO_OP_READV:
+    case SHUSO_IO_OP_RECVFROM:
+    case SHUSO_IO_OP_RECV:
+    case SHUSO_IO_OP_RECVMSG:
+      if(result == 0) {
+        io->closed |= SHUSO_IO_READ;
+      }
+      else {
+        io->closed &= ~SHUSO_IO_READ;
+      }
+      break;
+    case SHUSO_IO_OP_WRITE:
+    case SHUSO_IO_OP_WRITEV:
+    case SHUSO_IO_OP_SENDMSG:
+    case SHUSO_IO_OP_SENDTO:
+    case SHUSO_IO_OP_SEND:
+      if(result == 0) {
+        io->closed |= SHUSO_IO_WRITE;
+      }
+      else {
+        io->closed &= ~SHUSO_IO_WRITE;
+      }
+      break;
+      
+    default:
+      break;
+  }
+  
   if(result == -1) {
     if(op == SHUSO_IO_OP_CONNECT && (errno == EAGAIN || errno == EINPROGRESS)) {
       io->watch_type = SHUSO_IO_WATCH_OP_FINISH;
@@ -492,12 +501,13 @@ static void shuso_io_ev_operation(shuso_io_t *io) {
       return;
     }
   }
-  else if(io->op_repeat_to_completion && !io_op_update_and_check_completion(io, result)) {
+  else if(result != 0 && io->op_repeat_to_completion && !io_op_update_and_check_completion(io, result)) {
     io->watch_type = SHUSO_IO_WATCH_OP_RETRY;
+    io->result += result;
     io_watch_update(io);
     return;
   }
-  io->result = result;
+  io->result += result;
   io_run(io);
   return;
 }
@@ -549,9 +559,6 @@ static void io_op_run_new(shuso_io_t *io, int opcode, void *init_ptr, ssize_t in
   }
   io->op_repeat_to_completion = !partial;
   io->op_registered_memory_buffer = registered;
-  if(opcode == SHUSO_IO_OP_CLOSE) {
-    raise(SIGSTOP);
-  }
   shuso_io_operation(io);
 }
 

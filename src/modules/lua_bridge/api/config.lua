@@ -175,6 +175,7 @@ function Config.setting(ptr)
   for _, vtype in ipairs{"merged", "local", "inherited", "default"} do
     local values = {}
     local valcount = Core.config_setting_values_count(ptr, vtype)
+    values.n = valcount
     for i=1,valcount do
       table.insert(values, assert(Core.config_setting_value(ptr, i, vtype)))
     end
@@ -202,6 +203,51 @@ local possible_data_types = {
   raw = true,
   boolean = true
 }
+
+function setting:each_value(...)
+  local first, last, data_type, value_type
+  for _, v in ipairs({...}) do
+    if type(v) == "number" then
+      if not first then
+        first = v
+      elseif not last then
+        last = v
+      else
+        error("unexpected number argument")
+      end
+    elseif type(v) == "string" then
+      if not data_type then
+        data_type = v
+      elseif not value_type then
+        value_type = v
+      else
+        error("unexpected string argument")
+      end
+    else
+      error("unexpected argument type " .. type(v))
+    end
+  end
+  
+  local vals = self.values_cache[value_type]
+  if vals == nil then
+    return function() end
+  end
+  first = first or 1
+  local valcount = vals.n
+  if last > valcount then
+    last = valcount
+  end
+  local index = first
+  return function()
+    if index > last then
+      return nil
+    end
+    local val = self:value(index, data_type, value_type)
+    index = index+1
+    return index-1, val
+  end
+  
+end
 
 function setting:value(n, data_type, value_type)
   if type(n) == "string" and not value_type then

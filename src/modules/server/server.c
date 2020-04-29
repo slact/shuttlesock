@@ -12,128 +12,51 @@
 static int luaS_create_binding_data(lua_State *L) {
   shuso_t                  *S = shuso_state(L);
   shuso_server_binding_t   *binding = shuso_stalloc(&S->stalloc, sizeof(*binding));
-  const char               *name;
   if(!binding) {
     return luaL_error(L, "failed to allocate memory for server binding");
   }
   binding->lua_hostnum = lua_tointeger(L, 2);
-  
-  lua_getfield(L, 1, "type");
+  lua_getfield(L, 1, "server_type");
   const char *server_type = lua_tostring(L, -1);
   binding->server_type = shuso_stalloc(&S->stalloc, strlen(server_type)+1);
+  if(!binding->server_type) {
+    return luaL_error(L, "failed to allocate memory for server binding server_type string");
+  }
   strcpy((char *)binding->server_type, server_type);
   lua_pop(L, 1);
   
   lua_getfield(L, 1, "name");
-  name = lua_tostring(L, -1);
+  const char *name = lua_tostring(L, -1);
+  binding->host.name = shuso_stalloc(&S->stalloc, strlen(name)+1);
+  if(!binding->host.name) {
+    return luaL_error(L, "failed to allocate memory for server binding server_type string");
+  }
+  strcpy((char *)binding->host.name, name);
   lua_pop(L, 1); //pop ["name"]
-  
-  bool udp = false;
-  lua_getfield(L, 1, "UDP");
-  if(lua_toboolean(L, -1)) {
-    udp = true;
-  }
-  lua_pop(L, 1);
-  lua_getfield(L, 1, "udp");
-  if(lua_toboolean(L, -1)) {
-    udp = true;
-  }
-  lua_pop(L, 1);
-  lua_getfield(L, 1, "socktype");
-  if(lua_isstring(L, -1) && luaS_streq_literal(L, -1, "dgram")) {
-    udp = true;
-  }
-  lua_pop(L, 1);
-  
-  lua_getfield(L, 1, "address");
-  
-  lua_getfield(L, -1, "family");
-  const char *famstr = lua_tostring(L, -1);
-  int fam = AF_UNSPEC;
-  if(famstr) {
-    if(strcasecmp(famstr, "IPv4") == 0) {
-      fam = AF_INET;
-    }
-#ifdef SHUTTLESOCK_HAVE_IPV6
-    else if(strcasecmp(famstr, "IPv6") == 0) {
-      fam = AF_INET6;
-    }
-#endif
-    else if(strcasecmp(famstr, "unix") == 0) {
-      fam = AF_UNIX;
-    }
-  }
-  lua_pop(L, 1); // pop ['family']
-  
-  binding->host.addr_family = fam;
-  
-  union {
-    struct sockaddr_un     sa_unix;
-    struct sockaddr_in     sa_inet;
-#ifdef SHUTTLESOCK_HAVE_IPV6
-    struct sockaddr_in6    sa_inet6;
-#endif
-  }                     sockaddr;
-  
-  if(fam == AF_UNIX) {
-    lua_getfield(L, -1, "path");
-    binding->host.path = lua_tostring(L, -1);
-    //no need to ref this string -- it's ref'd in the Lua structure
-    lua_pop(L, 1); //pop ["path"]
-  }
-  else {
-    lua_getfield(L, -1, "port");
-    binding->host.port = lua_tointeger(L, -1);
-    lua_pop(L, 1); //pop "port"
     
-    lua_getfield(L, -1, "address_binary");
-    const char *addr;
-    size_t      addrlen;
-    addr = lua_tolstring(L, -1, &addrlen);
-    lua_pop(L, 1); //pop ["address_binary"]
-    
-    if(fam == AF_INET) {
-      assert(sizeof(binding->host.addr) == addrlen);
-      memcpy(&binding->host.addr, addr, addrlen);
-    }
-#ifdef SHUTTLESOCK_HAVE_IPV6
-    else if(fam == AF_INET6) {
-      assert(sizeof(binding->host.addr) == addrlen);
-      memcpy(&binding->host.addr6, addr, addrlen);
-    }
-    else {
-      return luaL_error(L, "weird address family");
-    }
-#endif
-  }
-  
-  shuso_hostinfo_t *host = &binding->host;
-  
-  host->name = name;
-  host->udp = udp;
-  
-  host->sockaddr = shuso_stalloc(&S->stalloc, sizeof(sockaddr));
-  if(!host->sockaddr) {
+  binding->host.sockaddr = shuso_stalloc(&S->stalloc, sizeof(*binding->host.sockaddr));
+  if(!binding->host.sockaddr) {
     return luaL_error(L,"couldn't allocate host sockaddr");
   }
-  if(fam == AF_UNIX) {
-    host->sockaddr_un->sun_family = AF_UNIX;
-    size_t pathlen = strlen(host->path)+1, maxlen = sizeof(host->sockaddr_un->sun_path);
-    memcpy(host->sockaddr_un->sun_path, host->path, pathlen > maxlen ? maxlen : pathlen);
+  
+  lua_pushcfunction(L, luaS_sockaddr_lua_to_c);
+  lua_getfield(L, 1, "address");
+  
+  lua_getfield(L, -1, "type");
+  binding->host.type = luaS_string_to_socktype(L, -1);
+  assert(binding->host.type != 0);
+  lua_pop(L, 1);
+  
+  lua_pushlightuserdata(L, binding->host.sockaddr);
+  luaS_call(L, 2, 2);
+  if(lua_isnil(L, -2)) {
+    return luaL_error(L, "%s", lua_tostring(L, -1));
   }
-  else if(fam == AF_INET) {
-    host->sockaddr_in->sin_family = AF_INET;
-    host->sockaddr_in->sin_port = htons(host->port);
-    host->sockaddr_in->sin_addr = host->addr;
-  }
-#ifdef SHUTTLESOCK_HAVE_IPV6
-  else if(fam == AF_INET6) {
-    host->sockaddr_in6->sin6_family = AF_INET6;
-    host->sockaddr_in6->sin6_port = htons(host->port);
-    host->sockaddr_in6->sin6_addr = host->addr6;
-  }
-#endif
-  lua_pop(L, 1); //pop ["address"]
+  assert(lua_topointer(L, -2) == binding->host.sockaddr);
+  lua_pop(L, 2);
+  
+  binding->host.family = binding->host.sockaddr->any.sa_family;
+  
   lua_getfield(L, 1, "common_parent_block");
   assert(lua_istable(L, -1));
   lua_getfield(L, -1, "ptr");
@@ -188,51 +111,15 @@ static int luaS_create_binding_table_from_ptr(lua_State *L) {
     lua_setfield(L, -2, "name");
   }
   
-  lua_newtable(L);
-  switch(binding->host.addr_family) {
-    case AF_INET: {
-      lua_pushliteral(L, "IPv4");
-      lua_setfield(L, -2, "family");
-      
-      lua_pushlstring(L, (const char *)&binding->host.addr, sizeof(binding->host.addr));
-      lua_setfield(L, -2, "address_binary");
-      
-      char addr[INET_ADDRSTRLEN];
-      inet_ntop(AF_INET, &binding->host.addr, addr, INET_ADDRSTRLEN);
-      lua_pushstring(L, addr);
-      lua_setfield(L, -2, "address");
-      
-      lua_pushinteger(L, binding->host.port);
-      lua_setfield(L, -2, "port");
-      break;
-    }
-#ifdef SHUTTLESOCK_HAVE_IPV6
-    case AF_INET6: {
-      lua_pushliteral(L, "IPv6");
-      lua_setfield(L, -2, "family");
-      
-      lua_pushlstring(L, (const char*)&binding->host.addr6, sizeof(binding->host.addr6));
-      lua_setfield(L, -2, "address_binary");
-      
-      char addr[INET6_ADDRSTRLEN];
-      inet_ntop(AF_INET, &binding->host.addr6, addr, INET6_ADDRSTRLEN);
-      lua_pushstring(L, addr);
-      lua_setfield(L, -2, "address");
-      
-      lua_pushinteger(L, binding->host.port);
-      lua_setfield(L, -2, "port");
-      break;
-    }
-#endif
-    case AF_UNIX:
-      lua_pushliteral(L, "unix");
-      lua_setfield(L, -2, "family");
-      
-      lua_pushstring(L, binding->host.path);
-      lua_setfield(L, -2, "path");
-      break;
+  lua_pushcfunction(L, luaS_sockaddr_c_to_lua);
+  lua_pushlightuserdata(L, binding->host.sockaddr);
+  luaS_call(L, 1, 2);
+  if(lua_isnil(L, -2)) {
+    return 2;
   }
-  lua_setfield(L, -2, "address");
+  else {
+    lua_setfield(L, -2, "address");
+  }
   
   lua_newtable(L);
   for(unsigned i=0; i<binding->config.count; i++) {
@@ -360,9 +247,6 @@ static void free_shared_host_data(shuso_t *S, shuso_hostinfo_t *h) {
     if(h->sockaddr) {
       shuso_shared_slab_free(&S->common->shm, h->sockaddr);
     }
-    if(h->addr_family == AF_UNIX && h->path) {
-      shuso_shared_slab_free(&S->common->shm, h->path);
-    }
     shuso_shared_slab_free(&S->common->shm, h);
   }
 }
@@ -385,38 +269,34 @@ static int luaS_create_shared_host_data(lua_State *L) {
     }
     strcpy((char *)shared_host->name, host->name);
   }
-  if(host->addr_family == AF_UNIX && host->path) {
-    shared_host->path = shuso_shared_slab_alloc(&S->common->shm, strlen(host->path)+1);
-    if(!shared_host->path) {
-      goto fail;
-    }
-    strcpy((char *)shared_host->path, host->path);
-  }
   
-  if(host->sockaddr) {
-    if(host->sockaddr->sa_family == AF_UNIX) {
-      shared_host->sockaddr_un = shuso_shared_slab_alloc(&S->common->shm, sizeof(*host->sockaddr_un));
-      if(!shared_host->sockaddr_un) {
+  //recreate sockaddr
+  assert(host->sockaddr);
+  sa_family_t fam = host->sockaddr->any.sa_family;
+  switch(fam) {
+    case AF_INET:
+      shared_host->sockaddr = shuso_shared_slab_alloc(&S->common->shm, sizeof(struct sockaddr_in));
+      if(!shared_host->sockaddr) {
         goto fail;
       }
-      *shared_host->sockaddr_un = *host->sockaddr_un;
-    }
-    else if(host->sockaddr->sa_family == AF_INET) {
-      shared_host->sockaddr_in = shuso_shared_slab_alloc(&S->common->shm, sizeof(*host->sockaddr_in));
-      if(!shared_host->sockaddr_in) {
-        goto fail;
-      }
-      *shared_host->sockaddr_in = *host->sockaddr_in;
-    }
+      shared_host->sockaddr->in = host->sockaddr->in;
+      break;
 #ifdef SHUTTLESOCK_HAVE_IPV6
-    else if(host->sockaddr->sa_family == AF_INET6) {
-      shared_host->sockaddr_in6 = shuso_shared_slab_alloc(&S->common->shm, sizeof(*host->sockaddr_in6));
-      if(!shared_host->sockaddr_in6) {
+    case AF_INET6:
+      shared_host->sockaddr = shuso_shared_slab_alloc(&S->common->shm, sizeof(struct sockaddr_in6));
+      if(!shared_host->sockaddr) {
         goto fail;
       }
-      *shared_host->sockaddr_in6 = *host->sockaddr_in6;
-    }
+      shared_host->sockaddr->in6 = host->sockaddr->in6;
+      break;
 #endif
+    case AF_UNIX:
+      shared_host->sockaddr = shuso_shared_slab_alloc(&S->common->shm, sizeof(struct sockaddr_un));
+      if(!shared_host->sockaddr) {
+        goto fail;
+      }
+      shared_host->sockaddr->un = host->sockaddr->un;
+      break;
   }
   
   lua_pushlightuserdata(L, shared_host);
@@ -430,16 +310,6 @@ fail:
 static int luaS_handle_fd_request(lua_State *L) {
   shuso_hostinfo_t *hostinfo = (void *)lua_topointer(L, 1);
   shuso_t          *S = shuso_state(L);
-  int               socktype = hostinfo->udp ? SOCK_DGRAM : SOCK_STREAM;
-  union {
-    struct sockaddr        sa;
-    struct sockaddr_un     sa_unix;
-    struct sockaddr_in     sa_inet;
-#ifdef SHUTTLESOCK_HAVE_IPV6
-    struct sockaddr_in6    sa_inet6;
-#endif
-  }                 sockaddr;
-  size_t            sockaddr_len = sizeof(sockaddr);
   
   shuso_sockopt_t sopt = {
     .level = SOL_SOCKET,
@@ -452,14 +322,7 @@ static int luaS_handle_fd_request(lua_State *L) {
   };
   
   assert(S->procnum == SHUTTLESOCK_MASTER);
-  
-  if(!shuso_hostinfo_to_sockaddr(S, hostinfo, &sockaddr.sa, &sockaddr_len)) {
-    lua_pushnil(L);
-    lua_pushfstring(L, "Failed to obtain sockaddr for listener socket %s", hostinfo->name ? hostinfo->name : "");
-    return 2;
-  }
-  
-  int fd = socket(hostinfo->addr_family, socktype, 0);
+  int fd = socket(hostinfo->family, hostinfo->type, 0);
   if(fd == -1) {
     lua_pushnil(L);
     lua_pushfstring(L, "Failed to create listener socket %s: %s", hostinfo->name ? hostinfo->name : "", strerror(errno));
@@ -477,8 +340,9 @@ static int luaS_handle_fd_request(lua_State *L) {
     }
   }
   
+  assert(hostinfo->sockaddr);
   
-  if(bind(fd, &sockaddr.sa, sockaddr_len) == -1) {
+  if(bind(fd, &hostinfo->sockaddr->any, shuso_sockaddr_len(hostinfo->sockaddr)) == -1) {
     close(fd);
     lua_pushnil(L);
     lua_pushfstring(L, "Failed to bind listener socket %s: %s", hostinfo->name ? hostinfo->name : "", strerror(errno));
@@ -523,32 +387,11 @@ static void maybe_accept_event_confirm_accept(shuso_t *S, shuso_event_state_t *e
   
   socket.fd = data->fd;
   socket.host.name = NULL;
-  
-  //TODO: udp flag from binding
-  socket.host.udp = false;
-  
-  switch(data->sockaddr->any.sa_family) {
-    case AF_INET:
-      socket.host.addr_family = AF_INET;
-      socket.host.addr = data->sockaddr->in.sin_addr;
-      socket.host.port = data->sockaddr->in.sin_port;
-      socket.host.sockaddr_in = &data->sockaddr->in;
-      break;
-#ifdef SHUTTLESOCK_HAVE_IPV6
-    case AF_INET6:
-      socket.host.addr_family = AF_INET6;
-      socket.host.addr6 = data->sockaddr->in6.sin6_addr;
-      socket.host.port = data->sockaddr->in6.sin6_port;
-      socket.host.sockaddr_in6 = &data->sockaddr->in6;
-      break;
-#endif
-    case AF_UNIX:
-      socket.host.addr_family = AF_UNIX;
-      socket.host.path = data->sockaddr->un.sun_path;
-      socket.host.port = 0;
-      socket.host.sockaddr_un = &data->sockaddr->un;
-      break;
-  }
+
+  assert(data->sockaddr->any.sa_family == data->binding->host.family);
+  socket.host.sockaddr = data->sockaddr;
+  socket.host.family = data->binding->host.family;
+  socket.host.type = data->binding->host.type;
   
   accept_data = (shuso_server_accept_data_t ) {
     .socket = &socket,
@@ -592,74 +435,31 @@ static bool lua_event_data_socket_wrap(lua_State *L, const char *type, void *dat
   lua_checkstack(L, 3);
   
   lua_newtable(L);
+  int tindex = lua_gettop(L);
   
   lua_pushinteger(L, sock->fd);
-  lua_setfield(L, -2, "fd");
+  lua_setfield(L, tindex, "fd");
   
   if(sock->host.name) {
     lua_pushstring(L, sock->host.name);
-    lua_setfield(L, -2, "name");
+    lua_setfield(L, tindex, "name");
   }
   
-  lua_pushinteger(L, sock->host.port);
-  lua_setfield(L, -2, "port");
+  switch(sock->host.type) {
+    case SOCK_STREAM:
+      lua_pushliteral(L, "stream");
+      break;
+    case SOCK_DGRAM:
+      lua_pushliteral(L, "dgram");
+    case SOCK_RAW:
+      lua_pushliteral(L, "raw");
+  }
+  lua_setfield(L, tindex, "type");
   
-  if(sock->host.udp) {
-    lua_pushliteral(L, "dgram");
-    lua_setfield(L, -2, "socktype");
-    
-    lua_pushboolean(L, 1);
-    lua_setfield(L, -2, "UDP");
-  }
-  else {
-    lua_pushliteral(L, "stream");
-    lua_setfield(L, -2, "socktype");
-    if(sock->host.addr_family != AF_UNIX) {
-      lua_pushboolean(L, 1);
-      lua_setfield(L, -2, "TCP");
-    }
-  }
-  
-  switch(sock->host.addr_family) {
-    case AF_INET: {
-      lua_pushliteral(L, "IPv4");
-      lua_setfield(L, -2, "family");
-      
-      lua_pushlstring(L, (char *)&sock->host.addr.s_addr, sizeof(sock->host.addr.s_addr));
-      lua_setfield(L, -2, "address_binary");
-      
-      char  address_str[INET_ADDRSTRLEN];
-      if(inet_ntop(AF_INET, (char *)&sock->host.addr, address_str, INET_ADDRSTRLEN)) {
-        lua_pushstring(L, address_str);
-        lua_setfield(L, -2, "address");
-      }
-      
-      break;
-    }
-#ifdef SHUTTLESOCK_HAVE_IPV6
-    case AF_INET6: {
-      lua_pushliteral(L, "IPv6");
-      lua_setfield(L, -2, "family");
-      
-      lua_pushlstring(L, (char *)&sock->host.addr6.s6_addr, sizeof(sock->host.addr6.s6_addr));
-      lua_setfield(L, -2, "address_binary");
-      char address_str[INET6_ADDRSTRLEN];
-      if(inet_ntop(AF_INET6, (char *)&sock->host.addr6, address_str, INET6_ADDRSTRLEN)) {
-        lua_pushstring(L, address_str);
-        lua_setfield(L, -2, "address");
-      }
-      
-      break;
-    }
-#endif
-    case AF_UNIX:
-      lua_pushliteral(L, "unix");
-      lua_setfield(L, -2, "family");
-      
-      lua_pushstring(L, sock->host.path);
-      lua_setfield(L, -2, "path");
-      break;
-  }
+  lua_pushcfunction(L, luaS_sockaddr_c_to_lua);
+  lua_pushlightuserdata(L, sock->host.sockaddr);
+  lua_pushvalue(L, tindex);
+  luaS_call(L, 2, 0);
   
   assert(lua_gettop(L) == top+1);
   
@@ -675,56 +475,7 @@ static lua_reference_t lua_event_data_socket_unwrap(lua_State *L, const char *ty
   
   lua_checkstack(L, 3);
   
-  shuso_socket_t *sock;
-  
-  lua_getfield(L, idx, "family");
-  sa_family_t fam;
-  if(luaS_streq_literal(L, -1, "IPv4") || luaS_streq_literal(L, -1, "ipv4")) {
-    struct {
-      shuso_socket_t        sock;
-      struct sockaddr_in    addr;
-    } *sockblob;
-    
-    sockblob = lua_newuserdata(L, sizeof(*sockblob));
-    sockblob->sock.host.sockaddr_in = &sockblob->addr;
-    sock = &sockblob->sock;
-    fam = AF_INET;
-  }
-  else if(luaS_streq_literal(L, -1, "IPv6") || luaS_streq_literal(L, -1, "ipv6")) {
-#ifndef SHUTTLESOCK_HAVE_IPV6
-    fam = 0;
-    sock = lua_newuserdata(L, sizeof(*sock));
-    sock->host.sockaddr = NULL;
-#else
-    struct {
-      shuso_socket_t        sock;
-      struct sockaddr_in6   addr;
-    } *sockblob;
-    
-    sockblob = lua_newuserdata(L, sizeof(*sockblob));
-    sockblob->sock.host.sockaddr_in6 = &sockblob->addr;
-    sock = &sockblob->sock;
-    fam = AF_INET6;
-#endif
-  }
-  else if(luaS_streq_literal(L, -1, "Unix") || luaS_streq_literal(L, -1, "unix") || luaS_streq_literal(L, -1, "local") || luaS_streq_literal(L, -1, "UNIX")) {
-    struct {
-      shuso_socket_t        sock;
-      struct sockaddr_un    addr;
-    } *sockblob;
-    
-    sockblob = lua_newuserdata(L, sizeof(*sockblob));
-    sockblob->sock.host.sockaddr_un = &sockblob->addr;
-    sock = &sockblob->sock;
-    fam = AF_UNIX;
-  }
-  else {
-    fam = 0;
-    sock = lua_newuserdata(L, sizeof(*sock));
-    sock->host.sockaddr = NULL;
-  }
-  int ref = luaL_ref(L, LUA_REGISTRYINDEX);
-  lua_pop(L, 1); //["family"]
+  shuso_socket_t *sock = lua_newuserdata(L, sizeof(*sock));
   
   lua_getfield(L, idx, "fd");
   sock->fd = lua_isinteger(L, -1) ? lua_tointeger(L, -1) : -1;
@@ -734,65 +485,16 @@ static lua_reference_t lua_event_data_socket_unwrap(lua_State *L, const char *ty
   sock->host.name = lua_isstring(L, -1) ? lua_tostring(L, -1) : NULL;
   lua_pop(L, 1);
   
-  lua_getfield(L, idx, "port");
-  sock->host.port = lua_isinteger(L, -1) ? lua_tointeger(L, -1) : 0;
+  lua_getfield(L, idx, "type");
+  sock->host.type = luaS_string_to_socktype(L, -1);
   lua_pop(L, 1);
   
-  size_t        sz;
-  const char   *str;
+  lua_pushcfunction(L, luaS_sockaddr_lua_to_c);
+  lua_pushvalue(L, idx);
+  luaS_call(L, 1, 1);
+  lua_setuservalue(L, -2);
   
-  switch(fam) {
-    case AF_INET: {
-      sock->host.addr_family = AF_INET;
-      sock->host.sockaddr_in->sin_family = AF_INET;
-      sock->host.sockaddr_in->sin_port = htons(sock->host.port);
-      
-      lua_getfield(L, idx, "address_binary");
-      str = lua_tolstring(L, -1, &sz);
-      sz = sizeof(sock->host.addr.s_addr) > sz ? sz : sizeof(sock->host.addr.s_addr);
-      memcpy(&sock->host.addr.s_addr, str, sz);
-      memcpy(&sock->host.sockaddr_in->sin_addr.s_addr, str, sz);
-      lua_pop(L, 1);
-      
-      break;
-    }
-#ifndef SHUTTLESOCK_HAVE_IPV6    
-    case AF_INET6: {
-      sock->host.addr_family = AF_INET6;
-      sock->host.sockaddr_in6->sin6_family = AF_INET6;
-      sock->host.sockaddr_in6->sin6_port = htons(sock->host.port);
-      sock->host.sockaddr_in6->sin6_flowinfo = 0;
-      //sock->sockaddr_in6->sin6_scope_id = 0; /* Scope ID (new in 2.4) */ //is this even used?...
-      
-      lua_getfield(L, idx, "address_binary");
-      str = lua_tolstring(L, -1, &sz);
-      sz = sizeof(sock->host.addr6.s6_addr) > sz ? sz : sizeof(sock->host.addr6.s6_addr);
-      memcpy(&sock->host.addr6.s6_addr, str, sz);
-      memcpy(&sock->host.sockaddr_in6->sin6_addr.s6_addr, str, sz);
-      lua_pop(L, 1);
-      
-      break;
-    }
-#endif
-    case AF_UNIX:
-      
-      lua_getfield(L, idx, "path");
-      sock->host.path = lua_isstring(L, -1) ? lua_tostring(L, -1) : NULL;
-      lua_pop(L, 1);
-      
-      sock->host.sockaddr_un->sun_family = AF_UNIX;
-      if(sock->host.path) {
-        strncpy(sock->host.sockaddr_un->sun_path, sock->host.path, sizeof(sock->host.sockaddr_un->sun_path));
-      }
-      else {
-        sock->host.sockaddr_un->sun_path[0] = '\0';
-      }
-      break;
-      
-    default:
-      sock->host.addr_family = 0;
-      break;
-  }
+  lua_reference_t ref = luaL_ref(L, LUA_REGISTRYINDEX);
   
   assert(top == lua_gettop(L));
   return ref;

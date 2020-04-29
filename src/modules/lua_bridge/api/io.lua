@@ -15,17 +15,17 @@ local function io_check_op_completion(self, ...)
 end
 
 function io:connect()
-  local ok, err = self.core:op("connect")
+  local ok, err = self.core:connect()
   return io_check_op_completion(self, ok, err)
 end
 
 function io:accept()
-  local ok, err = self.core:op("accept")
+  local ok, err = self.core:accept()
   return io_check_op_completion(self, ok, err)
 end
 
 function io:close()
-  local ok, err = self.core:op("close")
+  local ok, err = self.core:close()
   return io_check_op_completion(self, ok, err)
 end
 
@@ -36,65 +36,41 @@ function io:shutdown(how)
     how = "w"
   elseif how == "SHUT_RDWR" or how == "readwrite" or how == "rw" or how == "wr" then
     how = "rw"
+  elseif how == nil then
+    how = "rw"
   else
     error(("invalid 'how' value %s"):format(tostring(how)))
   end
-  local ok, err = self.core:op("shutdown", how)
+  local ok, err = self.core:shutdown(how)
   return io_check_op_completion(self, ok, err)
 end
 
-local function io_write(self, str, n, partial)
-  assert(type(str) == "string")
-  if n then
-    assert(type(n) == "number")
+function io:write(str, n)
+  assert(type(str) == "string", "to write a string")
+  if n ~= nil then
+    assert(math.type(n) == "integer", "expected string length to be an integer")
   else
     n = #str
   end
-  local op = partial and "write_partial" or "write"
-  local bytes_written, err, errno = self.core:op(op, str, n)
-  if not bytes_written and errno == "EAGAIN" then
-    self:wait("w")
-    bytes_written, err = self.core:op(op, str, n)
-  end
-  
-  return io_check_op_completion(self, bytes_written, err)
+  local bytes_written, err, errno = self.core:write(str, n)
+  return io_check_op_completion(self, bytes_written, err, errno)
 end
-
-function io:write(str, n)
-  return io_write(self, str, n, false)
-end
-
 function io:write_partial(str, n)
-  return io_write(self, str, n, true)
-end
-
-function io:setsockopt(sockopt, val)
-  local fd = self.core:get_io_fd()
-  return Core.fd_setsockopt(fd, sockopt, val)
-end
-
-function io:getsockopt(sockopt)
-  local fd = self.core:get_io_fd()
-  return Core.fd_getsockopt(fd, sockopt)
-end
-
-local function io_read(self, n, partial)
-  assert(type(n) == "number")
-  local op = partial and "read_partial" or "read"
-  local string_read, err, errno = self.core:op(op, n)
-  if not string_read and errno == "EAGAIN" then
-    self:wait("r")
-    string_read, err = self.core:op(op, n)
-  end
-  return io_check_op_completion(self, string_read, err)
+  self.core:op_set_partial(true)
+  return self:write(str, n)
 end
 
 function io:read(n)
-  return io_read(self, n, false)
+  assert(math.type(n) == "integer", "expected number of bytes to read to be an integer")
+  local string_read, err, errno = self.core:read(n)
+  return io_check_op_completion(self, string_read, err, errno)
 end
 function io:read_partial(n)
-  return io_read(self, n, true)
+  self.core:op_set_partial(true)
+  return self:read(n)
 end
+
+
 
 function io:wait(rw)
   if rw == "read" or rw == "r" then
@@ -107,8 +83,12 @@ function io:wait(rw)
     error(("invalid rw value '%s' for io:wait()"):format(tostring(rw)))
   end
   
-  local ok, err = self.core:op("wait", rw)
-  return io_check_op_completion(self, ok, err)
+  local ok, err, errno = self.core:wait(rw)
+  return io_check_op_completion(self, ok, err, errno)
+end
+
+function io:closed()
+  return self.core:get_closed()
 end
 
 local io_mt = {
@@ -132,6 +112,7 @@ function IO.wrap(init, io_handler)
     path = host.path
     name = host.name
     port = host.port
+    socktype = "SOCK_STREAM"
     sockopts = host.sockopts
     readwrite = host.readwrite or host.rw or "rw"
   elseif type(init) == "table" then
@@ -143,7 +124,7 @@ function IO.wrap(init, io_handler)
     port = init.port
     address = init.address
     address_binary = init.address_binary
-    socktype = init.socktype
+    socktype = init.type or init.socktype
     sockopts = init.sockopts
     readwrite = init.readwrite or init.rw or "rw"
     
@@ -207,19 +188,21 @@ function IO.wrap(init, io_handler)
       socktype = "SOCK_RAW"
     elseif path then
       socktype = "SOCK_STREAM"
+    elseif socktype then
+      error("invalid socket type '" .. tostring(socktype) .. "'")
     else --default to TCP
       socktype = "SOCK_STREAM"
     end
     
     self.init = {
-      addr = address,
-      addr_binary = address_binary,
+      address = address,
+      address_binary = address_binary,
       hostname = hostname,
-      addr_family = family,
+      family = family,
       path = path,
       name = name,
       port = port,
-      socktype = socktype,
+      type = socktype,
       sockopts = sockopts,
       readwrite = readwrite
     }
