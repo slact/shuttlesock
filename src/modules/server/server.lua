@@ -28,7 +28,8 @@ local Server = Module.new {
     "worker.start"
   },
   subscribe = {
-    "~server:maybe_accept"
+    "server:maybe_accept",
+    "core:worker.stop"
   },
   raw_hosts = {},
   bindings = {},
@@ -360,6 +361,9 @@ Server:subscribe("core:master.start", function()
         end
         resp = rcv:yield()
         assert(resp == "ok")
+        for _, fd in ipairs(fds) do
+          assert(Core.fd_close(fd))
+        end
       end
     until not req or req == "done"
     rcv:stop()
@@ -367,6 +371,12 @@ Server:subscribe("core:master.start", function()
   end)
   IPC.receive("server:start", "manager", publish_server_started_event)
   coroutine.resume(coro)
+end)
+
+Server:subscribe("core:worker.stop", function()
+  for _, io_coro in ipairs(Server.listener_io_c_coroutines) do
+    CFuncs.stop_worker_io_listener_coro(io_coro)
+  end
 end)
 
 local function delay_stopping(self, evstate)

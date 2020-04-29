@@ -2439,7 +2439,7 @@ fail:
   return 2;
 }
 
-static int Lua_shuso_fd_destroy(lua_State *L) {
+static int Lua_shuso_fd_close(lua_State *L) {
   int fd = luaL_checkinteger(L, 1);
   int rc = close(fd);
   if(rc != 0) {
@@ -2739,7 +2739,7 @@ luaL_Reg shuttlesock_core_module_methods[] = {
 
 //socket stuff
   {"fd_create", Lua_shuso_fd_create},
-  {"fd_destroy", Lua_shuso_fd_destroy},
+  {"fd_close", Lua_shuso_fd_close},
   {"fd_getsockopt", Lua_shuso_fd_getsockopt},
   {"fd_setsockopt", Lua_shuso_fd_setsockopt},
   

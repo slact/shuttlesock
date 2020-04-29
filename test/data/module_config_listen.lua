@@ -14,7 +14,7 @@ local testmod = Module.new {
 
 
 testmod:subscribe("server:manager.start", function()
-  Watcher.timer(5, function()
+  Watcher.timer(10, function()
     error("listener test timed out")
   end):start()
   
