@@ -59,7 +59,7 @@ local config =
 [[
 http {
   server {
-    listen localhost:11595;
+    listen localhost:11595 tcp;
   }
   server {
     listen localhost:11595;
