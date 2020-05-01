@@ -273,7 +273,7 @@ static int Lua_shuso_procnums_active(lua_State *L) {
 
 static int Lua_shuso_process_runstate(lua_State *L) {
   shuso_t *S = shuso_state(L);
-  if(lua_gettop(L) == 0) {
+  if(lua_gettop(L) == 0 || lua_isnil(L, 1)) {
     luaS_push_runstate(L, *S->process->state);
     return 1;
   }
