@@ -451,8 +451,10 @@ static bool lua_event_data_socket_wrap(lua_State *L, const char *type, void *dat
       break;
     case SOCK_DGRAM:
       lua_pushliteral(L, "dgram");
+      break;
     case SOCK_RAW:
       lua_pushliteral(L, "raw");
+      break;
   }
   lua_setfield(L, tindex, "type");
   
