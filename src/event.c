@@ -302,6 +302,7 @@ bool shuso_event_pause(shuso_t *S, shuso_event_state_t *evstate, const char *rea
   }
   
   cev->interrupt = SHUSO_EVENT_PAUSE;
+  cev->interrupt_reason = reason;
   
   *paused = (shuso_event_pause_t) {
     .reason = reason,
@@ -328,6 +329,7 @@ bool shuso_event_delay(shuso_t *S, shuso_event_state_t *evstate, const char *rea
   }
   
   cev->interrupt = SHUSO_EVENT_DELAY;
+  cev->interrupt_reason = reason;
   
   lua_State  *L = S->lua.state;
   int         top = lua_gettop(L);
