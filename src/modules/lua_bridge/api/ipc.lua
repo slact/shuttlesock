@@ -98,9 +98,18 @@ end
 local function ipc_broadcast(dst, name, data, handler, must_yield)
   local my_procnum = dst == "others" or dst == "other_workers" and Process.procnum()
   local min_procnum = dst == ("workers" or dst == "other_workers") and 0 or -math.huge
+  
+  if Process.runstate() ~= "running" then
+    return nil, ("%s state must be 'running' but is '%s'"):format(Process.procnum_to_string(Process.procnum()), Process.runstate())
+  end
+  
   local dstprocnums = {}
   for _, procnum in ipairs(Process.all_procnums()) do
     if procnum ~= my_procnum and procnum >= min_procnum then
+      local procstate = Process.runstate(procnum)
+      if procstate ~= "running" then
+        return nil, ("%s state must be 'running' but is '%s'"):format(Process.procnum_to_string(procnum), procstate)
+      end
       table.insert(dstprocnums, procnum)
     end
   end
@@ -161,6 +170,14 @@ function IPC.send(destination, name, data, how_to_handle_acknowledgement)
   if many_dsts then
     return ipc_broadcast(destination, name, data, handler, must_yield)
   else
+    local src_state = Process.runstate()
+    local dst_state = Process.runstate(dst)
+    if src_state ~= "running" then
+      return nil, ("%s state must be 'running' but is '%s'"):format(Process.procnum_to_string(Process.procnum()), src_state)
+    elseif dst_state ~= "running" then
+      return nil, ("%s state must be 'running' but is '%s'"):format(Process.procnum_to_string(dst), dst_state)
+    end
+    
     local ok = Core.ipc_send_message(dst, name, data, nil, handler)
     if must_yield then
       return ipc_coroutine_yield("send")
