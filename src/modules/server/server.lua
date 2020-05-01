@@ -70,9 +70,10 @@ Server.settings = {
 function Server:initialize()
   CFuncs.register_event_data_types()
   CFuncs.maybe_accept_event_init(self:event_pointer("maybe_accept"))
-  self.shared = Atomics.new("done", "failed")
-  self.shared.done = 0
-  self.shared.failed = 0
+  self.shared = Atomics.new("done_count", "failed_count", "aborted")
+  self.shared.aborted = false
+  self.shared.done_count = 0
+  self.shared.failed_count = 0
 end
 
 function Server:initialize_config(block)
@@ -160,6 +161,25 @@ local function publish_server_started_event(ok)
   Server:publish(Process.type()..".start", true)
 end
 
+local function ipc_try_send(dst, name, data)
+  local ok, err = IPC.send(dst, name, data)
+  if not ok then
+    error(err, 0)
+  end
+  return true
+end
+
+local function finish_server_startup(func)
+  local ok, err = pcall(func)
+  if not ok then
+    Server.shared.aborted = true
+    Server.shared:increment("failed_count", 1)
+    Log.warning("Failed to start server module: %s", err)
+  end
+  Server.startup_finished = true
+  return ok
+end
+
 Server:subscribe("core:manager.workers_started", function()
 
   local coro = coroutine.create(function()
@@ -242,59 +262,62 @@ Server:subscribe("core:manager.workers_started", function()
     --
     --end
     
-    local worker_procnums = Process.worker_procnums()
-    if #Server.bindings > 0 then
-      
-      local rcv = IPC.Receiver.start("server:create_listener_sockets", "master")
-      local rcvfd = IPC.FD_Receiver.start("server:receive_listener_sockets", 5.0)
-      
-      for i, binding in ipairs(Server.bindings) do
-        
-        binding.ptr = assert(CFuncs.create_binding_data(binding, i), "problem creating bind data")
-        Server.bindings_by_ptr[binding.ptr]=binding
-        
-        local shared_ptr = CFuncs.create_shared_host_data(binding.ptr)
-        
-        local msg = {
-          count = #worker_procnums,
-          shared_ptr = shared_ptr,
-          fd_ref = rcvfd.id
-        }
-        
-        IPC.send("master", "server:create_listener_sockets", msg)
-        local resp = rcv:yield()
-        binding.sockets = binding.sockets or {}
-        for _, err in ipairs(resp.errors or {}) do
-          Log.error(err)
-        end
-        while #binding.sockets < resp.fd_count do
-          local ok, fd = rcvfd:yield()
-          assert(ok)
-          table.insert(binding.sockets, fd)
-        end
-        IPC.send("master", "server:create_listener_sockets", "ok")
-        
-        CFuncs.free_shared_host_data(shared_ptr)
-      end
-    end
-    for _, worker in ipairs(worker_procnums) do
+    
+    finish_server_startup(function()
+      local worker_procnums = Process.worker_procnums()
       if #Server.bindings > 0 then
-        local receiver = IPC.Receiver.start("server:listener_socket_transfer", worker)
-        for _, binding in ipairs(Server.bindings) do
-          local fd = assert(table.remove(binding.sockets), "not enough listener sockets opened. weird")
-          IPC.send(worker, "server:listener_socket_transfer", {name = binding.name, fd = fd, address = binding.address, binding_ptr = binding.ptr})
-          local resp = receiver:yield()
-          assert(resp == "ok", resp)
+        
+        local rcv = IPC.Receiver.start("server:create_listener_sockets", "master")
+        local rcvfd = IPC.FD_Receiver.start("server:receive_listener_sockets", 5.0)
+        
+        for i, binding in ipairs(Server.bindings) do
+          
+          binding.ptr = assert(CFuncs.create_binding_data(binding, i), "problem creating bind data")
+          Server.bindings_by_ptr[binding.ptr]=binding
+          
+          local shared_ptr = CFuncs.create_shared_host_data(binding.ptr)
+          
+          local msg = {
+            count = #worker_procnums,
+            shared_ptr = shared_ptr,
+            fd_ref = rcvfd.id
+          }
+          
+          ipc_try_send("master", "server:create_listener_sockets", msg)
+          local resp = rcv:yield()
+          binding.sockets = binding.sockets or {}
+          for _, err in ipairs(resp.errors or {}) do
+            Log.error(err)
+          end
+          while #binding.sockets < resp.fd_count do
+            local ok, fd = rcvfd:yield()
+            assert(ok)
+            table.insert(binding.sockets, fd)
+          end
+          ipc_try_send("master", "server:create_listener_sockets", "ok")
+          
+          CFuncs.free_shared_host_data(shared_ptr)
         end
-        receiver:stop()
       end
-      IPC.send(worker, "server:listener_socket_transfer", "done")
-    end
-    IPC.send("master", "server:create_listener_sockets", "done")
-    Server.startup_finished = true
+      for _, worker in ipairs(worker_procnums) do
+        if #Server.bindings > 0 then
+          local receiver = IPC.Receiver.start("server:listener_socket_transfer", worker)
+          for _, binding in ipairs(Server.bindings) do
+            local fd = assert(table.remove(binding.sockets), "not enough listener sockets opened. weird")
+            ipc_try_send(worker, "server:listener_socket_transfer", {name = binding.name, fd = fd, address = binding.address, binding_ptr = binding.ptr})
+            local resp = receiver:yield()
+            assert(resp == "ok", resp)
+          end
+          receiver:stop()
+        end
+        ipc_try_send(worker, "server:listener_socket_transfer", "done")
+      end
+      ipc_try_send("master", "server:create_listener_sockets", "done")
+    end)
   end)
+  
   IPC.receive("server:workers_started", "any", function(ok)
-    IPC.send("all", "server:start", ok or true)
+    ipc_try_send("all", "server:start", ok or true)
   end)
   IPC.receive("server:start", "manager", publish_server_started_event)
   coroutine.resume(coro)
@@ -303,31 +326,33 @@ end)
 Server:subscribe("core:worker.start", function()
   Server.listener_io_c_coroutines = {}
   local coro = coroutine.create(function()
-    local receiver = IPC.Receiver.start("server:listener_socket_transfer", "manager")
-    while true do
-      local data = receiver:yield()
-      if data == "done" then
-        break
-      elseif type(data) == "table" then
-        local c_io_coro = CFuncs.start_worker_io_listener_coro(Server, data.fd, data.binding_ptr)
-        local resp
-        if c_io_coro then
-          table.insert(Server.listener_io_c_coroutines, c_io_coro)
-          resp = "ok"
+    finish_server_startup(function()
+      local receiver = IPC.Receiver.start("server:listener_socket_transfer", "manager")
+      while true do
+        local data = receiver:yield()
+        if data == "done" then
+          break
+        elseif type(data) == "table" then
+          local c_io_coro = CFuncs.start_worker_io_listener_coro(Server, data.fd, data.binding_ptr)
+          local resp
+          if c_io_coro then
+            table.insert(Server.listener_io_c_coroutines, c_io_coro)
+            resp = "ok"
+          else
+            resp = "not ok"
+          end
+          ipc_try_send("manager", "server:listener_socket_transfer", resp)
         else
-          resp = "not ok"
+          ipc_try_send("manager", "server:listener_socket_transfer", "i don't get it")
         end
-        IPC.send("manager", "server:listener_socket_transfer", resp)
-      else
-        IPC.send("manager", "server:listener_socket_transfer", "i don't get it")
       end
-    end
-    receiver:stop()
-    Server.startup_finished = true
-    Server.shared:increment("done", 1)
-    if Server.shared.done == Process.count_workers() then
-      IPC.send("manager", "server:workers_started", true)
-    end
+      receiver:stop()
+      
+      Server.shared:increment("done_count", 1)
+      if Server.shared.done_count == Process.count_workers() then
+        ipc_try_send("manager", "server:workers_started", true)
+      end
+    end)
   end)
   
   IPC.receive("server:start", "manager", publish_server_started_event)
@@ -336,38 +361,41 @@ end)
 
 Server:subscribe("core:master.start", function()
   local coro = coroutine.create(function()
-    local rcv = IPC.Receiver.start("server:create_listener_sockets", "manager")
-    repeat
-      local req, src = rcv:yield()
-      if type(req) == "table" then
-        local fds = {}
-        local errors = {}
-        while #fds < req.count - #errors do
-          local fd, err = CFuncs.handle_fd_request(req.shared_ptr)
-          if fd then
-            table.insert(fds, fd)
-          else
-            table.insert(errors, err or "error")
+  
+    finish_server_startup(function()
+      local rcv = IPC.Receiver.start("server:create_listener_sockets", "manager")
+      repeat
+        local req, src = rcv:yield()
+        if type(req) == "table" then
+          local fds = {}
+          local errors = {}
+          while #fds < req.count - #errors do
+            local fd, err = CFuncs.handle_fd_request(req.shared_ptr)
+            if fd then
+              table.insert(fds, fd)
+            else
+              table.insert(errors, err or "error")
+            end
+          end
+          
+          local resp = {
+            fd_count = #fds,
+            errors = errors
+          }
+          ipc_try_send(src, "server:create_listener_sockets", resp)
+          for _, fd in ipairs(fds) do
+            IPC.send_fd(src, req.fd_ref, fd)
+          end
+          resp = rcv:yield()
+          assert(resp == "ok")
+          for _, fd in ipairs(fds) do
+            assert(Core.fd_close(fd))
           end
         end
-        
-        local resp = {
-          fd_count = #fds,
-          errors = errors
-        }
-        IPC.send(src, "server:create_listener_sockets", resp)
-        for _, fd in ipairs(fds) do
-          IPC.send_fd(src, req.fd_ref, fd)
-        end
-        resp = rcv:yield()
-        assert(resp == "ok")
-        for _, fd in ipairs(fds) do
-          assert(Core.fd_close(fd))
-        end
-      end
-    until not req or req == "done"
-    rcv:stop()
-    Server.startup_finished = true
+      until not req or req == "done"
+      rcv:stop()
+    end)
+    
   end)
   IPC.receive("server:start", "manager", publish_server_started_event)
   coroutine.resume(coro)
@@ -380,7 +408,7 @@ Server:subscribe("core:worker.stop", function()
 end)
 
 local function delay_stopping(self, evstate)
-  if not Server.startup_finished then
+  if not Server.startup_finished and not Server.shared.aborted then
     assert(evstate:delay("still initializing", 0.3))
   end
 end
