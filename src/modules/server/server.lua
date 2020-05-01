@@ -317,8 +317,12 @@ Server:subscribe("core:manager.workers_started", function()
   end)
   
   IPC.receive("server:workers_started", "any", function(ok)
-    ipc_try_send("all", "server:start", ok or true)
+    local sent_ok, err = IPC.send("all", "server:start", ok or true)
+    if not sent_ok then
+      Log.warning("Failed to start server module: %s", err)
+    end
   end)
+  
   IPC.receive("server:start", "manager", publish_server_started_event)
   coroutine.resume(coro)
 end)
