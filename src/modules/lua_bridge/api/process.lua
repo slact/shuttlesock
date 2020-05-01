@@ -11,8 +11,8 @@ function Process.procnum()
   return Core.procnum()
 end
 
-function Process.runstate()
-  return Core.process_runstate()
+function Process.runstate(procnum)
+  return Core.process_runstate(procnum)
 end
 
 function Process.all_procnums()
