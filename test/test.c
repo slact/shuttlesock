@@ -730,7 +730,7 @@ describe(lua_api) {
       assert_shuso_ran_ok(S);
     }
     
-    test("master-manager communiation") {
+    test("master-manager communication") {
       assert_luaL_dofile(S->lua.state, "ipc_master_manager.lua");
       assert_shuso(S, shuso_configure_finish(S));
       shuso_run(S);
