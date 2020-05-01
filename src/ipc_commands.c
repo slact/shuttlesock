@@ -34,6 +34,12 @@ static void shutdown_handle_cb(shuso_loop *loop, shuso_ev_timer *w, int revents)
   
   shuso_remove_timer_watcher(S, w);
   
+  shuso_log(S, "process state: %d", *S->process->state);
+  if(*S->process->state == SHUSO_STATE_STOPPING) {
+    //already stopping, nothing needs to be done
+    return;
+  }
+  
   if(S->procnum == SHUTTLESOCK_MASTER) {
     shuso_stop(S, stop_type);
   }
