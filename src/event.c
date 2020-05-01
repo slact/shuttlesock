@@ -129,7 +129,7 @@ static bool event_listen_continue(shuso_t *S, lua_State *L, int nargs, bool opti
   return true;
 }
 
-/*
+#ifdef SHUTTLESOCK_DEBUG_EVENTS
 static const char *event_interrupt_action_string(shuso_event_interrupt_t interrupt) {
    switch(interrupt) {
     case SHUSO_EVENT_NO_INTERRUPT:
@@ -142,9 +142,9 @@ static const char *event_interrupt_action_string(shuso_event_interrupt_t interru
       return "delayed";
     default:
       return "<?>";
-  } 
+  }
 }
-*/
+#endif
 
 typedef struct {
   shuso_event_t             *event;
@@ -157,7 +157,7 @@ typedef struct {
   const char                *interrupt_reason;
 } shuso_complete_event_state_t;
 
-static bool fire_event(shuso_t *S, shuso_event_t *event, int listener_start_index, intptr_t code, void *data) {
+static bool fire_event(shuso_t *S, shuso_event_t *event, shuso_event_interrupt_t expected_interrupt_state, int listener_start_index, intptr_t code, void *data) {
   shuso_module_t *publisher = shuso_get_module(S, event->module_index);
   shuso_complete_event_state_t cev = {
     .event = event,
@@ -170,10 +170,21 @@ static bool fire_event(shuso_t *S, shuso_event_t *event, int listener_start_inde
     .interrupt_reason = NULL
   };
   
-#ifdef SHUTTLESOCK_DEBUG_MODULE_SYSTEM
-  if(expected_interrupt_state != event->interrupt_state) {
+#ifdef SHUTTLESOCK_DEBUG_EVENTS
+  lua_State                 *L = S->lua.state;
+  int                        top = lua_gettop(L);
+  shuso_event_interrupt_t    current_interrupt_state;
+  lua_checkstack(L, 4);
+  
+  luaL_getsubtable(L, LUA_REGISTRYINDEX, "shuttlesock.core.event.debug.interrupt_state");
+  //luaS_mm(L, -1);
+  lua_pushlightuserdata(L, event);
+  lua_rawget(L, -2);
+  current_interrupt_state = lua_isnil(L, -1) ? SHUSO_EVENT_NO_INTERRUPT : lua_tonumber(L, -1);
+  lua_pop(L, 1);
+  if(expected_interrupt_state != current_interrupt_state) {
     const char *interrupt_state_string;
-    switch(event->interrupt_state) {
+    switch(expected_interrupt_state) {
       case SHUSO_EVENT_NO_INTERRUPT:
         interrupt_state_string = "uninterrupted";
         break;
@@ -190,20 +201,24 @@ static bool fire_event(shuso_t *S, shuso_event_t *event, int listener_start_inde
     
     switch(expected_interrupt_state) {
       case SHUSO_EVENT_NO_INTERRUPT:
+        raise(SIGABRT);
         return shuso_set_error(S, "cannot publish %s event", interrupt_state_string);
       case SHUSO_EVENT_PAUSE:
+        raise(SIGABRT);
         return shuso_set_error(S, "cannot unpause %s event", interrupt_state_string);
       case SHUSO_EVENT_DELAY:
+        raise(SIGABRT);
         return shuso_set_error(S, "cannot undelay %s event", interrupt_state_string);
       case SHUSO_EVENT_CANCEL:
+        raise(SIGABRT);
         return shuso_set_error(S, "cannot uncancel event -- that's not even possible");
     }
   }
   if(listener_start_index == 0) {
     event->fired_count++;
   }
+  shuso_log_debug(S, "event %s:%s started", publisher->name, event->name);
 #endif
-  //shuso_log_debug(S, "event %s:%s started", publisher->name, event->name);
   
   const shuso_module_t *prev_active_module = S->active_module;
   if(event->interrupt_handler == NULL) {
@@ -223,45 +238,33 @@ static bool fire_event(shuso_t *S, shuso_event_t *event, int listener_start_inde
     }
   }
   S->active_module = prev_active_module;
-  
-  switch(cev.interrupt) {
-    case SHUSO_EVENT_NO_INTERRUPT:
-      //shuso_log_debug(S, "event %s:%s finished", publisher->name, event->name);
-#ifdef SHUTTLESOCK_DEBUG_MODULE_SYSTEM
-      event->interrupt_state = SHUSO_EVENT_NO_INTERRUPT;
-#endif
-      return true;
-    case SHUSO_EVENT_PAUSE:
-#ifdef SHUTTLESOCK_DEBUG_MODULE_SYSTEM
-      event->interrupt_state = SHUSO_EVENT_PAUSE;
-#endif
-      break;
-    case SHUSO_EVENT_CANCEL:
-#ifdef SHUTTLESOCK_DEBUG_MODULE_SYSTEM
-      event->interrupt_state = SHUSO_EVENT_NO_INTERRUPT;
-#endif
-      break;
-    case SHUSO_EVENT_DELAY:
-#ifdef SHUTTLESOCK_DEBUG_MODULE_SYSTEM
-      event->interrupt_state = SHUSO_EVENT_DELAY;
-#endif
-      break;
-    default:
-      break;
-  }
-  /*
-  if(cev.interrupt_reason) {
-    shuso_log_debug(S, "event %s:%s %s by module %s: %s", cev.state.publisher->name, cev.event->name, event_interrupt_action_string(cev.interrupt), cev.state.module->name, cev.interrupt_reason);
+
+#ifdef SHUTTLESOCK_DEBUG_EVENTS
+  if(cev.interrupt == SHUSO_EVENT_NO_INTERRUPT) {
+    shuso_log_debug(S, "event %s:%s finished", publisher->name, event->name);
   }
   else {
-    shuso_log_debug(S, "event %s:%s %s by module %s", cev.state.publisher->name, cev.event->name, event_interrupt_action_string(cev.interrupt), cev.state.module->name);
+    if(cev.interrupt_reason) {
+      shuso_log_debug(S, "event %s:%s %s by module %s: %s", cev.state.publisher->name, cev.event->name, event_interrupt_action_string(cev.interrupt), cev.state.module->name, cev.interrupt_reason);
+    }
+    else {
+      shuso_log_debug(S, "event %s:%s %s by module %s", cev.state.publisher->name, cev.event->name, event_interrupt_action_string(cev.interrupt), cev.state.module->name);
+    }
   }
-  */
-  return false;
+
+  lua_pushlightuserdata(L, event);
+  lua_pushinteger(L, cev.interrupt == SHUSO_EVENT_CANCEL ? SHUSO_EVENT_NO_INTERRUPT : cev.interrupt);
+  lua_rawset(L, -3);
+  lua_pop(L, 1);
+  
+  assert(lua_gettop(L) == top);
+  
+#endif
+  return cev.interrupt == SHUSO_EVENT_NO_INTERRUPT;
 }
 
 bool shuso_event_publish(shuso_t *S, shuso_event_t *event, intptr_t code, void *data) {
-  return fire_event(S, event, 0, code, data);
+  return fire_event(S, event, SHUSO_EVENT_NO_INTERRUPT, 0, code, data);
 }
 
 
@@ -406,7 +409,7 @@ static void delayed_event_handler(shuso_loop *loop, shuso_ev_timer *w, int event
     return;
   }
   
-  fire_event(S, pause.event, pause.next_listener_index, pause.code, pause.data);
+  fire_event(S, pause.event, SHUSO_EVENT_DELAY, pause.next_listener_index, pause.code, pause.data);
 }
 
 bool shuso_event_resume_delayed(shuso_t *S, int delay_id) {
@@ -425,9 +428,9 @@ bool shuso_event_resume_delayed(shuso_t *S, int delay_id) {
     return false;
   }
   
-  return fire_event(S, pause.event, pause.next_listener_index, pause.code, pause.data);
+  return fire_event(S, pause.event, SHUSO_EVENT_DELAY, pause.next_listener_index, pause.code, pause.data);
 }
 
 bool shuso_event_resume_paused(shuso_t *S, shuso_event_pause_t *pause) {
-  return fire_event(S, pause->event, pause->next_listener_index, pause->code, pause->data);
+  return fire_event(S, pause->event, SHUSO_EVENT_PAUSE, pause->next_listener_index, pause->code, pause->data);
 }

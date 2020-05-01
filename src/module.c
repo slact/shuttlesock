@@ -356,8 +356,7 @@ static bool shuso_module_finalize(shuso_t *S, shuso_module_t *mod) {
       event->interrupt_handler = NULL;
     }
     
-#ifdef SHUTTLESOCK_DEBUG_MODULE_SYSTEM
-    event->interrupt_state = SHUSO_EVENT_NO_INTERRUPT;
+#ifdef SHUTTLESOCK_DEBUG_EVENTS
     event->count = 0;
     event->fired_count = 0;
 #endif
@@ -503,7 +502,7 @@ shuso_module_t *shuso_get_module_by_name(shuso_t *S, const char *name) {
 shuso_module_t *shuso_get_module_by_index(shuso_t *S, int index) {
 #ifdef SHUTTLESOCK_DEBUG_MODULE_SYSTEM
   assert(index>=0);
-  assert(index < S->common->modules.count);
+  assert((unsigned)index < S->common->modules.count);
 #endif
   return S->common->modules.array[index];
 }

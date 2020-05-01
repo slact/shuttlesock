@@ -483,6 +483,9 @@ rebuild = Opts.new do
   debug_modules :debug_flag,
     cmake_define: {SHUTTLESOCK_DEBUG_MODULE_SYSTEM: true}
   
+  debug_events :debug_flag,
+    cmake_define: {SHUTTLESOCK_DEBUG_EVENTS: true}
+  
   no_eventfd :debug_flag,
     cmake_define: {SHUTTLESOCK_USE_EVENTFD: false}
   

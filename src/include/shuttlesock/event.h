@@ -27,8 +27,7 @@ typedef struct shuso_event_s {
   uint16_t           module_index;
   unsigned           detached:1;
   unsigned           firing:1;
-#ifdef SHUTTLESOCK_DEBUG_MODULE_SYSTEM
-  shuso_event_interrupt_t interrupt_state;
+#ifdef SHUTTLESOCK_DEBUG_EVENTS
   size_t             count;
   _Atomic uint64_t   fired_count;
 #endif
