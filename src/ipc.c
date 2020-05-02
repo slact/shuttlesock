@@ -235,10 +235,6 @@ void ipc_receive_msg_fd_coroutine(shuso_t *S, shuso_io_t *io) {
       .msg_flags = 0
     };
     
-    SHUSO_IO_CORO_YIELD(wait, SHUSO_IO_READ);
-    if(io->error) {
-      goto end_coroutine;
-    }
     SHUSO_IO_CORO_YIELD(recvmsg, &msghdr_buf->msg, 0);
     if(io->error) {
       goto end_coroutine;
