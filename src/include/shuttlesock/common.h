@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <netinet/in.h>
 #include <sys/un.h>
+#include <sys/socket.h>
 #include <shuttlesock/build_config.h>
 
 #ifndef container_of
