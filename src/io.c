@@ -310,7 +310,7 @@ static bool io_op_update_and_check_completion(shuso_io_t *io, ssize_t result_sz)
       
     case SHUSO_IO_OP_RECVMSG:
     case SHUSO_IO_OP_SENDMSG:
-      return io_iovec_op_update_and_check_completion(&io->msg->msg_iov, &io->msg->msg_iovlen, result_sz);
+      return io_iovec_op_update_and_check_completion(&io->msg->msg_iov, (size_t *)&io->msg->msg_iovlen, result_sz);
   }
   return true;
 }
