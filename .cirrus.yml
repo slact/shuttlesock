@@ -53,7 +53,7 @@ osx_task:
 freebsd_task:
   freebsd_instance:
     image: freebsd-12-1-release-amd64
-  setup_script: pkg install -y c-ares gmake cmake ccache libev valgrind zsh ruby lua53 openssl111 pcre2 libnghttp2
+  setup_script: pkg install -y c-ares gmake cmake ccache libev zsh ruby lua53 openssl111 pcre2 libnghttp2
   test_basic_script:
     - ruby ./rebuild.rb
     - zsh ./test.sh --color
