@@ -265,19 +265,19 @@ static size_t iovec_size(const struct iovec *iov, size_t iovcnt) {
 static bool io_iovec_op_update_and_check_completion(struct iovec **iov_ptr, size_t *iovcnt_ptr, ssize_t written) {
   //returns true if operation is complete (iovec now empty)
   size_t         iovcnt = *iovcnt_ptr;
-  size_t         chomped = written;
+  size_t         written_unaccounted_for = written;
   struct iovec  *iov = *iov_ptr;
   size_t         i;
-  for(i=0; i < iovcnt; i++) {
-    if(chomped < iov[i].iov_len) {
+  for(i=0; i < iovcnt && written_unaccounted_for > 0; i++) {
+    if(written_unaccounted_for < iov[i].iov_len) {
       *iov_ptr = &iov[i];
-      iov[i].iov_len -= chomped;
+      iov[i].iov_len -= written_unaccounted_for;
       *iovcnt_ptr = iovcnt - i;
       return false;
     }
     else {
-      assert(chomped >= iov[i].iov_len);
-      chomped -= iov[i].iov_len;
+      assert(written_unaccounted_for >= iov[i].iov_len);
+      written_unaccounted_for -= iov[i].iov_len;
     }
   }
   *iovcnt_ptr = 0;
