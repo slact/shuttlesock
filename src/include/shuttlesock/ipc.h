@@ -33,7 +33,7 @@
 
 // adds a 1-second IPC check for unread left-behind messages.
 // only useful for debugging IPC internals
-//#define SHUTTLESOCK_DEBUG_IPC_RECEIVE_CHECK_TIMER
+//#define SHUTTLESOCK_DEBUG_IPC_RECEIVE_CHECK_TIMER 1
 
 typedef struct {
   struct {

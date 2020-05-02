@@ -145,34 +145,17 @@ void ipc_receive_notice_coroutine(shuso_t *S, shuso_io_t *io) {
   
   SHUSO_IO_CORO_BEGIN(io);
   
+  do {
 #ifdef SHUTTLESOCK_HAVE_EVENTFD
-  
-  do {
     SHUSO_IO_CORO_YIELD(read, &receiver->buf.eventfd, sizeof(receiver->buf.eventfd));
-    err = io->error;
-  } while(!err && ipc_receive(S, proc));
-  
 #else
-  
-  do {
-    SHUSO_IO_CORO_YIELD(wait, SHUSO_IO_READ);
-    if(!io->error) {
-      do {
-        //eat up everything in the buffer. we don't care about the contents, only that it must all be consumed
-        SHUSO_IO_CORO_YIELD(read_partial, receiver->buf.pipe, sizeof(receiver->buf.pipe));
-      } while(io->result > 0);
-    }
-    
-    err = io->error;
-    if(err == EAGAIN || err == EWOULDBLOCK) {
-      err = 0;
-    }
-  } while(!err && ipc_receive(S, proc));
-  
+    //eat up everything in the buffer. we don't care about the contents, only that as much of it as possible should be consumed
+    SHUSO_IO_CORO_YIELD(read_partial, receiver->buf.pipe, sizeof(receiver->buf.pipe));
 #endif
+    err = io->result == 0 ? -1 : io->error;
+  } while(!err && ipc_receive(S, proc));
   
   SHUSO_IO_CORO_END(io);
-  
 }
 
 static void ipc_handle_received_socket(shuso_t *S, int fd, int ref, void *pd) {
