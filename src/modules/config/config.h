@@ -2,6 +2,7 @@
 #define SHUTTLESOCK_CONFIG_MODULE_H
 
 #include <shuttlesock/common.h>
+#include <shuttlesock/instring.h>
 
 extern shuso_module_t shuso_config_module;
 
@@ -31,17 +32,14 @@ typedef struct shuso_setting_value_s {
   bool        boolean;
   int         integer;
   double      number;
-  const char *string;
-  size_t      string_len;
-  const char *raw;
-  size_t      raw_len;
-  
+  shuso_str_t string;
+  shuso_str_t raw;
 } shuso_setting_value_t;
 
 
 typedef struct shuso_setting_values_s {
   uint16_t              count;
-  shuso_setting_value_t array[];
+    shuso_instring_t    array[];
 } shuso_setting_values_t;
 
 typedef struct shuso_setting_s {
@@ -54,7 +52,7 @@ typedef struct shuso_setting_s {
     shuso_setting_values_t *local;
     shuso_setting_values_t *inherited;
     shuso_setting_values_t *defaults;
-  }                       values;
+  }                       instrings;
   shuso_setting_block_t  *block;
 } shuso_setting_t;
 
@@ -66,7 +64,7 @@ shuso_setting_t *shuso_setting(shuso_t *S, const shuso_setting_block_t *block, c
 bool shuso_setting_boolean(shuso_t *S, const shuso_setting_t *setting, int n, bool *ret);
 bool shuso_setting_integer(shuso_t *S, const shuso_setting_t *setting, int n, int *ret);
 bool shuso_setting_number(shuso_t *S, const shuso_setting_t *setting, int n, double *ret);
-bool shuso_setting_string(shuso_t *S, const shuso_setting_t *setting, int n, const char **ret);
+bool shuso_setting_string(shuso_t *S, const shuso_setting_t *setting, int n, const shuso_str_t **ret);
 bool shuso_setting_string_matches(shuso_t *S, const shuso_setting_t *setting, int n, const char *lua_matchstring);
 
 

@@ -163,19 +163,19 @@ static shuso_setting_values_t  *lua_setting_values_to_c_struct(lua_State *L, shu
   v->count = values_count;
   for(int i = 1; i <= values_count; i++) {
     lua_rawgeti(L, -1, i);
-    lua_getfield(L, -1, "value");
+    lua_getfield(L, -1, "instring_ptr");
     shuso_setting_value_t *val = &v->array[i-1];
     
     lua_getfield(L, -1, "raw");
     if(lua_isstring(L, -1)) {
-      val->raw = lua_tolstring(L, -1, &val->raw_len);
+      val->raw.data = (char *)lua_tolstring(L, -1, &val->raw.len);
     }
     lua_pop(L, 1);
     
     lua_getfield(L, -1, "string");
     if(lua_isstring(L, -1)) {
       val->valid.string = true;
-      val->string = lua_tolstring(L, -1, &val->string_len);
+      val->string.data = (char *)lua_tolstring(L, -1, &val->string.len);
     }
     else {
       val->valid.string = false;
@@ -529,17 +529,17 @@ bool shuso_setting_number(shuso_t *S, const shuso_setting_t *setting, int n, dou
   if(ret) *ret = val->number;
   return true;
 }
-bool shuso_setting_string(shuso_t *S, const shuso_setting_t *setting, int n, const char **ret) {
+bool shuso_setting_string(shuso_t *S, const shuso_setting_t *setting, int n, const shuso_str_t **ret) {
   const shuso_setting_value_t *val = shuso_setting_value(S, setting, n);
   if(!val || !val->valid.string) {
     return false;
   }
-  if(ret) *ret = val->string;
+  if(ret) *ret = &val->string;
   return true;
 }
 
 bool shuso_setting_string_matches(shuso_t *S, const shuso_setting_t *setting, int n, const char *lua_matchstring) {
-  const char *val = NULL;
+  const shuso_str_t *val = NULL;
   if(!shuso_setting_string(S, setting, n, &val)) {
     return false;
   }
@@ -548,7 +548,7 @@ bool shuso_setting_string_matches(shuso_t *S, const shuso_setting_t *setting, in
   int top = lua_gettop(L);
   lua_checkstack(L, 3);
   luaS_push_lua_module_field(L, "string", "match");
-  lua_pushstring(L, val);
+  lua_pushlstring(L, val->data, val->len);
   lua_pushstring(L, lua_matchstring);
   if(!luaS_pcall(L, 2, 1)) {
     return false;

@@ -116,6 +116,11 @@ typedef struct shuso_socket_s {
   shuso_hostinfo_t  host;
 } shuso_socket_t;
 
+typedef struct shuso_str_s {
+  char            *data;
+  size_t           len;
+} shuso_str_t;
+
 typedef struct shuso_connection_s shuso_connection_t;
 
 typedef void shuso_socket_fn(shuso_t *S, shuso_socket_t *socket);

@@ -4,6 +4,7 @@ local parser_mt
 local Config = {}
 local config_mt
 
+local parse_instring = require "shuttlesock.core.instring.parse"
 
 local function mm_setting(setting)
   local mm = require "mm"
@@ -311,31 +312,18 @@ do --parser
       first = self.cur - #val,
       last = self.cur
     }
-    value.value = {
-      raw = val
-    }
+    value.raw = val
     
     if type(val) == "string" and opt.quote_char then
       --unquote value
       val = val:match(("^%s(.*)%s$"):format(opt.quote_char, opt.quote_char))
     end
     
-    value.value.string = tostring(val)
-    value.value.number = tonumber(val)
-    value.value.integer = math.tointeger(value.value.number)
-    
-    local boolies = {
-      off=false,
-      no=false,
-      ["0"]=false,
-      ['false']=false,
-      
-      on=true,
-      yes=true,
-      ['1']=true,
-      ['true']=true
-    }
-    value.value.boolean = boolies[val]
+    local instring, err, first, last = parse_instring(val, opt.quote_char)
+    if not instring then
+      return nil, err, first, last
+    end
+    value.instring = instring
     
     local setting = opt.setting or assert(self:in_setting())
     if not opt.non_contiguous then

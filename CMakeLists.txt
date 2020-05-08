@@ -32,6 +32,7 @@ target_sources(shuttlesock PRIVATE
   src/event.c
   src/embedded_lua_scripts.c
   src/lua_utils.c
+  src/instring.c
   src/io.c
   src/buffer.c
 )
@@ -141,6 +142,7 @@ pack_lua_bundled_module("inspect"  src/luarocks/inspect.lua)
 #modules used by the shuttlesock core
 pack_lua_module("shuttlesock.core.module"        src/module.lua)
 pack_lua_module("shuttlesock.core.event"         src/event.lua)
+pack_lua_module("shuttlesock.core.instring.parse" src/instring_parse.lua)
 
 add_core_module("core"
   SOURCES core.c
@@ -203,8 +205,6 @@ add_core_module("server" LUA
   LUA_REQUIRE
     shuttlesock.modules.core.server
 )
-
-
 
 set_lua_packed_script_file("src/embedded_lua_scripts.c")
 finish_adding_core_modules()

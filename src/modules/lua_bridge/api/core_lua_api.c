@@ -2049,11 +2049,11 @@ static int Lua_shuso_setting_value(lua_State *L) {
     lua_setfield(L, -2, "number");
   }
   if(val->valid.string) {
-    lua_pushlstring(L, val->string, val->string_len);
+    lua_pushlstring(L, val->string.data, val->string.len);
     lua_setfield(L, -2, "string");
   }
   
-  lua_pushlstring(L, val->raw, val->raw_len);
+  lua_pushlstring(L, val->raw.data, val->raw.len);
   lua_setfield(L, -2, "raw");
   
   return 1;

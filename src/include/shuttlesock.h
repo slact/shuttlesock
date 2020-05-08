@@ -27,6 +27,7 @@
 #include <shuttlesock/event.h>
 #include <shuttlesock/core_modules.h>
 #include <shuttlesock/buffer.h>
+#include <shuttlesock/instring.h>
 
 typedef struct shuso_process_s {
   shuso_t                          *S;
