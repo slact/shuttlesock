@@ -47,6 +47,14 @@ typedef struct {
   shuso_buffer_t      buffer;
 } shuso_instring_t;
 
+typedef struct shuso_instrings_s {
+  size_t            count;
+  shuso_instring_t  array[];
+} shuso_instrings_t;
+
+
+shuso_setting_value_t *shuso_instring_value(shuso_t *S, shuso_instring_t *instring);
 shuso_instring_t *luaS_instring_lua_to_c(lua_State *L, int index);
+shuso_instrings_t *luaS_instrings_lua_to_c(lua_State *L, int index);
 
 #endif //SHUSO_SHUSTRING_H

@@ -1,7 +1,11 @@
 #include <shuttlesock.h>
 
-shuso_instring_t *luaS_instring_lua_to_c(lua_State *L, int index) {
-  shuso_t *S = shuso_state(L);
+static shuso_instring_t *luaS_instring_lua_to_c_generic(lua_State *L, int index, shuso_instring_t *preallocd_instring) {
+  index = lua_absindex(L, index);
+  
+  shuso_t             *S = shuso_state(L);
+  shuso_instring_t    *instring;
+  
   int token_count = luaL_len(L, index);
   int top = lua_gettop(L);
   int var_count = 0;
@@ -10,7 +14,14 @@ shuso_instring_t *luaS_instring_lua_to_c(lua_State *L, int index) {
   int  i;
   luaL_checkstack(L, 3, NULL);
   
-  shuso_instring_t *shu;
+  if(preallocd_instring) {
+    instring = preallocd_instring;
+  }
+  else if((instring = shuso_stalloc(&S->stalloc, sizeof(*instring))) == NULL) {
+    shuso_set_error(S, "no memory for instring");
+    return NULL;
+  }
+  
   shuso_instring_token_t *token = shuso_stalloc(&S->stalloc, sizeof(*token)*token_count);
   if(!token) {
     shuso_set_error(S, "no memory for instring token");
@@ -20,7 +31,7 @@ shuso_instring_t *luaS_instring_lua_to_c(lua_State *L, int index) {
   size_t      len;
   const char *str;
   
-  shu->tokens.count = token_count;
+  instring->tokens.count = token_count;
   for(i = 0; i< token_count; i++) {
     lua_rawgeti(L, index, i+1);
     lua_getfield(L, -1, "type");
@@ -82,12 +93,7 @@ shuso_instring_t *luaS_instring_lua_to_c(lua_State *L, int index) {
     }
   }
   
-  if((shu = shuso_stalloc(&S->stalloc, sizeof(*shu))) == NULL) {
-    shuso_set_error(S, "no memory for instring");
-    return NULL;
-  }
-  
-  shu->variables.count = var_count;
+  instring->variables.count = var_count;
   if(var_count > 0) {
     shuso_variable_t **vars = shuso_stalloc(&S->stalloc, sizeof(*vars) * var_count);
     int j = 0;
@@ -96,25 +102,52 @@ shuso_instring_t *luaS_instring_lua_to_c(lua_State *L, int index) {
         vars[j++] = &token[i].variable;
       }
     }
-    shu->variables.array = vars;
+    instring->variables.array = vars;
   }
   else {
-    shu->variables.array = NULL;
+    instring->variables.array = NULL;
   }
     
-  shu->tokens.array = token;
+  instring->tokens.array = token;
   
   if(literal) {
-    assert(shu->variables.count == 0);
-    assert(shu->tokens.count == 1);
+    assert(instring->variables.count == 0);
+    assert(instring->tokens.count == 1);
     //TODO interpolate that instring right now!
   }
   
   assert(top == lua_gettop(L));
   
-  return shu;
+  return instring;
 }
 
-void shuso_instring_interpolate(shuso_t *S, shuso_instring_t *str, shuso_str_t *out) {
+
+shuso_instring_t *luaS_instring_lua_to_c(lua_State *L, int index) {
+  return luaS_instring_lua_to_c_generic(L, index, NULL);
+}
+
+shuso_instrings_t *luaS_instrings_lua_to_c(lua_State *L, int index) {
+  shuso_t *S = shuso_state(L);
+  index = lua_absindex(L, index);
+  size_t instring_count = luaL_len(L, index);
+  shuso_instrings_t *instrings = shuso_stalloc(&S->stalloc, sizeof(*instrings) + sizeof(*instrings->array) * instring_count);
+  if(instrings == NULL) {
+    shuso_set_error(S, "no memory for instrings array");
+    return NULL;
+  }
   
+  instrings->count = instring_count;
+  for(unsigned i=0; i<instring_count; i++) {
+    lua_geti(L, index, i+1);
+    if(luaS_instring_lua_to_c_generic(L, -1, &instrings->array[i]) == NULL) {
+      return NULL;
+    }
+  }
+  
+  return instrings;
+}
+
+shuso_setting_value_t *shuso_instring_value(shuso_t *S, shuso_instring_t *instring) {
+  //TODO
+  return NULL;
 }

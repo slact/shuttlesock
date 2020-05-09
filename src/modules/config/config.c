@@ -152,6 +152,7 @@ bool shuso_config_system_initialize(shuso_t *S) {
   return true;
 }
 
+/*
 static shuso_setting_values_t  *lua_setting_values_to_c_struct(lua_State *L, shuso_stalloc_t *st) {
   shuso_t                 *S = shuso_state(L);
   int                      values_count = luaL_len(L, -1);
@@ -216,6 +217,7 @@ static shuso_setting_values_t  *lua_setting_values_to_c_struct(lua_State *L, shu
   }
   return v;
 }
+*/
 
 bool shuso_config_system_generate(shuso_t *S) {
   lua_State *L = S->lua.state;
@@ -269,7 +271,7 @@ bool shuso_config_system_generate(shuso_t *S) {
   }
   *root_setting = (shuso_setting_t ) {
     .name = "::ROOT",
-    .values = {
+    .instrings = {
       .local = NULL,
       .inherited = NULL,
       .defaults = NULL,
@@ -330,51 +332,35 @@ bool shuso_config_system_generate(shuso_t *S) {
     setting->module = lua_tostring(L, -1);
     lua_pop(L, 1);
     
-    lua_getfield(L, -1, "values");
-    setting->values.local = lua_setting_values_to_c_struct(L, &S->stalloc);
-    if(!setting->values.local) {
-      lua_settop(L, top);
-      return false;
-    }
-    lua_pop(L, 1);
     
-    lua_pushvalue(L, -1);
-    if(!luaS_pcall_config_method(L, "default_values", 1, true)) {
-      lua_settop(L, top);
-      return false;
-    }
-    setting->values.defaults = lua_setting_values_to_c_struct(L, &S->stalloc);
-    if(!setting->values.defaults) {
-      lua_settop(L, top);
-      return false;
-    }
-    lua_pop(L, 1);
+    struct {
+      const char *name;
+      shuso_instrings_t **instrings;
+    } ins[] = {
+      {"instrings", &setting->instrings.local},
+      {"default_instrings", &setting->instrings.defaults},
+      {"inherited_instrings", &setting->instrings.inherited},
+    };
     
-    lua_pushvalue(L, -1);
-    if(!luaS_pcall_config_method(L, "inherited_values", 1, true)) {
-      lua_settop(L, top);
-      return false;
+    for(int i=0; i<3; i++) {
+      lua_getfield(L, -1, ins[i].name);
+      *ins[i].instrings = luaS_instrings_lua_to_c(L, -1);
+      if(*ins[i].instrings == NULL) {
+        lua_settop(L, top);
+        return false;
+      }
     }
-    setting->values.inherited = lua_setting_values_to_c_struct(L, &S->stalloc);
-    if(!setting->values.inherited) {
-      lua_settop(L, top);
-      return false;
-    }
-    lua_pop(L, 1);
     
-    if(setting->values.local) {
-      setting->values.merged = setting->values.local;
+    if(setting->instrings.local->count > 0) {
+      setting->instrings.merged = setting->instrings.local;
     }
-    else if(setting->values.inherited) {
-      setting->values.merged = setting->values.inherited;
-    }
-    else if(setting->values.defaults) {
-      setting->values.merged = setting->values.defaults;
+    else if(setting->instrings.inherited->count > 0) {
+      setting->instrings.merged = setting->instrings.inherited;
     }
     else {
-      lua_settop(L, top);
-      return shuso_set_error(S, "couldn't merge setting %s values", setting->name);
+      setting->instrings.merged = setting->instrings.defaults;
     }
+    assert(setting->instrings.merged != NULL);
     
     lua_getfield(L, -1, "block");
     if(lua_isnil(L, -1)) {
@@ -499,12 +485,13 @@ shuso_setting_t *shuso_setting(shuso_t *S, const shuso_setting_block_t *block, c
   return setting;
 }
 
-static const shuso_setting_value_t *shuso_setting_value(shuso_t *S, const shuso_setting_t *setting, int nval) {
-  if(!setting || !setting->values.merged || setting->values.merged->count <= nval) {
+static const shuso_setting_value_t *shuso_setting_value(shuso_t *S, const shuso_setting_t *setting, size_t nval) {
+  if(!setting || !setting->instrings.merged || setting->instrings.merged->count <= nval) {
     return NULL;
   }
-  return &setting->values.merged->array[nval];
+  return shuso_instring_value(S, &setting->instrings.merged->array[nval]);
 }
+
 bool shuso_setting_boolean(shuso_t *S, const shuso_setting_t *setting, int n, bool *ret) {
   const shuso_setting_value_t *val = shuso_setting_value(S, setting, n);
   if(!val || !val->valid.boolean) {

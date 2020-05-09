@@ -48,10 +48,10 @@ typedef struct shuso_setting_s {
   const char             *raw_name;
   const char             *path;
   struct {
-    shuso_setting_values_t *merged;
-    shuso_setting_values_t *local;
-    shuso_setting_values_t *inherited;
-    shuso_setting_values_t *defaults;
+    shuso_instrings_t      *merged;
+    shuso_instrings_t      *local;
+    shuso_instrings_t      *inherited;
+    shuso_instrings_t      *defaults;
   }                       instrings;
   shuso_setting_block_t  *block;
 } shuso_setting_t;
