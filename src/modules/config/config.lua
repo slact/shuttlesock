@@ -4,7 +4,7 @@ local parser_mt
 local Config = {}
 local config_mt
 
-local parse_instring = require "shuttlesock.core.instring.parse"
+local parse_instring = require "shuttlesock.core.instring".parse
 
 local function mm_setting(setting)
   local mm = require "mm"

@@ -274,7 +274,7 @@ void shuso_buffer_link_init_msg(shuso_t *S, shuso_buffer_link_t *link, struct ms
 }
 void shuso_buffer_link_init_charbuf(shuso_t *S, shuso_buffer_link_t *link, const char *charbuf, size_t len) {
   *link = (shuso_buffer_link_t ){
-    .buf = charbuf,
+    .buf = (char *)charbuf,
     .len = len,
     .data_type = SHUSO_BUF_CHARBUF,
     .memory_type = SHUSO_BUF_EXTERNAL,

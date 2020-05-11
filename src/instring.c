@@ -22,14 +22,14 @@ static shuso_instring_t *luaS_instring_lua_to_c_generic(lua_State *L, int index,
     return NULL;
   }
   
-  shuso_buffer_init(S, &instring->buffer.head, SHUSO_BUF_EXTERNAL, NULL)
+  shuso_buffer_init(S, &instring->buffer.head, SHUSO_BUF_EXTERNAL, NULL);
   
-  instring->buffer.iovec = shuso_stalloc(&S->stalloc, sizeof(struct iovec) * token_count);
-  if(!instring_>buffer.iovec) {
+  instring->buffer.iov = shuso_stalloc(&S->stalloc, sizeof(struct iovec) * token_count);
+  if(!instring->buffer.iov) {
     shuso_set_error(S, "no memory for instring iovec");
     return NULL;
   }
-  shuso_buffer_link_init(S, &instring->buffer.link, instring->buffer.iovec, token_count);
+  shuso_buffer_link_init(S, &instring->buffer.link, instring->buffer.iov, token_count);
   
   shuso_instring_token_t *token = shuso_stalloc(&S->stalloc, sizeof(*token)*token_count);
   if(!token) {
@@ -56,8 +56,8 @@ static shuso_instring_t *luaS_instring_lua_to_c_generic(lua_State *L, int index,
       }
       memcpy(token[i].literal.data, lua_tostring(L, -1), len + 1);
       
-      instring->iovec[i].iov_base = token[i].literal.data;
-      instring->iovec[i].iov_len = len;
+      instring->buffer.iov[i].iov_base = token[i].literal.data;
+      instring->buffer.iov[i].iov_len = len;
       
       lua_pop(L, 1);
     }
@@ -104,8 +104,8 @@ static shuso_instring_t *luaS_instring_lua_to_c_generic(lua_State *L, int index,
       }
       lua_pop(L, 2);
       
-      instring->iovec[i].iov_base = NULL;
-      instring->iovec[i].iov_len = 0;
+      instring->buffer.iov[i].iov_base = NULL;
+      instring->buffer.iov[i].iov_len = 0;
     }
   }
   
@@ -163,7 +163,193 @@ shuso_instrings_t *luaS_instrings_lua_to_c(lua_State *L, int index) {
   return instrings;
 }
 
-shuso_setting_value_t *shuso_instring_value(shuso_t *S, shuso_instring_t *instring) {
-  //TODO
-  return NULL;
+static void shuso_instring_interpolate(shuso_t *S, shuso_instring_t *instring) {
+  int varcount = instring->variables.count;
+  
+  if(varcount == 0) {
+    return; //nothing to do
+  }
+  
+  bool reset = false;
+  for(int i=0; i < varcount; i++) {
+    shuso_variable_t *var = instring->variables.array[i];
+    shuso_str_t       val;
+    if(var->eval(S, var, &val)) {
+      reset = true;
+      instring->buffer.iov[i] = (struct iovec) {
+        .iov_base = val.data,
+        .iov_len = val.len
+      };
+    }
+  }
+  
+  if(reset) {
+    if(instring->cached_value.string_lua_ref != LUA_NOREF) {
+      luaL_unref(S->lua.state, LUA_REGISTRYINDEX, instring->cached_value.string_lua_ref);
+      instring->cached_value.string_lua_ref = LUA_NOREF;
+    }
+    instring->cached_value.state = instring->cached_value.reset_state;
+  }
 }
+
+static void luaS_push_iovec_as_string(lua_State *L, struct iovec *iov, size_t iovlen) {
+  luaL_Buffer buf;
+  luaL_buffinit(L, &buf);
+  for(unsigned i=0; i<iovlen; i++) {
+    luaL_addlstring(&buf, iov[i].iov_base, iov[i].iov_len);
+  }
+  luaL_pushresult(&buf);
+}
+
+static bool luaS_instring_tovalue(lua_State *L, shuso_instring_t *instring, const char *towhat) {
+  luaS_push_iovec_as_string(L, instring->buffer.iov, instring->tokens.count);
+  luaS_push_lua_module_field(L, "shuttlesock.core.instring", towhat);
+  lua_call(L, 1, 1);
+  if(lua_isnil(L, -1)) {
+    lua_pop(L, 1);
+    return false;
+  }
+  return true;
+}
+
+bool shuso_instring_boolean_value(shuso_t *S, shuso_instring_t *instring, bool *retval) {
+  shuso_instring_interpolate(S, instring);
+  switch(instring->cached_value.state.boolean) {
+    case SHUTTLESOCK_INSTRING_VALUE_VALID:
+      if(retval) {
+        *retval = instring->cached_value.boolean;
+      }
+      return true;
+    case SHUTTLESOCK_INSTRING_VALUE_INVALID:
+      return false;
+  }
+  //quick 'n' dirty conversion using Lua
+  if(!luaS_instring_tovalue(S->lua.state, instring, "toboolean")) {
+    instring->cached_value.state.boolean = SHUTTLESOCK_INSTRING_VALUE_INVALID;
+    return false;
+  }
+  instring->cached_value.state.boolean = SHUTTLESOCK_INSTRING_VALUE_VALID;
+  lua_State *L = S->lua.state;
+  bool ret = lua_toboolean(L, -1);
+  instring->cached_value.boolean = ret;
+  lua_pop(L, 1);
+  if(retval) {
+    *retval = ret;
+  }
+  return true;
+}
+
+bool shuso_instring_integer_value(shuso_t *S, shuso_instring_t *instring, int *retval) {
+  shuso_instring_interpolate(S, instring);
+  switch(instring->cached_value.state.integer) {
+    case SHUTTLESOCK_INSTRING_VALUE_VALID:
+      if(retval) {
+        *retval = instring->cached_value.integer;
+      }
+      return true;
+    case SHUTTLESOCK_INSTRING_VALUE_INVALID:
+      return false;
+  }
+  //quick 'n' dirty conversion using Lua
+  if(!luaS_instring_tovalue(S->lua.state, instring, "tointeger")) {
+    instring->cached_value.state.integer = SHUTTLESOCK_INSTRING_VALUE_INVALID;
+    return false;
+  }
+  instring->cached_value.state.integer = SHUTTLESOCK_INSTRING_VALUE_VALID;
+  lua_State *L = S->lua.state;
+  int ret = lua_tointeger(L, -1);
+  instring->cached_value.integer = ret;
+  lua_pop(L, 1);
+  if(retval) {
+    *retval = ret;
+  }
+  return true;
+}
+
+bool shuso_instring_number_value(shuso_t *S, shuso_instring_t *instring, double *retval) {
+  shuso_instring_interpolate(S, instring);
+  switch(instring->cached_value.state.number) {
+    case SHUTTLESOCK_INSTRING_VALUE_VALID:
+      if(retval) {
+        *retval = instring->cached_value.number;
+      }
+      return true;
+    case SHUTTLESOCK_INSTRING_VALUE_INVALID:
+      return false;
+  }
+  //quick 'n' dirty conversion using Lua
+  if(!luaS_instring_tovalue(S->lua.state, instring, "tonumber")) {
+    instring->cached_value.state.number = SHUTTLESOCK_INSTRING_VALUE_INVALID;
+    return false;
+  }
+  instring->cached_value.state.number = SHUTTLESOCK_INSTRING_VALUE_VALID;
+  lua_State *L = S->lua.state;
+  double ret = lua_tointeger(L, -1);
+  instring->cached_value.number = ret;
+  lua_pop(L, 1);
+  if(retval) {
+    *retval = ret;
+  }
+  return true;
+}
+
+bool shuso_instring_size_value(shuso_t *S, shuso_instring_t *instring, size_t *retval) {
+  shuso_instring_interpolate(S, instring);
+  switch(instring->cached_value.state.size) {
+    case SHUTTLESOCK_INSTRING_VALUE_VALID:
+      if(retval) {
+        *retval = instring->cached_value.size;
+      }
+      return true;
+    case SHUTTLESOCK_INSTRING_VALUE_INVALID:
+      return false;
+  }
+  //quick 'n' dirty conversion using Lua
+  if(!luaS_instring_tovalue(S->lua.state, instring, "tosize")) {
+    instring->cached_value.state.size = SHUTTLESOCK_INSTRING_VALUE_INVALID;
+    return false;
+  }
+  instring->cached_value.state.size = SHUTTLESOCK_INSTRING_VALUE_VALID;
+  lua_State *L = S->lua.state;
+  double ret = lua_tointeger(L, -1);
+  instring->cached_value.size = ret;
+  lua_pop(L, 1);
+  if(retval) {
+    *retval = ret;
+  }
+  return true;
+}
+
+bool shuso_instring_string_value(shuso_t *S, shuso_instring_t *instring, shuso_str_t *retval) {
+  shuso_instring_interpolate(S, instring);
+  switch(instring->cached_value.state.string) {
+    case SHUTTLESOCK_INSTRING_VALUE_VALID:
+      if(retval) {
+        *retval = instring->cached_value.string;
+      }
+      return true;
+    case SHUTTLESOCK_INSTRING_VALUE_INVALID:
+      return false;
+  }
+  //quick 'n' dirty conversion using Lua
+  if(!luaS_instring_tovalue(S->lua.state, instring, "tostring")) {
+    instring->cached_value.state.string = SHUTTLESOCK_INSTRING_VALUE_INVALID;
+    return false;
+  }
+  instring->cached_value.state.string = SHUTTLESOCK_INSTRING_VALUE_VALID;
+  lua_State *L = S->lua.state;
+  if(retval) {
+    instring->cached_value.string.data = (char *)lua_tolstring(L, -1, &instring->cached_value.string.len);
+    *retval = instring->cached_value.string;
+  }
+  assert(instring->cached_value.string_lua_ref == LUA_NOREF);
+  instring->cached_value.string_lua_ref = luaL_ref(L, -1);
+  return true;
+}
+
+bool shuso_instring_buffer_value(shuso_t *S, shuso_instring_t *instring, shuso_buffer_t **retval) {
+  shuso_instring_interpolate(S, instring);
+  *retval = &instring->buffer.head;
+  return true;
+}
+

@@ -88,7 +88,7 @@ void *shuso_buffer_allocate(shuso_t *S, shuso_buffer_t *buf, size_t sz);
 void shuso_buffer_free(shuso_t *S, shuso_buffer_t *buf, shuso_buffer_link_t *);
 
 void shuso_buffer_link_init_msg(shuso_t *S, shuso_buffer_link_t *link, struct msghdr *, int flags);
-void shuso_buffer_link_init_charbuf(shuso_t *S, shuso_buffer_link_t *link, const char *charbuf, int len);
+void shuso_buffer_link_init_charbuf(shuso_t *S, shuso_buffer_link_t *link, const char *charbuf, size_t len);
 void shuso_buffer_link_init_shuso_str(shuso_t *S, shuso_buffer_link_t *link, const shuso_str_t *str);
 void shuso_buffer_link_init_iovec(shuso_t *S, shuso_buffer_link_t *link, struct iovec *iov, int iovlen);
 

@@ -1,3 +1,5 @@
+local Instring = {}
+
 local function match_parens(str, start, parenstr)
   local openbyte, closebyte, escapebyte = parenstr:byte(1), parenstr:byte(2), parenstr:byte(3)
   local open_count = 0
@@ -116,7 +118,7 @@ function Token.literal(str, cur, force)
 end
 
 
-local function parse(str, quote_type)
+function Instring.parse(str, quote_type)
   local cur = 1
   local ok, res, len
   local parsed = {}
@@ -163,4 +165,48 @@ local function parse(str, quote_type)
   return parsed
 end
 
-return parse
+function Instring.tonumber(str)
+  return tonumber(str)
+end
+
+function Instring.tointeger(str)
+  return math.tointeger(str)
+end
+
+function Instring.toboolean(str)
+  if str == "yes" or str == "1" or str == "true" or str == "on" then
+    return true
+  elseif str == "no" or str == "9" or str == "false" or str == "off" then
+    return false
+  else
+    return nil
+  end
+end
+
+function Instring.tosize(str)
+  local num, unit = str:match("^([%d+%.])(%w*)$")
+  if not num then
+    return nil
+  end
+  num = tonumber(num)
+  if not num then
+    return nil
+  end
+  if unit == "" or unit == "b" or unit == "B" then
+    return num
+  elseif unit == "K" or unit == "KB" or unit == "Kb" then
+    return num * 1024
+  elseif unit == "M" or unit == "MB" or unit == "Mb" then
+    return num * 1048576
+  elseif unit == "G" or unit == "FB" or unit == "Gb" then
+    return num * 1073741824
+  else
+    return nil --invalid/unknown unit
+  end
+end
+
+function Instring.tostring(str)
+  return str
+end
+
+return Instring

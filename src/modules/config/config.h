@@ -58,16 +58,49 @@ typedef struct shuso_setting_s {
   shuso_setting_block_t  *block;
 } shuso_setting_t;
 
+typedef enum {
+  SHUSO_SETTING_MERGED =      0,
+  SHUSO_SETTING_LOCAL =       1,
+  SHUSO_SETTING_INHERITED =   2,
+  SHUSO_SETTING_DEFAULT=      3
+} shuso_setting_value_merge_type_t;
+
+typedef enum {
+  SHUSO_SETTING_BOOLEAN = 16,
+  SHUSO_SETTING_INTEGER = 17,
+  SHUSO_SETTING_NUMBER  = 18,
+  SHUSO_SETTING_SIZE    = 19, 
+  SHUSO_SETTING_STRING  = 20,
+  SHUSO_SETTING_BUFFER  = 21
+} shuso_setting_value_type_t;
+
 #define SHUTTLESOCK_SETTINGS_END (shuso_module_setting_t ){.name = NULL}
 
 //For module developers
+bool shuso_setting_value(shuso_t *S, const shuso_setting_t *setting, size_t nval, shuso_setting_value_merge_type_t mergetype, shuso_setting_value_type_t valtype, void *ret);
+  
 shuso_setting_t *shuso_setting(shuso_t *S, const shuso_setting_block_t *block, const char *name);
 
-bool shuso_setting_boolean(shuso_t *S, const shuso_setting_t *setting, int n, bool *ret);
-bool shuso_setting_integer(shuso_t *S, const shuso_setting_t *setting, int n, int *ret);
-bool shuso_setting_number(shuso_t *S, const shuso_setting_t *setting, int n, double *ret);
-bool shuso_setting_string(shuso_t *S, const shuso_setting_t *setting, int n, const shuso_str_t **ret);
-bool shuso_setting_string_matches(shuso_t *S, const shuso_setting_t *setting, int n, const char *lua_matchstring);
+/*
+ * size_t shuso_setting_values_count(shuso_t *S, const shuso_setting_t *setting);
+ * size_t shuso_setting_values_count(shuso_t *S, const shuso_setting_t *setting, shuso_setting_value_merge_type_t mergetype);
+ * 
+ * get number of values in a setting. if mergetype is omitted, assumes SHUSO_SETTING_MERGED
+ */
+#define ___shuso_setting_values_count_vararg(_1,_2,NAME,...) NAME
+#define shuso_setting_values_count(S, ...) ___shuso_setting_values_count_vararg(__VA_ARGS__, __shuso_setting_values_count, shuso_setting_values_count_merged, ___END__VARARG__LIST__)(S, __VA_ARGS__)
+#define shuso_setting_values_count_merged(S, setting) __shuso_setting_values_count(S, setting, SHUSO_SETTING_MERGED)
+size_t __shuso_setting_values_count(shuso_t *S, const shuso_setting_t *setting, shuso_setting_value_merge_type_t mergetype);
+
+
+
+bool shuso_setting_boolean(shuso_t *S, shuso_setting_t *setting, int n, bool *ret);
+bool shuso_setting_integer(shuso_t *S, shuso_setting_t *setting, int n, int *ret);
+bool shuso_setting_number(shuso_t *S, shuso_setting_t *setting, int n, double *ret);
+bool shuso_setting_size(shuso_t *S, shuso_setting_t *setting, int n, size_t *ret);
+bool shuso_setting_string(shuso_t *S, shuso_setting_t *setting, int n, shuso_str_t *ret);
+bool shuso_setting_buffer(shuso_t *S, shuso_setting_t *setting, int n, const shuso_buffer_t **ret);
+bool shuso_setting_string_matches(shuso_t *S, shuso_setting_t *setting, int n, const char *lua_matchstring);
 
 
 bool shuso_config_match_setting_path(shuso_t *S, const shuso_setting_t *setting, const char *path);

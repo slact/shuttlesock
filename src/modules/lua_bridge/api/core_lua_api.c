@@ -1959,103 +1959,131 @@ static int Lua_shuso_setting_block_pointer(lua_State *L) {
   return 1;
 }
 
-static const shuso_setting_values_t *setting_values_type(lua_State *L, const shuso_setting_t *setting, int nindex) {
-  lua_pushliteral(L, "merged");
-  if(nindex == 0 || lua_compare(L, nindex, -1, LUA_OPEQ)) {
-    lua_pop(L, 1);
-    return setting->values.merged;
+static shuso_setting_value_merge_type_t setting_instring_mergetype(lua_State *L, const shuso_setting_t *setting, int nindex) {
+  if(nindex > lua_gettop(L) || nindex == 0 || lua_isnil(L, nindex) || luaS_streq_literal(L, nindex, "merged")) {
+    return SHUSO_SETTING_MERGED;
   }
-  lua_pop(L, 1);
   
-  lua_pushliteral(L, "local");
-  if(lua_compare(L, nindex, -1, LUA_OPEQ)) {
-    lua_pop(L, 1);
-    return setting->values.local;
+  if(luaS_streq_literal(L, nindex, "local")) {
+    return SHUSO_SETTING_LOCAL;
   }
-  lua_pop(L, 1);
   
-  lua_pushliteral(L, "inherited");
-  if(lua_compare(L, nindex, -1, LUA_OPEQ)) {
-    lua_pop(L, 1);
-    return setting->values.inherited;
+  if(luaS_streq_literal(L, nindex, "inherited")) {
+    return SHUSO_SETTING_INHERITED;
   }
-  lua_pop(L, 1);
   
-  lua_pushliteral(L, "default");
-  lua_pushliteral(L, "defaults");
-  if(lua_compare(L, nindex, -1, LUA_OPEQ) || lua_compare(L, nindex, -2, LUA_OPEQ)) {
-    lua_pop(L, 2);
-    return setting->values.defaults;
+  if(luaS_streq_any(L, nindex, 2, "default", "defaults")) {
+    return SHUSO_SETTING_DEFAULT;
   }
-  lua_pop(L, 2);
   
-  lua_getglobal(L, "tostring");
-  lua_pushvalue(L, nindex);
-  lua_call(L, 1, 1);
-  luaL_error(L, "invalid setting value type '%d', must be 'merged', 'local', 'inherited', or 'default'", lua_tostring(L, -1));
-  return NULL;
+  luaL_error(L, "invalid setting value merge-type '%d', must be 'merged', 'local', 'inherited', or 'default'", lua_tostring(L, nindex));
+  return SHUSO_SETTING_DEFAULT;
+}
+
+static shuso_setting_value_type_t setting_instring_type(lua_State *L, const shuso_setting_t *setting, int nindex) {
+  if(nindex > lua_gettop(L) || nindex == 0 || lua_isnil(L, nindex) || luaS_streq_any(L, nindex, 2, "string", "str")) {
+    return SHUSO_SETTING_STRING;
+  }
+  
+  if(luaS_streq_any(L, nindex, 2, "bool", "boolean")) {
+    return SHUSO_SETTING_BOOLEAN;
+  }
+  
+  if(luaS_streq_any(L, nindex, 2, "int", "integer")) {
+    return SHUSO_SETTING_INTEGER;
+  }
+  
+  if(luaS_streq_any(L, nindex, 3, "float", "double", "number")) {
+    return SHUSO_SETTING_NUMBER;
+  }
+  
+  if(luaS_streq_literal(L, nindex, "size")) {
+    return SHUSO_SETTING_SIZE;
+  }
+  
+  if(luaS_streq_literal(L, nindex, "buffer")) {
+    return SHUSO_SETTING_BUFFER;
+  }
+  
+  luaL_error(L, "invalid setting value type '%d', must be 'string', 'boolean', 'integer', 'number', 'size' or 'buffer'", lua_tostring(L, nindex));
+  return SHUSO_SETTING_STRING;
 }
 
 static int Lua_shuso_setting_values_count(lua_State *L) {
   luaL_checktype(L, 1, LUA_TLIGHTUSERDATA);
-  const shuso_setting_t         *setting = lua_topointer(L, 1);
-  const shuso_setting_values_t  *vals = NULL;
+  const shuso_setting_t            *setting = lua_topointer(L, 1);
+  shuso_setting_value_merge_type_t  mt = setting_instring_mergetype(L, setting, 2);
   
-  vals = setting_values_type(L, setting, lua_gettop(L) < 2 ? 0 : 2);
-  
-  if(vals == NULL) {
-    lua_pushinteger(L, 0);
-  }
-  else {
-    lua_pushinteger(L, vals->count);
-  }
+  size_t count = shuso_setting_values_count(shuso_state(L), setting, mt);
+  lua_pushinteger(L, count);
   return 1;
 }
 
 static int Lua_shuso_setting_value(lua_State *L) {
   luaL_checktype(L, 1, LUA_TLIGHTUSERDATA);
-  int n = luaL_checkinteger(L, 2);
-  
-  const shuso_setting_t        *setting = lua_topointer(L, 1);
-  const shuso_setting_values_t *vals = NULL;
-  
-  vals = setting_values_type(L, setting, lua_gettop(L) < 3 ? 0 : 3);
-  assert(vals != NULL);
+  shuso_t                          *S = shuso_state(L);
+  shuso_setting_t                  *setting = (void *)lua_topointer(L, 1);
+  size_t                            n = luaL_checkinteger(L, 2);
+  shuso_setting_value_merge_type_t  mergetype = setting_instring_mergetype(L, setting, 3);
+  shuso_setting_value_type_t        valtype = setting_instring_type(L, setting, 4);
   
   if(n < 1) {
     lua_pushnil(L);
     lua_pushfstring(L, "invalid value index %d (as in lua, the indices start at 1, not 0)", n);
     return 2;
   }
-  else if(n > vals->count) {
+  else if(n >= shuso_setting_values_count(S, setting, mergetype)) { //n is 1-indexed, not 0. remember that.
     lua_pushnil(L);
     lua_pushfstring(L, "no value at index %d", n);
     return 2;
   }
+  luaL_checkstack(L, 2, NULL);
+  lua_pushnil(L);
   
-  const shuso_setting_value_t *val = &vals->array[n-1];
-  
-  lua_createtable(L, 0, 5);
-  if(val->valid.boolean) {
-    lua_pushboolean(L, val->boolean);
-    lua_setfield(L, -2, "boolean");
+  switch(valtype) {
+    case SHUSO_SETTING_BOOLEAN: {
+      bool ret;
+      if(shuso_setting_boolean(S, setting, n-1, &ret)) {
+        lua_pushboolean(L, ret);
+      }
+      break;
+    }
+    case SHUSO_SETTING_INTEGER: {
+      int ret;
+      if(shuso_setting_integer(S, setting, n-1, &ret)) {
+        lua_pushinteger(L, ret);
+      }
+      break;
+    }
+    case SHUSO_SETTING_NUMBER: {
+      double ret;
+      if(shuso_setting_number(S, setting, n-1, &ret)) {
+        lua_pushnumber(L, ret);
+      }
+      break;
+    }
+    case SHUSO_SETTING_SIZE: {
+      size_t ret;
+      if(shuso_setting_size(S, setting, n-1, &ret)) {
+        lua_pushinteger(L, ret);
+      }
+      break;
+    }
+    case SHUSO_SETTING_STRING: {
+      shuso_str_t ret;
+      if(shuso_setting_string(S, setting, n-1, &ret)) {
+        lua_pushlstring(L, ret.data, ret.len);
+      }
+      break;
+    }
+    case SHUSO_SETTING_BUFFER: {
+      const shuso_buffer_t *ret;
+      if(shuso_setting_buffer(S, setting, n-1, &ret)) {
+        lua_pushlightuserdata(L, (void *)ret);
+      }
+      break;
+    }
   }
-  if(val->valid.integer) {
-    lua_pushinteger(L, val->integer);
-    lua_setfield(L, -2, "integer");
-  }
-  if(val->valid.number) {
-    lua_pushnumber(L, val->number);
-    lua_setfield(L, -2, "number");
-  }
-  if(val->valid.string) {
-    lua_pushlstring(L, val->string.data, val->string.len);
-    lua_setfield(L, -2, "string");
-  }
-  
-  lua_pushlstring(L, val->raw.data, val->raw.len);
-  lua_setfield(L, -2, "raw");
-  
   return 1;
 }
 

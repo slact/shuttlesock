@@ -152,73 +152,6 @@ bool shuso_config_system_initialize(shuso_t *S) {
   return true;
 }
 
-/*
-static shuso_setting_values_t  *lua_setting_values_to_c_struct(lua_State *L, shuso_stalloc_t *st) {
-  shuso_t                 *S = shuso_state(L);
-  int                      values_count = luaL_len(L, -1);
-  shuso_setting_values_t  *v = shuso_stalloc(&S->stalloc, sizeof(*v) + sizeof(shuso_setting_value_t) * values_count);
-  if(!v) {
-    shuso_set_error(S, "failed to allocate setting values array");
-    return NULL;
-  }
-  v->count = values_count;
-  for(int i = 1; i <= values_count; i++) {
-    lua_rawgeti(L, -1, i);
-    lua_getfield(L, -1, "instring_ptr");
-    shuso_setting_value_t *val = &v->array[i-1];
-    
-    lua_getfield(L, -1, "raw");
-    if(lua_isstring(L, -1)) {
-      val->raw.data = (char *)lua_tolstring(L, -1, &val->raw.len);
-    }
-    lua_pop(L, 1);
-    
-    lua_getfield(L, -1, "string");
-    if(lua_isstring(L, -1)) {
-      val->valid.string = true;
-      val->string.data = (char *)lua_tolstring(L, -1, &val->string.len);
-    }
-    else {
-      val->valid.string = false;
-    }
-    lua_pop(L, 1);
-    
-    lua_getfield(L, -1, "number");
-    if(lua_isnumber(L, -1)) {
-      val->valid.number = true;
-      val->number = lua_tonumber(L, -1);
-    }
-    else {
-      val->valid.number = false;
-    }
-    lua_pop(L, 1);
-    
-    lua_getfield(L, -1, "integer");
-    if(lua_isinteger(L, -1)) {
-      val->valid.integer = true;
-      val->integer = lua_tointeger(L, -1);
-    }
-    else {
-      val->valid.integer = false;
-    }
-    lua_pop(L, 1);
-    
-    lua_getfield(L, -1, "boolean");
-    if(lua_isboolean(L, -1)) {
-      val->valid.boolean = true;
-      val->boolean = lua_toboolean(L, -1);
-    }
-    else {
-      val->valid.boolean = false;
-    }
-    lua_pop(L, 1);
-    
-    lua_pop(L, 2);
-  }
-  return v;
-}
-*/
-
 bool shuso_config_system_generate(shuso_t *S) {
   lua_State *L = S->lua.state;
   int top = lua_gettop(L);
@@ -485,67 +418,98 @@ shuso_setting_t *shuso_setting(shuso_t *S, const shuso_setting_block_t *block, c
   return setting;
 }
 
-static const shuso_setting_value_t *shuso_setting_value(shuso_t *S, const shuso_setting_t *setting, size_t nval) {
-  if(!setting || !setting->instrings.merged || setting->instrings.merged->count <= nval) {
-    return NULL;
+bool shuso_setting_value(shuso_t *S, const shuso_setting_t *setting, size_t nval, shuso_setting_value_merge_type_t mergetype, shuso_setting_value_type_t valtype, void *ret) {
+  if(!setting) {
+    return false;
   }
-  return shuso_instring_value(S, &setting->instrings.merged->array[nval]);
+  shuso_instrings_t *instrings;
+  switch(mergetype) {
+    case SHUSO_SETTING_MERGED:
+      instrings = setting->instrings.merged;
+      break;
+    case SHUSO_SETTING_LOCAL:
+      instrings = setting->instrings.local;
+      break;
+    case SHUSO_SETTING_INHERITED:
+      instrings = setting->instrings.inherited;
+      break;
+    case SHUSO_SETTING_DEFAULT:
+      instrings = setting->instrings.defaults;
+      break;
+    default:
+      shuso_set_error(S, "Fatal API error: invalid setting mergetype %d, shuso_setting_value() was probably called incorrectly", mergetype);
+      raise(SIGABRT);
+      return false;
+  }
+  
+  if(!instrings || instrings->count > nval) {
+    return false;
+  }
+  shuso_instring_t *instring = &instrings->array[nval];
+  
+  switch(valtype) {
+    case SHUSO_SETTING_BOOLEAN: 
+      return shuso_instring_boolean_value(S, instring, ret);
+    case SHUSO_SETTING_INTEGER:
+      return shuso_instring_integer_value(S, instring, ret);
+    case SHUSO_SETTING_NUMBER:
+      return shuso_instring_number_value(S, instring, ret);
+    case SHUSO_SETTING_SIZE:
+      return shuso_instring_size_value(S, instring, ret);
+    case SHUSO_SETTING_STRING:
+      return shuso_instring_string_value(S, instring, ret);
+    case SHUSO_SETTING_BUFFER:
+      return shuso_instring_buffer_value(S, instring, ret);
+    default:
+      shuso_set_error(S, "Fatal API error: invalid setting type %d, shuso_setting_value() was probably called incorrectly", mergetype);
+      raise(SIGABRT);
+      return false;
+  }
 }
 
-bool shuso_setting_boolean(shuso_t *S, const shuso_setting_t *setting, int n, bool *ret) {
-  const shuso_setting_value_t *val = shuso_setting_value(S, setting, n);
-  if(!val || !val->valid.boolean) {
-    return false;
-  }
-  if(ret) *ret = val->boolean;
-  return true;
+bool shuso_setting_boolean(shuso_t *S, shuso_setting_t *setting, int n, bool *ret) {
+  return shuso_setting_value(S, setting, n, SHUSO_SETTING_MERGED, SHUSO_SETTING_BOOLEAN, ret);
 }
-bool shuso_setting_integer(shuso_t *S, const shuso_setting_t *setting, int n, int *ret) {
-  const shuso_setting_value_t *val = shuso_setting_value(S, setting, n);
-  if(!val || !val->valid.integer) {
-    return false;
-  }
-  if(ret) *ret = val->integer;
-  return true;
+bool shuso_setting_integer(shuso_t *S, shuso_setting_t *setting, int n, int *ret) {
+  return shuso_setting_value(S, setting, n, SHUSO_SETTING_MERGED, SHUSO_SETTING_INTEGER, ret);
 }
-bool shuso_setting_number(shuso_t *S, const shuso_setting_t *setting, int n, double *ret) {
-  const shuso_setting_value_t *val = shuso_setting_value(S, setting, n);
-  if(!val || !val->valid.number) {
-    return false;
-  }
-  if(ret) *ret = val->number;
-  return true;
+bool shuso_setting_number(shuso_t *S, shuso_setting_t *setting, int n, double *ret) {
+  return shuso_setting_value(S, setting, n, SHUSO_SETTING_MERGED, SHUSO_SETTING_NUMBER, ret);
 }
-bool shuso_setting_string(shuso_t *S, const shuso_setting_t *setting, int n, const shuso_str_t **ret) {
-  const shuso_setting_value_t *val = shuso_setting_value(S, setting, n);
-  if(!val || !val->valid.string) {
-    return false;
-  }
-  if(ret) *ret = &val->string;
-  return true;
+bool shuso_setting_size(shuso_t *S, shuso_setting_t *setting, int n, size_t *ret) {
+  return shuso_setting_value(S, setting, n, SHUSO_SETTING_MERGED, SHUSO_SETTING_SIZE, ret);
 }
-
-bool shuso_setting_string_matches(shuso_t *S, const shuso_setting_t *setting, int n, const char *lua_matchstring) {
-  const shuso_str_t *val = NULL;
-  if(!shuso_setting_string(S, setting, n, &val)) {
-    return false;
-  }
-  assert(lua_matchstring);
+bool shuso_setting_string(shuso_t *S, shuso_setting_t *setting, int n, shuso_str_t *ret) {
+  return shuso_setting_value(S, setting, n, SHUSO_SETTING_MERGED, SHUSO_SETTING_STRING, ret);
+}
+bool shuso_setting_buffer(shuso_t *S, shuso_setting_t *setting, int n, const shuso_buffer_t **ret) {
+  return shuso_setting_value(S, setting, n, SHUSO_SETTING_MERGED, SHUSO_SETTING_BUFFER, ret);
+}
+bool shuso_setting_string_matches(shuso_t *S, shuso_setting_t *setting, int n, const char *lua_matchstring) {
   lua_State *L = S->lua.state;
   int top = lua_gettop(L);
-  lua_checkstack(L, 3);
-  luaS_push_lua_module_field(L, "string", "match");
-  lua_pushlstring(L, val->data, val->len);
-  lua_pushstring(L, lua_matchstring);
-  if(!luaS_pcall(L, 2, 1)) {
+  if(!setting || !setting->instrings.merged || setting->instrings.merged->count < (size_t)n) {
     return false;
   }
+  shuso_instring_t *instring = &setting->instrings.merged->array[n];
+  if(!shuso_instring_string_value(S, instring, NULL)) {
+    return false;
+  }
+  
+  lua_reference_t string_ref = instring->cached_value.string_lua_ref;
+  assert(string_ref != LUA_NOREF);
+  
+  if(lua_checkstack(L, 3)) {
+    return false;
+  }
+  luaS_push_lua_module_field(L, "string", "match");
+  lua_rawgeti(L, LUA_REGISTRYINDEX, string_ref);
+  assert(lua_isstring(L, -1));
+  lua_pushstring(L, lua_matchstring);
+  lua_call(L, 2, 1);
   bool matched = lua_toboolean(L, -1);
   lua_pop(L, 1);
   assert(lua_gettop(L) == top);
-  if(!matched) {
-    //TODO: nice, informative error
-  }
   return matched;
 }
 
@@ -595,6 +559,29 @@ bool shuso_configure_string(shuso_t *S,  const char *str_title, const char *str)
     return false;
   }
   return true;
+}
+
+size_t __shuso_setting_values_count(shuso_t *S, const shuso_setting_t *setting, shuso_setting_value_merge_type_t mt) {
+  shuso_instrings_t *ins;
+  switch(mt) {
+    case SHUSO_SETTING_MERGED:
+      ins = setting->instrings.merged;
+      break;
+    case SHUSO_SETTING_LOCAL:
+      ins = setting->instrings.local;
+      break;
+    case SHUSO_SETTING_INHERITED:
+      ins = setting->instrings.inherited;
+      break;
+    case SHUSO_SETTING_DEFAULT:
+      ins = setting->instrings.defaults;
+      break;
+    default:
+      shuso_set_error(S, "Fatal API error: invalid setting mergetype %d, shuso_setting_values_count() was probably called incorrectly", mt);
+      raise(SIGABRT);
+      return 0;
+  }
+  return ins->count;
 }
 
 static bool shuso_config_match_thing_path(shuso_t *S, const void *thing, const char *path) {
