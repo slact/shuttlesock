@@ -86,4 +86,25 @@ shuso_buffer_link_t *shuso_buffer_dequeue(shuso_t *S, shuso_buffer_t *buf);
 
 void *shuso_buffer_allocate(shuso_t *S, shuso_buffer_t *buf, size_t sz);
 void shuso_buffer_free(shuso_t *S, shuso_buffer_t *buf, shuso_buffer_link_t *);
+
+void shuso_buffer_link_init_msg(shuso_t *S, shuso_buffer_link_t *link, struct msghdr *, int flags);
+void shuso_buffer_link_init_charbuf(shuso_t *S, shuso_buffer_link_t *link, const char *charbuf, int len);
+void shuso_buffer_link_init_shuso_str(shuso_t *S, shuso_buffer_link_t *link, const shuso_str_t *str);
+void shuso_buffer_link_init_iovec(shuso_t *S, shuso_buffer_link_t *link, struct iovec *iov, int iovlen);
+
+#define ___SHUSO_BUFFER_LINK_INIT_VARARG(_1,_2,NAME,...) NAME
+
+#define shuso_buffer_link_init(S, link, ...) ___SHUSO_BUFFER_LINK_INIT_VARARG(__VA_ARGS__, __SHUSO_BUFFER_LINK_INIT_2, __SHUSO_BUFFER_LINK_INIT_1, ___END__VARARG__LIST__)(S, link, __VA_ARGS__)
+
+#define __SHUSO_BUFFER_LINK_INIT_2(S, link, contents, intarg) \
+  _Generic((contents), \
+    struct msghdr *         : shuso_buffer_link_init_msg, \
+    char *                  : shuso_buffer_link_init_charbuf, \
+    struct iovec *          : shuso_buffer_link_init_iovec \
+  )(S, link, contents, intarg)
+
+#define __SHUSO_BUFFER_LINK_INIT_1(S, link, contents) \
+  _Generic((contents), \
+    shuso_str_t *           : shuso_buffer_link_init_shuso_str \
+  )(S, link, contents)
 #endif // SHUTTLESOCK_BUFFER_H

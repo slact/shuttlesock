@@ -261,3 +261,44 @@ char *shuso_buffer_add_msg_fd_with_cleanup(shuso_t *S, shuso_buffer_t *buf, int 
 }
 
 #endif
+
+void shuso_buffer_link_init_msg(shuso_t *S, shuso_buffer_link_t *link, struct msghdr *msg, int flags) {
+  *link = (shuso_buffer_link_t ){
+    .msg = msg,
+    .flags = flags,
+    .data_type = SHUSO_BUF_MSGHDR,
+    .memory_type = SHUSO_BUF_EXTERNAL,
+    .have_cleanup = 0,
+    .next = NULL
+  };
+}
+void shuso_buffer_link_init_charbuf(shuso_t *S, shuso_buffer_link_t *link, const char *charbuf, size_t len) {
+  *link = (shuso_buffer_link_t ){
+    .buf = charbuf,
+    .len = len,
+    .data_type = SHUSO_BUF_CHARBUF,
+    .memory_type = SHUSO_BUF_EXTERNAL,
+    .have_cleanup = 0,
+    .next = NULL
+  };
+}
+void shuso_buffer_link_init_shuso_str(shuso_t *S, shuso_buffer_link_t *link, const shuso_str_t *str) {
+  *link = (shuso_buffer_link_t ){
+    .buf = str->data,
+    .len = str->len,
+    .data_type = SHUSO_BUF_CHARBUF,
+    .memory_type = SHUSO_BUF_EXTERNAL,
+    .have_cleanup = 0,
+    .next = NULL
+  };
+}
+void shuso_buffer_link_init_iovec(shuso_t *S, shuso_buffer_link_t *link, struct iovec *iov, int iovcnt) {
+ *link = (shuso_buffer_link_t ){
+    .iov = iov,
+    .iovcnt = iovcnt,
+    .data_type = SHUSO_BUF_IOVEC,
+    .memory_type = SHUSO_BUF_EXTERNAL,
+    .have_cleanup = 0,
+    .next = NULL
+  }; 
+}
