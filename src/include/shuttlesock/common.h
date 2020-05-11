@@ -41,15 +41,6 @@ typedef enum {
 } shuso_stop_t;
 
 typedef enum {
-  SHUSO_VALUE_END_SENTINEL = -1,
-  SHUSO_VALUE_UNSET = 0,
-  SHUSO_VALUE_STRING,
-  SHUSO_VALUE_INTEGER,
-  SHUSO_VALUE_FLOAT,
-  SHUSO_VALUE_BOOL,
-} shuso_setting_value_type_t;
-
-typedef enum {
   //non-positive states MUST be kinds of non-running states
   SHUSO_STATE_DEAD = -5,
   SHUSO_STATE_STOPPED = -4,
@@ -61,6 +52,14 @@ typedef enum {
   SHUSO_STATE_RUNNING  = 2,
   SHUSO_STATE_STOPPING = 3
 } shuso_runstate_t;
+
+typedef enum {
+  SHUTTLESOCK_VALUE_BOOLEAN = 1,
+  SHUTTLESOCK_VALUE_INTEGER,
+  SHUTTLESOCK_VALUE_NUMBER,
+  SHUTTLESOCK_VALUE_STRING,
+  SHUTTLESOCK_VALUE_BUFFER
+} shuso_value_type_t;
 
 #define SHUTTLESOCK_UNKNOWN_PROCESS  -404
 #define SHUTTLESOCK_NOPROCESS  -3

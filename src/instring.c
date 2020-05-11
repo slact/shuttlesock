@@ -22,6 +22,15 @@ static shuso_instring_t *luaS_instring_lua_to_c_generic(lua_State *L, int index,
     return NULL;
   }
   
+  shuso_buffer_init(S, &instring->buffer.head, SHUSO_BUF_EXTERNAL, NULL)
+  
+  instring->buffer.iovec = shuso_stalloc(&S->stalloc, sizeof(struct iovec) * token_count);
+  if(!instring_>buffer.iovec) {
+    shuso_set_error(S, "no memory for instring iovec");
+    return NULL;
+  }
+  shuso_buffer_link_init(S, &instring->buffer.link, instring->buffer.iovec, token_count);
+  
   shuso_instring_token_t *token = shuso_stalloc(&S->stalloc, sizeof(*token)*token_count);
   if(!token) {
     shuso_set_error(S, "no memory for instring token");
@@ -46,6 +55,10 @@ static shuso_instring_t *luaS_instring_lua_to_c_generic(lua_State *L, int index,
         return NULL;
       }
       memcpy(token[i].literal.data, lua_tostring(L, -1), len + 1);
+      
+      instring->iovec[i].iov_base = token[i].literal.data;
+      instring->iovec[i].iov_len = len;
+      
       lua_pop(L, 1);
     }
     else if(luaS_streq_literal(L, -1, "variable")) {
@@ -68,7 +81,7 @@ static shuso_instring_t *luaS_instring_lua_to_c_generic(lua_State *L, int index,
       lua_pop(L, 1);
       
       lua_getfield(L, -2, "indices");
-      int indices_count = luaL_len(L, -1);\
+      int indices_count = luaL_len(L, -1);
       token[i].variable.indices.size = indices_count;
       if(indices_count == 0) {
         token[i].variable.indices.size = 0;
@@ -90,6 +103,9 @@ static shuso_instring_t *luaS_instring_lua_to_c_generic(lua_State *L, int index,
         }
       }
       lua_pop(L, 2);
+      
+      instring->iovec[i].iov_base = NULL;
+      instring->iovec[i].iov_len = 0;
     }
   }
   

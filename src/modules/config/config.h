@@ -22,6 +22,8 @@ typedef struct {
   }                blocks;
 } shuso_config_module_ctx_t;
 
+
+
 typedef struct shuso_setting_value_s {
   struct {
     unsigned    boolean:1;
