@@ -24,7 +24,7 @@ typedef struct {
   int         workers;
 } test_config_t;
 
-test_config_t test_config;
+extern test_config_t test_config;
 
 #undef snow_main_decls
 #define snow_main_decls \
@@ -100,7 +100,7 @@ typedef struct {
   shuso_module_t   runcheck_module;
 } test_runcheck_t;
 
-int dev_null;
+extern int dev_null;
 
 shuso_t *shuso_createst(void);
 

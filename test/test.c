@@ -5,6 +5,9 @@
 #include <shuttlesock/modules/lua_bridge/api/ipc_lua_api.h>
 #ifndef __clang_analyzer__
 
+test_config_t test_config;
+int dev_null;
+
 bool set_test_options(int *argc, char **argv) {
   snow_set_extra_help(""
     "    --verbose              Verbose test output.\n"
