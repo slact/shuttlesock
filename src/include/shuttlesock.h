@@ -211,7 +211,12 @@ bool shuso_set_log_fd(shuso_t *S, int fd);
 bool shuso_set_error(shuso_t *S, const char *fmt, ...);
 bool shuso_set_error_errno(shuso_t *S, const char *fmt, ...);
 int shuso_error_count(shuso_t *S);
+
+int shuso_error_capture_start(shuso_t *S);
+const char *shuso_error_capture_finish(shuso_t *S, int prev_errcount);
+
 const char *shuso_last_error(shuso_t *S);
+
 int shuso_last_errno(shuso_t *S);
 shuso_process_t *shuso_process(shuso_t *S, int procnum);
 int shuso_process_to_procnum(shuso_t *S, shuso_process_t *proc);

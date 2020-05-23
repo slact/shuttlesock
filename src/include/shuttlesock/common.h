@@ -78,9 +78,6 @@ typedef struct shuso_s shuso_t;
 typedef struct shuso_common_s shuso_common_t;
 typedef struct shuso_process_s shuso_process_t;
 
-
-typedef struct shuso_setting_value_s shuso_setting_value_t;
-typedef struct shuso_setting_values_s shuso_setting_values_t;
 typedef struct shuso_setting_block_s shuso_setting_block_t;
 typedef struct shuso_setting_s shuso_setting_t;
 
@@ -91,6 +88,8 @@ typedef struct shuso_event_s shuso_event_t;
 typedef struct shuso_module_context_list_s shuso_module_context_list_t;
 typedef struct shuso_module_setting_s shuso_module_setting_t;
 typedef struct shuso_event_state_s shuso_event_state_t;
+
+typedef struct shuso_variable_s shuso_variable_t;
 
 typedef struct shuso_sockopts_s shuso_sockopts_t;
 
@@ -131,6 +130,9 @@ typedef bool shuso_module_init_fn(shuso_t *S, shuso_module_t *);
 typedef bool shuso_module_config_init_fn(shuso_t *S, shuso_module_t *, shuso_setting_block_t *);
 
 typedef void shuso_event_fn(shuso_t *S, shuso_event_state_t *, intptr_t code, void *data, void *pd);
+
+typedef bool shuso_variable_eval_fn(shuso_t *S, shuso_variable_t *var, shuso_str_t *ret_val);
+
 
 #if defined(__has_feature)
   #if __has_feature(memory_sanitizer)

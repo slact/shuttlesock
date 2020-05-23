@@ -41,7 +41,6 @@ function Token.escape(str, cur)
     return nil
   end
   local fc = m:sub(1, 1)
-  print("|"..fc.."|")
   if not fc then
     return false, "backslash is the last char in string", 1
   elseif simple[fc] then
@@ -70,17 +69,18 @@ function Token.simple_variable(str, cur)
     return nil
   end
   cur = cur + #m + 1
-  local indices = {}
+  local params = {}
   while str:match("^%[", cur) do
     local bracketed = match_parens(str, cur, "[]\\")
     --print("bracketed: ", bracketed)
     if not bracketed then
       return false, "unmatched square bracket", cur
     end
-    table.insert(indices, bracketed:sub(2, -2))
+    table.insert(params, bracketed:sub(2, -2))
     cur = cur + #bracketed
   end
-  return true, {type="variable", name=m, indices=indices}, cur - start
+  
+  return true, {type="variable", name=m, params=params}, cur - start
 end
   
 function Token.bracketed_variable(str, cur)
@@ -118,17 +118,31 @@ function Token.literal(str, cur, force)
 end
 
 
-function Instring.parse(str, quote_type)
-  local cur = 1
+function Instring.parse(setting_value)
+  assert(type(setting_value) == "table")
+  local valtype = setting_value.type
+  local str = setting_value.raw
   local ok, res, len
-  local parsed = {}
-  if quote_type == "'" then
-    ok, res, len = Token.literal(str, cur, true)
+  
+  if valtype == "literal" or (valtype == "string" and setting_value.quote_char == "'") then
+    ok, res, len = Token.literal(str, 1, true)
     if not ok then
-      return nil, res, cur, len
+      return nil, (res or "not a literal value"), 1, len
     end
-    table.insert(parsed, res)
+    return { res }
+  elseif type == "variable" then
+    ok, res, len = Token.simple_variable(str, 1)
+    if ok == nil then
+      ok, res, len = Token.bracketed_variable(str, 1)
+    end
+    if not ok then
+      return nil, (res or "not a variable"), 1, len
+    end
+    return { res }
   else
+    assert(valtype == "string" or valtype == "value")
+    local tokens = {}
+    local cur = 1
     while cur <= #str do
       --print("match", str:sub(cur))
       ok, res, len = Token.escape(str, cur)
@@ -150,19 +164,22 @@ function Instring.parse(str, quote_type)
       assert(len > 0)
       res.pos={first = cur, last = cur+len}
       
-      local last = parsed[#parsed]
+      local last = tokens[#tokens]
       if last and last.type == "literal" and res.type == "literal" then
-        print("join", last.value, res.value)
         last.value = last.value .. res.value
         last.pos.last = cur + len
       else
-        table.insert(parsed, res)
+        table.insert(tokens, res)
       end
       cur = cur + len
     end
+    
+    local instring = {
+      tokens = tokens
+    }
+    
+    return setmetatable(instring, Instring.metatable)
   end
-  
-  return parsed
 end
 
 function Instring.tonumber(str)
@@ -208,5 +225,16 @@ end
 function Instring.tostring(str)
   return str
 end
+
+function Instring.is_instring(t)
+  return type(t) == "table" and getmetatable(t) == Instring.metatable
+end
+
+Instring.metatable = {
+  __name="instring",
+  __gxcopy_metatable = function()
+    return require("shuttlesock.core.instring").metatable
+  end,
+}
 
 return Instring

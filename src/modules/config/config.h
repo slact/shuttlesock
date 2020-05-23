@@ -23,27 +23,6 @@ typedef struct {
 } shuso_config_module_ctx_t;
 
 
-
-typedef struct shuso_setting_value_s {
-  struct {
-    unsigned    boolean:1;
-    unsigned    integer:1;
-    unsigned    number:1;
-    unsigned    string:1;
-  }           valid;
-  bool        boolean;
-  int         integer;
-  double      number;
-  shuso_str_t string;
-  shuso_str_t raw;
-} shuso_setting_value_t;
-
-
-typedef struct shuso_setting_values_s {
-  uint16_t              count;
-    shuso_instring_t    array[];
-} shuso_setting_values_t;
-
 typedef struct shuso_setting_s {
   const char             *name;
   const char             *module;
@@ -55,6 +34,7 @@ typedef struct shuso_setting_s {
     shuso_instrings_t      *inherited;
     shuso_instrings_t      *defaults;
   }                       instrings;
+  shuso_setting_block_t  *parent_block;
   shuso_setting_block_t  *block;
 } shuso_setting_t;
 
@@ -81,6 +61,8 @@ bool shuso_setting_value(shuso_t *S, const shuso_setting_t *setting, size_t nval
   
 shuso_setting_t *shuso_setting(shuso_t *S, const shuso_setting_block_t *block, const char *name);
 
+shuso_setting_block_t *shuso_setting_parent_block(shuso_t *S, const shuso_setting_t *setting);
+
 /*
  * size_t shuso_setting_values_count(shuso_t *S, const shuso_setting_t *setting);
  * size_t shuso_setting_values_count(shuso_t *S, const shuso_setting_t *setting, shuso_setting_value_merge_type_t mergetype);
@@ -91,8 +73,6 @@ shuso_setting_t *shuso_setting(shuso_t *S, const shuso_setting_block_t *block, c
 #define shuso_setting_values_count(S, ...) ___shuso_setting_values_count_vararg(__VA_ARGS__, __shuso_setting_values_count, shuso_setting_values_count_merged, ___END__VARARG__LIST__)(S, __VA_ARGS__)
 #define shuso_setting_values_count_merged(S, setting) __shuso_setting_values_count(S, setting, SHUSO_SETTING_MERGED)
 size_t __shuso_setting_values_count(shuso_t *S, const shuso_setting_t *setting, shuso_setting_value_merge_type_t mergetype);
-
-
 
 bool shuso_setting_boolean(shuso_t *S, shuso_setting_t *setting, int n, bool *ret);
 bool shuso_setting_integer(shuso_t *S, shuso_setting_t *setting, int n, int *ret);

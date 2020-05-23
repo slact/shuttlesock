@@ -2,9 +2,8 @@ local Parser = {}
 local parser_mt
 
 local Config = {}
+local Instring = require "shuttlesock.core.instring"
 local config_mt
-
-local parse_instring = require "shuttlesock.core.instring".parse
 
 local function mm_setting(setting)
   local mm = require "mm"
@@ -56,7 +55,7 @@ local config_settings = {
     path = "/",
     description = "path to all the internal lua stuff",
     nargs = "1..10",
-    default = {".", "/usr/lib/shuttlesock/lua"},
+    default = ". /usr/lib/shuttlesock/lua",
     handler = function(setting, default)
       local values = setting.values or default
       setting.parent.config_lua_path = values[1]
@@ -122,6 +121,31 @@ local config_settings = {
       assert(config:replace_setting(setting, table.unpack(settings)))
       
       config.config_include_stack = nil
+      
+      return true
+    end
+  },
+  {
+    name    = "set",
+    path    = "",
+    description = "set variable to value",
+    nargs   = 2,
+    default = nil,
+    internal_handler = function(setting, default, config)
+      local parent_block = assert(setting.parent.block, "parent block missing")
+      local v1 = setting.value[1]
+      local var = v1.instring[1]
+      var.ignore = true -- don't generate evaluation or variable lookup code for the variable name
+      
+      if v1.type ~= "variable" or var.type ~= "variable" then
+        return nil, setting.value[1].raw .. " is an invalid variable name"
+      end
+      
+      if var.params and #var.params > 0 then
+        return nil, "setting variable with params is not yet supported"
+      end
+      
+      parent_block.variables[var.name] = setting.value[2].instring
       
       return true
     end
@@ -312,18 +336,9 @@ do --parser
       first = self.cur - #val,
       last = self.cur
     }
+    
     value.raw = val
-    
-    if type(val) == "string" and opt.quote_char then
-      --unquote value
-      val = val:match(("^%s(.*)%s$"):format(opt.quote_char, opt.quote_char))
-    end
-    
-    local instring, err, first, last = parse_instring(val, opt.quote_char)
-    if not instring then
-      return nil, err, first, last
-    end
-    value.instring = instring
+    value.quote_char = opt.quote_char
     
     local setting = opt.setting or assert(self:in_setting())
     if not opt.non_contiguous then
@@ -358,7 +373,8 @@ do --parser
         settings = {},
         comments = {},
         tokens = {},
-        source_setting = assert(self:in_setting())
+        source_setting = assert(self:in_setting()),
+        variables = {} --for variables set with the "set" command
       }
     elseif type(block_name) == "table" and block_name.type == "block" then
       block = block_name
@@ -501,7 +517,7 @@ do --parser
     return m
   end
   
-  function parser:match_string(opt)
+  function parser:match_string()
     local quote_char = self.str:sub(self.cur, self.cur)
     if not quote_char:match("['\"]") then
       return false
@@ -514,11 +530,7 @@ do --parser
         offset = unquote - self.cur + 1
         if count_slashes_reverse(self.str, self.cur, unquote - 1) % 2 == 0 then
           --string end found
-          if opt and opt.unquote then
-            self.last_match = self.str:sub(self.cur + 1, unquote - 1)
-          else
-            self.last_match = self.str:sub(self.cur, unquote)
-          end
+          self.last_match = self.str:sub(self.cur + 1, unquote - 1) --also unquote the string
           self.cur = unquote + 1
           return self.last_match, quote_char
         end
@@ -626,7 +638,7 @@ do --parser
       return false
     end
     
-    local label, quotechar, err = self:match_string({unquote=true})
+    local label, quotechar, err = self:match_string()
     
     if err then
       return nil, "invalid heredoc label string"
@@ -853,7 +865,11 @@ function Config.new(name)
     string = nil,
     handlers = {},
     handlers_any_module = {},
-    parsers = {}
+    parsers = {},
+    variables = { --for module variables
+      name = {},
+      prefix_match = {}
+    }
   }
   setmetatable(config, config_mt)
   
@@ -974,7 +990,11 @@ do --config
     end
   }
   
+  
+  
   function config:parse(str, opt)
+    print("parse string:\n ", str, "\nFIN")
+    
     assert(type(str) == "string")
     opt = opt or {}
     assert(type(opt) == "table")
@@ -1001,6 +1021,18 @@ do --config
     --now handle includes
     assert(self:handle("config:include_path"))
     assert(self:handle("config:include"))
+    assert(self:handle("config:set"))
+    
+    --handle variables
+    for setting in self:each_setting() do
+      for i, val in ipairs(setting.values or {}) do
+        local instring, ins_err = Instring.parse(val)
+        if not instring then
+          return nil, ins_err
+        end
+        setting.values[i].instring = instring
+      end
+    end
     
     self.parsed = true
     
@@ -1287,8 +1319,8 @@ do --config
     end
     local function ensure_type(field_name, expected_type)
       local t = type(setting[field_name])
-      if not setting[field_name] then
-        error(("module %s setting \"%s\" must be of type %s, but was %s"):format(module_name, setting.name, expected_type, t))
+      if t ~= expected_type then
+        error(("module %s setting \"%s\" field '%s' must be of type %s, but was %s"):format(module_name, setting.name, field_name, expected_type, t))
       end
     end
     
@@ -1303,27 +1335,24 @@ do --config
     if setting.alias then
       ensure_type("aliases", "table")
       for k, v in pairs(setting.aliases) do
-        ensure(type(k) == "number", "aliases must be a number-indexed table")
-        ensure(v:match("^[%w_%.]+$"), "alias '%s' is invalid", v)
+        ensure(type(k) == "number", "field 'aliases' must be a number-indexed table")
+        ensure(v:match("^[%w_%.]+$"), "alias \"%s\" is invalid", v)
         table.insert(aliases, v)
       end
     end
     
     ensure_type("path", "string")
-    ensure(not setting.path:match("%/%/"), "path '%s' is invalid", setting.path)
-    ensure(setting.path:match("^[%w%:_%.%/%*%(%)%|]*$"), "path '%s' is invalid", setting.path)
+    ensure(not setting.path:match("%/%/"), "path \"%s\" is invalid", setting.path)
+    ensure(setting.path:match("^[%w%:_%.%/%*%(%)%|]*$"), "path \"%s\" is invalid", setting.path)
     path = setting.path:match("^(.+)/$") or setting.path
     
-    description = ensure(setting.description, "description is required, draconian as that may seem")
+    description = ensure(setting.description, "'description' is required, draconian as that may seem")
     
     if not setting.nargs then
       args_min, args_max = 1, 1
     elseif type(setting.nargs) == "number" then
-      if math.type then
-        ensure(math.type(setting.nargs) == "integer", "setting.nargs must be an integer")
-      else
-        assert(math.floor(setting.nargs) == setting.nargs, "setting.nargs must be an integer")
-      end
+      local is_int = math.type and (math.type(setting.nargs) == "integer") or (math.floor(setting.nargs) == setting.nargs)
+      ensure(is_int, "field 'nargs' must be an integer, but it's a float")
       args_min, args_max = setting.nargs, setting.nargs
     elseif type(setting.nargs == "string") then
       args_min, args_max = setting.nargs:match("^(%d+)%s*%-%s*(%d+)$")
@@ -1339,11 +1368,11 @@ do --config
       end
       args_min, args_max = tonumber(args_min), tonumber(args_max)
     else
-      ensure_type("nargs", "number or string")
+      ensure(false, "field 'nargs' must be number or string integer")
     end
-    ensure(args_min <= args_max, "nargs minimum must be smaller or equal to maximum")
-    ensure(args_min >= 0, "nargs minimum must be non-negative. " .. mock("moderate"))
-    ensure(args_max >= 0, "nargs maximum must be non-negative." .. mock("moderate"))
+    ensure(args_min <= args_max, "field 'nargs' minimum must be smaller or equal to maximum")
+    ensure(args_min >= 0, "field 'nargs' minimum must be non-negative. " .. mock("moderate"))
+    ensure(args_max >= 0, "field 'nargs' maximum must be non-negative." .. mock("moderate"))
     
     if setting.block then
       if type(setting.block) ~= "boolean" then
@@ -1404,6 +1433,122 @@ do --config
     table.insert(self.handlers_any_module[shortname], handler)
     
     return handler
+  end
+  
+  function config:register_variable(var)
+    assert(type(var.name) == "string")
+    assert(type(var.path) == "string")
+    assert(type(var.module_name) == "string")
+    assert(type(var.ptr) == "userdata")
+    
+    local name, kleenestar = var.name:match("^([%w%_]+)(%*?)$")
+    if not name then
+      return nil, "Invalid variable name " .. var.name
+    end
+    
+    var = {
+      raw_name = var.name,
+      name = name,
+      path = var.path,
+      module_name = var.module_name,
+      ptr = var.ptr,
+    }
+    
+    if #kleenestar == 1 then
+      local vars = config.variables.prefix_match
+      local match_pattern = "^"..name.."([%w%_]*)"
+      vars[match_pattern] = vars[match_pattern] or {}
+      if vars[match_pattern][var.module_name] then
+        return nil, ("Variable %s is already registered by this module (%s)"):format(var.name, var.module_name)
+      end
+      vars.match_prefix = true
+      vars.match_suffix_pattern = match_pattern
+      vars[match_pattern][var.module_name] = var
+    else
+      local vars = config.variables.name
+      vars[name] = vars[name] or {}
+      if vars[name][var.module_name] then
+        return nil, ("Variable %s is already registered by this module (%s)"):format(var.name, var.module_name)
+      end
+      vars[name][var.module_name] = var
+    end
+    
+    return true
+  end
+  
+  function config:find_variable(name, module_name, block)
+    assert(block, "that's no block!")
+    
+    local possible_vars = {}
+
+    if module_name then
+      local module = require "shuttlesock.core.module".find(module)
+      if not module then
+        return nil, "no such module " .. module_name .. " for variable $" .. name
+      end
+      module_name = module.name
+    end
+    
+    local parent_block = block
+    local prev_parent_block
+    while parent_block and parent_block ~= prev_parent_block do
+      if parent_block.variables[name] then
+        table.insert(parent_block.variables[name], possible_vars)
+        break
+      end
+      
+      prev_parent_block = parent_block
+      parent_block = parent_block.setting.parent.block
+    end
+    
+    for pattern, wildcard_vars in pairs(self.variables.prefix_match) do
+      if name:match(pattern) then
+        for _, var in pairs(wildcard_vars) do
+          table.insert(possible_vars, var)
+        end
+      end
+    end
+    
+    for _, vars in pairs(self.variables.name[name]) do
+      for _, var in pairs(vars) do
+        table.insert(possible_vars, var)
+      end
+    end
+    
+    if #possible_vars == 0 then
+      return nil, "no such variable $"..name
+    end
+    
+    if module_name then
+      for i, var in pairs(possible_vars) do
+        if var.module_name ~= module_name then
+          table.remove(possible_vars, i)
+        end
+      end
+      if #possible_vars == 0 then
+        return nil, "no variable $"..name .. " for module " .. module_name
+      end
+    end
+    
+    for i, var in pairs(possible_vars) do
+      self:get_path(block)
+      if not Config.match_path(block, var.path) then
+        table.remove(possible_vars, i)
+      end
+    end
+    
+    if #possible_vars == 0 then
+      return nil, "no variable $"..name.." matches for the path of the config block"
+    elseif #possible_vars > 1 then
+      local module_names = {}
+      for _, v in ipairs(possible_vars) do
+        table.insert(module_names, v.module_name)
+      end
+      table.sort(module_names)
+      return nil, "variable $"..name.." is ambiguous, could be for any of these modules: " .. table.concat(module_names, ", ")
+    end
+    
+    return possible_vars[1]
   end
   
   function config:config_string(cur, lvl)
@@ -1487,17 +1632,6 @@ do --config
     return t
   end
   
-  function config:default_values(setting)
-    if not setting.handled_by then
-      return {}
-    end
-    local handler = self.handlers[setting.handled_by]
-    if not handler then
-      return nil, ("can't find handler for setting \"%s\" handled by %s"):format(setting.full_name, setting.handled_by)
-    end
-    return handler.default_values or {}
-  end
-  
   function config:predecessor(setting) --setting to inherit values from
     setting = setting.parent
     while setting and setting.parent ~= setting do
@@ -1513,12 +1647,37 @@ do --config
     return false
   end
   
-  function config:inherited_values(setting)
-    local predecessor = self:predecessor(setting)
-    if not predecessor then
-      return {}
+  function config:setting_values(setting, values_kind)
+    if not values_kind or values_kind == "local" then
+      return setting.values or {}
+    elseif values_kind == "default" then
+      if not setting.handled_by then
+        return {}
+      end
+      local handler = self.handlers[setting.handled_by]
+      if not handler then
+        return nil, ("can't find handler for setting \"%s\" handled by %s"):format(setting.full_name, setting.handled_by)
+      end
+      return handler.default_values or {}
+    elseif values_kind == "inherited" then
+      local predecessor = self:predecessor(setting)
+      if not predecessor then
+        return {}
+      end
+      return predecessor.values
+    else
+      error("invalid setting_values kind: " .. tostring(values_kind))
     end
-    return predecessor.values
+  end
+  
+  function config:setting_instrings(setting, kind)
+    local vals = self:setting_values(setting, kind)
+    local instrings = {}
+    for _, v in ipairs(vals) do
+      assert(Instring.is_instring(v.instring))
+      table.insert(instrings, v.instring)
+    end
+    return instrings
   end
   
   function config:mm_setting(setting)

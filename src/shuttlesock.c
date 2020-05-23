@@ -740,9 +740,10 @@ static void shuso_set_error_vararg(shuso_t *S, const char *fmt, va_list args) {
   if(S->common->state == SHUSO_STATE_MISCONFIGURED && S->error.combined_errors != NULL) {
     char *combined = S->error.combined_errors;
     S->error.combined_errors = NULL;
+    bool prev_do_not_log = S->error.do_not_log;
     S->error.do_not_log = true;
     shuso_set_error(S, "%s%s", shuso_last_error(S), combined);
-    S->error.do_not_log = false;
+    S->error.do_not_log = prev_do_not_log;
     free(combined);
   }
   if(free_oldmsg) {
@@ -752,6 +753,22 @@ static void shuso_set_error_vararg(shuso_t *S, const char *fmt, va_list args) {
     S->error.do_not_publish_event = true;
     shuso_core_event_publish(S, "error", SHUSO_OK, (void *)shuso_last_error(S));
     S->error.do_not_publish_event = false;
+  }
+}
+
+int shuso_error_capture_start(shuso_t *S) {
+  S->error.do_not_publish_event = true;
+  S->error.do_not_log = true;
+  return S->error.error_count;
+}
+const char *shuso_error_capture_finish(shuso_t *S, int prev_errcount) {
+  S->error.do_not_publish_event = false;
+  S->error.do_not_log = false;
+  if(prev_errcount == S->error.error_count) {
+    return shuso_last_error(S);
+  }
+  else {
+    return NULL;
   }
 }
 

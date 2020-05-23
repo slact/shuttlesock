@@ -4,25 +4,22 @@
 #include <shuttlesock/buffer.h>
 #include <shuttlesock/module.h>
 
-typedef struct shuso_variable_s shuso_variable_t;
-
-typedef bool shuso_variable_eval_fn(shuso_t *S, shuso_variable_t *var, shuso_str_t *ret_val);
-typedef void shuso_variable_cleanup_fn(shuso_t *S, shuso_variable_t *var, shuso_str_t *val);
-
 typedef struct shuso_variable_s {
   const shuso_module_t *module;
   const char           *name;
+  shuso_setting_t      *setting;
+  shuso_setting_block_t *block;
   struct {
     const char         **array;
     size_t               size;
-  }                    indices;
+  }                    params;
   shuso_variable_eval_fn     *eval;
   void                       *pd;
 } shuso_variable_t;
 
 #define SHUTTLESOCK_INSTRING_VALUE_UNKNOWN 0
 #define SHUTTLESOCK_INSTRING_VALUE_INVALID 1
-#define SHUTTLESOCK_INSTRING_VALUE_VALID 2
+#define SHUTTLESOCK_INSTRING_VALUE_VALID   2
 
 typedef enum {
   SHUSO_INSTRING_TOKEN_LITERAL = 0,
@@ -77,12 +74,9 @@ typedef struct shuso_instrings_s {
   shuso_instring_t  array[];
 } shuso_instrings_t;
 
-shuso_instring_t *luaS_instring_lua_to_c(lua_State *L, int index);
-shuso_instrings_t *luaS_instrings_lua_to_c(lua_State *L, int index);
 
-
-
-
+shuso_instring_t *luaS_instring_lua_to_c(lua_State *L, shuso_setting_t *setting, int index);
+shuso_instrings_t *luaS_instrings_lua_to_c(lua_State *L, shuso_setting_t *setting, int index);
 
 bool shuso_instring_boolean_value(shuso_t *S, shuso_instring_t *instring, bool *retval);
 bool shuso_instring_integer_value(shuso_t *S, shuso_instring_t *instring, int *retval);

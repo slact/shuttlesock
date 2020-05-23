@@ -6,7 +6,7 @@
 
 #define SHUSO_MODULE_INDEX_INVALID 255
 
-struct shuso_module_setting_s {
+typedef struct shuso_module_setting_s {
   const char             *name;
   const char             *aliases;
   const char             *path;
@@ -14,7 +14,15 @@ struct shuso_module_setting_s {
   const char             *nargs;
   const char             *default_value;
   int                     block; // 0/false - no, 1/true - yes, SHUSO_SETTING_BLOCK_OPTIONAL - maybe
-};// shuso_module_setting_t
+} shuso_module_setting_t;
+
+typedef struct shuso_module_variable_s {
+  const char *name;
+  const char *aliases;
+  const char *path;
+  const char *description;
+  shuso_variable_eval_fn *eval;
+} shuso_module_variable_t;
 
 struct shuso_module_s {
   const char             *name;
@@ -30,6 +38,7 @@ struct shuso_module_s {
   uint8_t                *parent_modules_index_map;
   int                     index; //global module number
   shuso_module_setting_t *settings;
+  shuso_module_variable_t *variables;
   struct {
     int                     count;
     shuso_module_t        **array;
