@@ -2,6 +2,7 @@
 #include "config.h"
 #include "private.h"
 #include <lauxlib.h>
+#include <assert.h>
 
 static void config_worker_gxcopy(shuso_t *S, shuso_event_state_t *evs, intptr_t code, void *data, void *pd) {
   assert(strcmp(evs->data_type, "shuttlesock_state") == 0);
@@ -25,7 +26,7 @@ static void config_worker_gxcopy(shuso_t *S, shuso_event_state_t *evs, intptr_t 
   
   
   
-  luaS_pcall_config_method(Lworker, "all_settings", 0, true);
+  luaS_pcall_config_method(Lworker, "all_settings", 0, 1);
   lua_pushnil(Lworker);
   while(lua_next(Lworker, -2)) {
     lua_getfield(Lworker, -1, "ptr");
@@ -35,7 +36,7 @@ static void config_worker_gxcopy(shuso_t *S, shuso_event_state_t *evs, intptr_t 
   }
   lua_pop(Lworker, 1);
   
-  luaS_pcall_config_method(Lworker, "all_blocks", 0, true);
+  luaS_pcall_config_method(Lworker, "all_blocks", 0, 1);
   lua_pushnil(Lworker);
   while(lua_next(Lworker, -2)) {
     lua_getfield(Lworker, -1, "ptr");
@@ -80,13 +81,12 @@ void luaS_push_config_field(lua_State *L, const char *field) {
   lua_remove(L, -2);
 }
 
-bool luaS_pcall_config_method(lua_State *L, const char *method_name, int nargs, bool keep_result) {
+bool luaS_pcall_config_method(lua_State *L, const char *method_name, int nargs, int nret) {
   shuso_t                    *S = shuso_state(L);
   int                         argstart = lua_absindex(L, -nargs);
   shuso_config_module_ctx_t  *ctx = S->common->module_ctx.config;
   
-  luaS_get_config_pointer_ref(L, ctx);
-  
+  luaS_get_config_pointer_ref(L, ctx);  
   lua_getfield(L, -1, method_name);
   lua_insert(L, argstart);
   lua_insert(L, argstart + 1);
@@ -137,7 +137,7 @@ bool shuso_config_register_setting(shuso_t *S, shuso_module_setting_t *setting, 
   
   lua_pushstring(L, module->name);
   lua_insert(L, -2);
-  if(!luaS_pcall_config_method(L, "register_setting", 2, false)) {
+  if(!luaS_pcall_config_method(L, "register_setting", 2, 2)) {
     return false;
   }
   return true;
@@ -182,7 +182,7 @@ static shuso_setting_t *lua_setting_to_c_struct(shuso_t *S, lua_State *L, int si
   lua_setfield(L, sidx, "ptr");
   
   lua_pushvalue(L, sidx);
-  luaS_pcall_config_method(L, "get_path", 1, true);
+  luaS_pcall_config_method(L, "get_path", 1, 1);
   setting->path = lua_tostring(L, -1);
   lua_pop(L, 1);
   
@@ -208,7 +208,7 @@ static shuso_setting_t *lua_setting_to_c_struct(shuso_t *S, lua_State *L, int si
     
     lua_pushvalue(L, sidx);
     lua_pushstring(L, ins[i].name);
-    luaS_pcall_config_method(L, "setting_instrings", 2, true);
+    luaS_pcall_config_method(L, "setting_instrings", 2, 1);
     assert(lua_istable(L, -1));
     
     int cnt = shuso_error_capture_start(S);
@@ -259,7 +259,7 @@ static shuso_setting_t *lua_setting_to_c_struct(shuso_t *S, lua_State *L, int si
     lua_setfield(L, -2, "ptr");
     
     lua_pushvalue(L, -1);
-    luaS_pcall_config_method(L, "get_path", 1, true);
+    luaS_pcall_config_method(L, "get_path", 1, 1);
     block->path = lua_tostring(L, -1);
     lua_pop(L, 1);
     
@@ -290,16 +290,19 @@ bool shuso_config_system_generate(shuso_t *S) {
   }
   lua_pop(L, 1);
   
-  if(!luaS_pcall_config_method(L, "handle", 0, false)) {
+  if(!luaS_pcall_config_method(L, "handle", 0, 2)) {
     lua_settop(L, top);
     return false;
   }
+  lua_pop(L, 1); //pop 2nd return val
   
   //create C structs for root
-  if(!luaS_pcall_config_method(L, "get_root", 0, true)) {
+  if(!luaS_pcall_config_method(L, "get_root", 0, 2)) {
     lua_settop(L, top);
     return false;
   }
+  lua_pop(L, 1); //pop 2nd return val
+  
   shuso_setting_block_t *root_block = shuso_stalloc(&S->stalloc, sizeof(*root_block));
   if(root_block == NULL) {
     lua_settop(L, top);
@@ -319,8 +322,7 @@ bool shuso_config_system_generate(shuso_t *S) {
   lua_setfield(L, -2, "ptr");
   
   lua_pushvalue(L, -1);
-  luaS_pcall_config_method(L, "get_path", 1, true);
-  lua_pop(L, 1);
+  luaS_pcall_config_method(L, "get_path", 1, 0); //create and cache the path -- don't care about the result
   
   luaS_config_pointer_ref(L, root_block); //also pops the block table
   
@@ -346,49 +348,48 @@ bool shuso_config_system_generate(shuso_t *S) {
   lua_setfield(L, -2, "ptr");
   
   lua_pushvalue(L, -1);
-  luaS_pcall_config_method(L, "get_path", 1, true);
+  luaS_pcall_config_method(L, "get_path", 1, 1);
   root_setting->path = lua_tostring(L, -1);
+  assert(root_setting->path);
   lua_pop(L, 1);
   
   root_block->setting = root_setting;
   luaS_config_pointer_ref(L, root_setting); //pops the root setting table too
   
   //finished setting up root structs
-  if(!luaS_pcall_config_method(L, "all_settings", 0, true)) {
-    lua_settop(L, top);
-    return false;
-  }
   
   //create C structs from config settings
-  int num_settings = luaL_len(L, -1);
-  for(int i=0; i<num_settings; i++) {
+  luaS_pcall_config_method(L, "all_settings", 0, 1);
+  assert(lua_istable(L, -1));
+  for(int i=0, num_settings = luaL_len(L, -1); i<num_settings; i++) {
     lua_rawgeti(L, -1, i+1);
-    if(lua_setting_to_c_struct(S, L, -1) == NULL) {
+    if(lua_setting_to_c_struct(S, L) == NULL) {
       lua_settop(L, top);
       return false;
     }
+    lua_pop(L, 1);
   }
   lua_pop(L, 1);
   
   
   //walk the blocks again, and let the modules set their settings for each block
-  if(!luaS_pcall_config_method(L, "all_blocks", 0, true)) {
-    lua_settop(L, top);
-    return false;
-  }
-  lua_pushnil(L);
-  while(lua_next(L, -2)) {
+  luaS_pcall_config_method(L, "all_blocks", 0, 1);
+  assert(lua_istable(L, -1));
+  for(int i=0, num_blocks = luaL_len(L, -1); i<num_blocks; i++) {
     shuso_setting_block_t      *block;
+    
+    lua_geti(L, -1, i+1);
+    assert(lua_istable(L, -1));
     lua_getfield(L, -1, "ptr");
     block = (void *)lua_topointer(L, -1);
-    lua_pop(L, 1);
+    lua_pop(L, 2); //pop [i].ptr
     assert(block != NULL);
     
-    for(unsigned i=0; i< S->common->modules.count; i++) {
-      shuso_module_t *module = S->common->modules.array[i];
+    for(unsigned j=0; j < S->common->modules.count; j++) {
+      shuso_module_t *module = S->common->modules.array[j];
       int errcount = shuso_error_count(S);
       if(module->initialize_config && !module->initialize_config(S, module, block)) {
-        if(shuso_last_error(S) == NULL) {
+        if(shuso_error_count(S) == errcount) {
           lua_settop(L, top);
           return shuso_set_error(S, "module %s failed to initialize config, but reported no error", module->name);
         }
@@ -400,7 +401,6 @@ bool shuso_config_system_generate(shuso_t *S) {
         return false;
       }
     }
-    lua_pop(L, 1);
   }
   lua_pop(L, 1);
   
@@ -408,19 +408,21 @@ bool shuso_config_system_generate(shuso_t *S) {
   
   assert(ctx->blocks.root == NULL);
   
-  if(!luaS_pcall_config_method(L, "get_root", 0, true)) {
+  if(!luaS_pcall_config_method(L, "get_root", 0, 2)) {
     lua_settop(L, top);
     return false;
   }
+  lua_pop(L, 1); //2nd return from get_root
+  
   lua_getfield(L, -1, "ptr");
   ctx->blocks.root = lua_topointer(L, -1);
   assert(ctx->blocks.root);
   lua_pop(L, 2);
   
-  if(!luaS_pcall_config_method(L, "all_blocks", 0, true)) {
-    lua_settop(L, top);
-    return false;
-  }
+  
+  //create config block array
+  luaS_pcall_config_method(L, "all_blocks", 0, 1);
+  assert(lua_istable(L, -1));
   ctx->blocks.count = luaL_len(L, -1);
   ctx->blocks.array = shuso_stalloc(&S->stalloc, sizeof(*ctx->blocks.array) * ctx->blocks.count);
   if(ctx->blocks.array == NULL) {
@@ -451,7 +453,8 @@ shuso_setting_t *shuso_setting(shuso_t *S, const shuso_setting_block_t *block, c
   shuso_setting_t   *setting;
   lua_pushstring(L, name);
   luaS_get_config_pointer_ref(L, block->setting);
-  if(!luaS_pcall_config_method(L, "find_setting", 2, true)) {
+  if(!luaS_pcall_config_method(L, "find_setting", 2, 1)) {
+    lua_pop(L, 1);
     return NULL;
   }
   lua_getfield(L, -1, "ptr");

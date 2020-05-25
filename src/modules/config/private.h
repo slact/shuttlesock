@@ -11,7 +11,7 @@ bool shuso_config_system_initialize_worker(shuso_t *workerState, shuso_t *manage
 bool shuso_config_system_generate(shuso_t *S);
 
 bool luaS_get_config_pointer_ref(lua_State *L, const void *ptr);
-bool luaS_pcall_config_method(lua_State *L, const char *method_name, int nargs, bool keep_result);
+bool luaS_pcall_config_method(lua_State *L, const char *method_name, int nargs, int nresults);
 bool luaS_config_pointer_ref(lua_State *L, const void *ptr);
 
 #endif //SHUTTLESOCK_CONFIG_MODULE_PRIVATE_H
