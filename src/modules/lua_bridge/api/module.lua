@@ -266,7 +266,7 @@ setmetatable(Module, {
     Module.event_subscribers = state.event_subscribers
     Module.module_publish_events = state.module_publish_events
     wrapped_modules = state.wrapped_modules
-    
+    return true
   end
 })
 return Module

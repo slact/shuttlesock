@@ -1243,56 +1243,90 @@ bool luaS_gxcopy_finish(lua_State *Ls, lua_State *Ld) {
 }
 
 bool luaS_gxcopy_module_state(lua_State *Ls, lua_State *Ld, const char *module_name) {
+  shuso_t        *Ss = shuso_state(Ls);
+  int             s_top = lua_gettop(Ls);
+  int             d_top = lua_gettop(Ld);
   luaL_checkstack(Ls, 5, NULL);
   luaL_checkstack(Ld, 5, NULL);
   
   lua_getglobal(Ls, "require");
   lua_pushstring(Ls, module_name);
-  if(!luaS_function_pcall_result_ok(Ls, 1, true)) {
-    return shuso_set_error(shuso_state(Ls), "gxcopy_module_state error: no Lua module '%s' in source Lua state", module_name);
+  if(!luaS_pcall(Ls, 1, 1) || lua_isnil(Ls, -1)) {
+    lua_settop(Ls, s_top);
+    lua_settop(Ld, d_top);
+    return shuso_set_error(Ss, "gxcopy_module_state error: no Lua module '%s' in source Lua state", module_name);
   }
   
   lua_getglobal(Ld, "require");
   lua_pushstring(Ld, module_name);
-  if(!luaS_function_pcall_result_ok(Ld, 1, true)) {
-    return shuso_set_error(shuso_state(Ls), "gxcopy_module_state error: no Lua module '%s' in destination Lua state", module_name);
+  if(!luaS_pcall(Ld, 1, 1) || lua_isnil(Ld, -1)) {
+    lua_settop(Ls, s_top);
+    lua_settop(Ld, d_top);
+    return shuso_set_error(Ss, "gxcopy_module_state error: no Lua module '%s' in destination Lua state", module_name);
   }
   
   if(!lua_getmetatable(Ls, -1)) {
-    lua_pop(Ls, 2);
-    return shuso_set_error(shuso_state(Ls), "gxcopy_module_state error: Lua module '%s' has no metatable in source Lua state", module_name);
+    lua_settop(Ls, s_top);
+    lua_settop(Ld, d_top);
+    return shuso_set_error(Ss, "gxcopy_module_state error: Lua module '%s' has no metatable in source Lua state", module_name);
   }
   
   if(!lua_getmetatable(Ld, -1)) {
-    lua_pop(Ld, 2);
-    return shuso_set_error(shuso_state(Ls), "gxcopy_module_state error: Lua module '%s' has no metatable in destination Lua state", module_name);
+    lua_settop(Ls, s_top);
+    lua_settop(Ld, d_top);
+    return shuso_set_error(Ss, "gxcopy_module_state error: Lua module '%s' has no metatable in destination Lua state", module_name);
   }
   
   lua_getfield(Ls, -1, "__gxcopy_save_module_state");
   if(!lua_isfunction(Ls, -1)) {
-    lua_pop(Ls, 3);
-    return shuso_set_error(shuso_state(Ls), "gxcopy_module_state error: Lua module '%s' has no __gxcopy_save_module_state metatable field in destination Lua state", module_name);
+    lua_settop(Ls, s_top);
+    lua_settop(Ld, d_top);
+    return shuso_set_error(Ss, "gxcopy_module_state error: Lua module '%s' has no __gxcopy_save_module_state metatable field in destination Lua state", module_name);
   }
   
   lua_getfield(Ld, -1, "__gxcopy_load_module_state");
   if(!lua_isfunction(Ld, -1)) {
-    lua_pop(Ld, 3);
-    return shuso_set_error(shuso_state(Ls), "gxcopy_module_state error: Lua module '%s' has no __gxcopy_load_module_state metatable field in destination Lua state", module_name);
+    lua_settop(Ls, s_top);
+    lua_settop(Ld, d_top);
+    return shuso_set_error(Ss, "gxcopy_module_state error: Lua module '%s' has no __gxcopy_load_module_state metatable field in destination Lua state", module_name);
   }
   
   lua_remove(Ld, -2);
   lua_remove(Ld, -2);
   
   //__gxcopy_save_module_state() -> table
-  if(!luaS_function_pcall_result_ok(Ls, 0, true)) {
-    return shuso_set_error(shuso_state(Ls), "gxcopy_module_state error: %s", module_name, shuso_last_error(shuso_state(Ls)));
+  if(!luaS_pcall(Ls, 0, 2)) {
+    lua_settop(Ls, s_top);
+    lua_settop(Ld, d_top);
+    return shuso_set_error(Ss, "gxcopy_module_state error: Lua module '%s' __gxcopy_save_module_state failed: %s", module_name, shuso_last_error(Ss));
   }
+  
+  if(lua_isnil(Ls, -2)) {
+    const char *err = lua_tostring(Ls, -1);
+    if(!err) err = "returned nil with no error, but return must be non-nil";
+    shuso_set_error(Ss, "gxcopy_module_state error: Lua module '%s' __gxcopy_save_module_state failed: %s", module_name, err);
+    lua_settop(Ls, s_top);
+    lua_settop(Ld, d_top);
+    return false;
+  }
+  lua_pop(Ls, 1); //pop 2nd return val
   
   luaS_gxcopy(Ls, Ld);
   lua_pop(Ls, 3);
-  if(!luaS_pcall(Ld, 1, 0)) {
-    return shuso_set_error(shuso_state(Ls), "gxcopy_module_state error: Lua module '%s' __gxcopy_load_module_state failed: %s", module_name, shuso_last_error(shuso_state(Ld)));
+  if(!luaS_pcall(Ld, 1, 2)) {
+    lua_settop(Ls, s_top);
+    lua_settop(Ld, d_top);
+    return shuso_set_error(Ss, "gxcopy_module_state error: Lua module '%s' __gxcopy_load_module_state failed: %s", module_name, shuso_last_error(shuso_state(Ld)));
   }
+  if(lua_isnil(Ld, -2)) {
+    const char *err = lua_tostring(Ld, -1);
+    if(!err) err = "returned nil with no error, but return must be non-nil";
+    shuso_set_error(Ss, "gxcopy_module_state error: Lua module '%s' __gxcopy_load_module_state failed: %s", module_name, err);
+    lua_settop(Ls, s_top);
+    lua_settop(Ld, d_top);
+    return false;
+  }
+  lua_pop(Ld, 1); //pop 2nd return val
   return true;
 }
 bool luaS_streq(lua_State *L, int index, const char *str) {

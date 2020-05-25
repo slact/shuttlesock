@@ -426,6 +426,7 @@ setmetatable(Module, {
     Module.dependents_indexed = state.dependents_indexed
     Module.dependents = state.dependents
     Module.providers = state.providers
+    return true
   end
 })
 

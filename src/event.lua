@@ -181,8 +181,15 @@ setmetatable(Event, {
     return k
   end,
   __gxcopy_load_module_state = function(state)
-    events_by_name = assert(state.by_name, "by_name missing from global Event state")
-    events_by_ptr = assert(state.by_ptr, "by_ptr missing from global Event state")
+    if not state.by_name then
+      return nil, "by_name missing from global Event state"
+    end
+    if not state.by_ptr then
+      return nil, "by_ptr missing from global Event state"
+    end
+    events_by_name = state.by_name
+    events_by_ptr = state.by_ptr
+    return true
   end
 })
 

@@ -255,6 +255,7 @@ setmetatable(Core, {
   end,
   __gxcopy_load_module_state = function(state)
     Core.event_data_wrappers = state.event_data_wrappers
+    return true
   end
 })
 

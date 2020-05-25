@@ -84,6 +84,7 @@ setmetatable(Atomics, {
   end,
   __gxcopy_load_module_state = function(state)
     atomics_tables = state.atomics_tables
+    return true
   end
 })
 
