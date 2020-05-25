@@ -77,17 +77,6 @@ bool luaS_function_call_result_ok(lua_State *L, int nargs, bool preserve_result)
   return function_result_ok(L, preserve_result);
 }
 
-bool luaS_function_pcall_result_ok(lua_State *L, int nargs, bool preserve_result) {
-  int rc = lua_pcall(L, nargs, 2, 0);
-  if(rc != LUA_OK) {
-    shuso_set_error(shuso_state(L), lua_tostring(L, -1));
-    lua_pop(L, 1);
-    return false;
-  }
-  return function_result_ok(L, preserve_result);
-}
-
-
 //fails if there's an error or the function returned nil
 //success on anything else, even if the function returns nothing
 bool luaS_call_noerror(lua_State *L, int nargs, int nrets) {

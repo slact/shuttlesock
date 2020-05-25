@@ -90,7 +90,17 @@ bool luaS_pcall_config_method(lua_State *L, const char *method_name, int nargs, 
   lua_getfield(L, -1, method_name);
   lua_insert(L, argstart);
   lua_insert(L, argstart + 1);
-  return luaS_function_pcall_result_ok(L, nargs + 1, keep_result);
+  if(!luaS_pcall(L, nargs + 1, nret)) {
+    return false;
+  }
+  if(nret >= 1 && lua_isnil(L, -nret)) {
+    if(nret >= 2) {
+      const char *err = lua_isstring(L, -1) ? lua_tostring(L, -1) : "returned nil with no error message, but probably kind of expected an error message";
+      shuso_set_error(S, err);
+    }
+    return false;
+  }
+  return true;
 }
 
 bool shuso_config_register_setting(shuso_t *S, shuso_module_setting_t *setting, shuso_module_t *module) {
