@@ -16,24 +16,6 @@ local function mm_setting(setting)
   mm(cpy)
 end
 
-local DEBUG_MODE = false
-local assert, error = assert, error
-if not DEBUG_MODE then
-  local __original_error = error
-  error = function(err, n)
-    __original_error(err, n or 0)
-  end
-
-  assert = function(cond, err)
-    if not cond then
-      error(err, 0)
-    else
-      return cond, err
-    end
-  end
-end
-
-
 local function resolve_path(prefix, name)
   if not prefix or name:match("^%/") then
     --absolute path or no path given
@@ -48,6 +30,7 @@ local function glob(globstr)
   local system = require "shuttlesock.core.system"
   return system.glob(globstr)
 end
+
 
 local config_settings = {
   {
@@ -92,6 +75,8 @@ local config_settings = {
       }
       local settings = { }
       
+      local ok, err
+      
       config.config_include_stack = config.config_include_stack or {}
       table.insert(config.config_include_stack, config.name)
       if #config.config_include_stack > 32 then
@@ -102,8 +87,10 @@ local config_settings = {
       for _, p in ipairs(paths) do
         local included_config = Config.new(p)
         included_config.config_include_stack = config.config_include_stack
-        assert(included_config:load())
-        assert(included_config:parse())
+        ok, err = included_config:load()
+        if not ok then return nil, err end
+        ok, err = included_config:parse()
+        if not ok then return nil, err end
         
         table.insert(tokens, {type="comment", value = "# included file " .. p ..";"})
         
@@ -117,8 +104,10 @@ local config_settings = {
         end
       end
       
-      assert(config:replace_token(setting, table.unpack(tokens)))
-      assert(config:replace_setting(setting, table.unpack(settings)))
+      ok, err = config:replace_token(setting, table.unpack(tokens))
+      if not ok then return nil, err end
+      ok, err = config:replace_setting(setting, table.unpack(settings))
+      if not ok then return nil, err end
       
       config.config_include_stack = nil
       
@@ -132,7 +121,10 @@ local config_settings = {
     nargs   = 2,
     default = nil,
     internal_handler = function(setting, default, config)
-      local parent_block = assert(setting.parent.block, "parent block missing")
+      local parent_block = setting.parent.block
+      if not parent_block then
+        return nil, "parent block missing"
+      end
       local v1 = setting.value[1]
       local var = v1.instring[1]
       var.ignore = true -- don't generate evaluation or variable lookup code for the variable name
@@ -216,9 +208,9 @@ do --parser
   end
   
   function parser:in_chunk_type(chunk_type, stack_position)
-    assert(type(chunk_type) == "string")
+    assert(type(chunk_type) == "string", "chunk_type is not a string")
     stack_position = stack_position or 0
-    assert(type(stack_position) == "number" and stack_position <= 0)
+    assert(type(stack_position) == "number" and stack_position <= 0, "invalid stack_position")
     local chunk = self.stack[#self.stack + stack_position]
     return chunk.type == chunk_type and chunk
   end
@@ -232,8 +224,8 @@ do --parser
   
   function parser:push_setting(setting_name, module_name, is_root)
     if is_root then
-      assert(self.top == nil)
-      assert(#self.stack == 0)
+      assert(self.top == nil, "expected stack top to be nil")
+      assert(#self.stack == 0, "expected stack to be empty")
     else
       assert(self:in_block())
       assert(self:in_setting(-1))
@@ -387,17 +379,18 @@ do --parser
   end
   
   function parser:pop_block()
-    assert(self:in_block(), "tried popping a block while not in block")
+    assert(self:in_block())
     local block = self.top
     table.remove(self.stack)
     self.top = self.stack[#self.stack]
-    local setting = assert(self:in_setting(), "popped a block and ended not not in setting")
+    local setting = assert(self:in_setting())
     if not setting.block then
       setting.block = block
       block.setting = setting
     else
-      assert(setting.block == block, "setting.block doesn't match block")
-      assert(block.setting == setting, "block.setting doesn't match setting")
+      --sanity checks
+      assert(setting.block == block)
+      assert(block.setting == setting)
     end
     --finishing a block means we are also finishing the setting it belongs to
     self:pop_setting()
@@ -439,7 +432,7 @@ do --parser
       --get last match
       return (self.last_match or {})
     else
-      assert(pattern:sub(1, 1) == "^", "match must start with ^, but have \"" .. pattern .. "\"")
+      assert(pattern:sub(1, 1) == "^", "parser match must start with ^, but have \"" .. pattern .. "\"")
       local m = self.str:match(pattern, self.cur)
       if not m then
         return nil
@@ -1005,7 +998,9 @@ do --config
     
     local parser = assert(Parser.new(str, {name = self.name, root = self.root}))
     local ok, err = parser:parse()
-    assert(ok, err or "parser failed for unknown reasons")
+    if not ok then
+      return nil, err
+    end
     
     self.root = parser.root
     table.insert(self.parsers, parser)
@@ -1311,48 +1306,67 @@ do --config
     local block
     local default_setting
     local default_values
-    local function ensure(condition, fmt, ...)
-      if not condition then
-        error(("module %s setting \"%s\" "..fmt):format(module_name, setting.name, ...))
+    local function failmsg(...)
+      local n = select("#", ...)
+      if n == 1 then
+        local msg = ...
+        return ("module %s setting \"%s\" %s"):format(module_name, setting.name, msg)
+      elseif n == 2 then
+        local field_name, field_type = ...
+        return ("module %s setting \"%s\" field '%s' must be of type %s, but was %s"):format(module_name, setting.name, field_name, field_type, type(setting[field_name]))
       end
-      return true
-    end
-    local function ensure_type(field_name, expected_type)
-      local t = type(setting[field_name])
-      if t ~= expected_type then
-        error(("module %s setting \"%s\" field '%s' must be of type %s, but was %s"):format(module_name, setting.name, field_name, expected_type, t))
-      end
+      error("weird failmsg call")
     end
     
     assert(type(module_name) == "string", "module name must be a string, but was "..type(module_name)..". " .. mock("mild"))
     assert(type(setting) == "table", "module "..module_name.." setting must be a table")
     
-    assert(type(setting.name) == "string", "module "..module_name.." setting name must be a string, but is ".. type(setting.name))
+    if type(setting.name) ~= "string" then
+      return nil, failmsg("name", "string")
+    end
     
-    ensure(setting.name:match("^[%w_%.]+$"), "name contains invalid characters")
+    if not setting.name:match("^[%w_%.]+$") then
+      return nil, failmsg("name contains invalid characters")
+    end
     name = setting.name
     
-    if setting.alias then
-      ensure_type("aliases", "table")
+    if setting.aliases then
+      if type(setting.aliases) ~= "table" then
+        return nil, failmsg("aliases", "table")
+      end
       for k, v in pairs(setting.aliases) do
-        ensure(type(k) == "number", "field 'aliases' must be a number-indexed table")
-        ensure(v:match("^[%w_%.]+$"), "alias \"%s\" is invalid", v)
+        if type(k) ~= "number" then
+          return nil, failmsg("field 'aliases' must be a number-indexed table")
+        end
+        if type(v) ~= "string" then
+          return nil, failmsg("field 'aliases' at index "..k.." is not a string")
+        end
+        if not v:match("^[%w_%.]+$") then
+          return nil, failmsg("alias \""..tostring(v).."\" is invalid")
+        end
         table.insert(aliases, v)
       end
     end
     
-    ensure_type("path", "string")
-    ensure(not setting.path:match("%/%/"), "path \"%s\" is invalid", setting.path)
-    ensure(setting.path:match("^[%w%:_%.%/%*%(%)%|]*$"), "path \"%s\" is invalid", setting.path)
+    if type(setting.path) ~= "string" then
+      return nil, failmsg("path", "string")
+    end
+    if setting.path:match("%/%/") or not setting.path:match("^[%w%:_%.%/%*%(%)%|]*$") then
+      return nil, failmsg("path \"%s\" is invalid")
+    end
     path = setting.path:match("^(.+)/$") or setting.path
     
-    description = ensure(setting.description, "'description' is required, draconian as that may seem")
+    if not setting.description then
+      failmsg("'description' is required, draconian as that may seem")
+    end
+    description = setting.description
     
     if not setting.nargs then
       args_min, args_max = 1, 1
     elseif type(setting.nargs) == "number" then
-      local is_int = math.type and (math.type(setting.nargs) == "integer") or (math.floor(setting.nargs) == setting.nargs)
-      ensure(is_int, "field 'nargs' must be an integer, but it's a float")
+      if math.type(setting.nargs) ~= "integer" then
+        return nil, failmsg("field 'nargs' must be an integer, but it's a float")
+      end
       args_min, args_max = setting.nargs, setting.nargs
     elseif type(setting.nargs == "string") then
       args_min, args_max = setting.nargs:match("^(%d+)%s*%-%s*(%d+)$")
@@ -1364,19 +1378,30 @@ do --config
         args_max = args_min
       end
       if not args_min then
-        assert(args_min and math.floor(args_min) ~= args_min, "nargs is invalid")
+        return nil, failmsg("field 'nargs' is invalid")
       end
       args_min, args_max = tonumber(args_min), tonumber(args_max)
+      if not args_min or not args_max or math.type(args_min) ~= "integer" or math.type(args_max) ~= "integer" then
+        return nil, failmsg("field 'nargs' is invalid")
+      end
     else
-      ensure(false, "field 'nargs' must be number or string integer")
+      return nil, failmsg("field 'nargs' must be number or string integer")
     end
-    ensure(args_min <= args_max, "field 'nargs' minimum must be smaller or equal to maximum")
-    ensure(args_min >= 0, "field 'nargs' minimum must be non-negative. " .. mock("moderate"))
-    ensure(args_max >= 0, "field 'nargs' maximum must be non-negative." .. mock("moderate"))
+    if args_min > args_max then
+      return nil, failmsg("field 'nargs' minimum must be smaller or equal to maximum")
+    end
+    if args_min < 0 then
+      return nil, failmsg("field 'nargs' minimum must be non-negative")
+    end
+    if args_max < 0 then
+      return nil, failmsg("field 'nargs' maximum must be non-negative")
+    end
     
     if setting.block then
       if type(setting.block) ~= "boolean" then
-        ensure(setting.block == "optional", "block must be boolean, nil, or the string \"optional\"")
+        if setting.block ~= "optional" then
+          return nil, failmsg("field 'block' must be boolean, nil, or the string \"optional\", but is \"" .. tostring(setting.block).."\"")
+        end
       end
       block = setting.block
     else
@@ -1384,21 +1409,37 @@ do --config
     end
     
     if setting.default then
-      ensure_type("default", "string")
+      if type(setting.default) ~= "string" then
+        return nil, failmsg("default", "string")
+      end
       local default_value_parser = Parser.new(("%s %s;"):format(setting.name, setting.default), {name = setting.name .. " default value"})
       local default_parsed, err = default_value_parser:parse()
-      ensure(default_parsed, "default string invalid: %s", err)
+      if not default_parsed then
+        return nil, failmsg("default string invalid: " .. err)
+      end
       default_setting = default_parsed.block.settings[1]
       default_values = default_setting.values
-      
-      assert(default_values)
+      if not default_values then
+        return nil, failmsg("default setting values missing")
+      end
+      for i, val in ipairs(default_values) do
+        local instring, instring_err = Instring.parse(val)
+        if not instring then
+          return nil, failmsg("default setting value " .. i .. " invalid: " .. instring_err)
+        end
+        val.instring = instring
+      end
     end
     
     if setting.handler then
-      ensure(type(setting.handler) == "function", "handler must be a function." .. mock("moderate"))
+      if type(setting.handler) ~= "function" then
+        return nil, failmsg("handler", "function")
+      end
     end
     if setting.internal_handler then
-      ensure(type(setting.internal_handler) == "function", "internal_handler must be a function." .. mock("moderate"))
+      if type(setting.internal_handler) ~= "function" then
+        return nil, failmsg("internal_handler", "function")
+      end
     end
     
     local handler = {
@@ -1417,12 +1458,17 @@ do --config
       internal_handler = setting.internal_handler
     }
     
-    ensure(not self.handlers[handler.full_name], 'already exists')
+    if self.handlers[handler.full_name] then
+      return nil, failmsg("has already been registered")
+    end
     
     self.handlers[handler.full_name] = handler
     for _, alias in ipairs(handler.aliases) do
       local alias_full_name = module_name.."."..alias
-      ensure(not self.handlers[alias_full_name], 'aliased as %s already exists', alias_full_name)
+      
+      if self.handlers[alias_full_name] then
+        return nil, failmsg("aliased as \""..alias_full_name.."\" already exists")
+      end
       self.handlers[alias_full_name] = handler
     end
     
