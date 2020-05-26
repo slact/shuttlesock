@@ -396,9 +396,6 @@ static bool handle_lua_ipc_response(shuso_t *S, shuso_ipc_lua_data_t *d) {
     luaS_lua_ipc_gc_data(L, d);
     d = NULL; // don't use it anymore, it may be GCed anytime
   }
-  if(top != lua_gettop(L)) {
-    luaS_printstack(L, "yeh");
-  }
   assert(top == lua_gettop(L));
   return true;
 }
