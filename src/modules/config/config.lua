@@ -1525,7 +1525,7 @@ do --config
     local possible_vars = {}
 
     if module_name then
-      local module = require "shuttlesock.core.module".find(module)
+      local module = require "shuttlesock.core.module".find(module_name)
       if not module then
         return nil, "no such module " .. module_name .. " for variable $" .. name
       end
