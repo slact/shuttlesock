@@ -2026,7 +2026,6 @@ static int Lua_shuso_setting_value(lua_State *L) {
   size_t                            n = luaL_checkinteger(L, 2);
   shuso_setting_value_merge_type_t  mergetype = setting_instring_mergetype(L, setting, 3);
   shuso_setting_value_type_t        valtype = setting_instring_type(L, setting, 4);
-  
   if(n < 1) {
     lua_pushnil(L);
     lua_pushfstring(L, "invalid value index %d (as in lua, the indices start at 1, not 0)", n);
@@ -2040,49 +2039,50 @@ static int Lua_shuso_setting_value(lua_State *L) {
   luaL_checkstack(L, 2, NULL);
   lua_pushnil(L);
   
+  union {
+    bool boolean;
+    int  integer;
+    double number;
+    size_t size;
+    shuso_str_t string;
+    const shuso_buffer_t *buf;
+  } ret;
+  
+  //union type-punning sanity check
+  assert((void *)&ret == &ret.boolean);
+  assert((void *)&ret == &ret.integer);
+  assert((void *)&ret == &ret.number);
+  assert((void *)&ret == &ret.size);
+  assert((void *)&ret == &ret.string);
+  assert((void *)&ret == &ret.buf);
+  
+  bool ok = shuso_setting_value(S, setting, n-1, mergetype, valtype, &ret);
+  if(!ok) {
+    lua_pushnil(L);
+    lua_pushliteral(L, "failed to get setting value for unknown reasons");
+    return 2;
+  }
+  
   switch(valtype) {
-    case SHUSO_SETTING_BOOLEAN: {
-      bool ret;
-      if(shuso_setting_boolean(S, setting, n-1, &ret)) {
-        lua_pushboolean(L, ret);
-      }
+    case SHUSO_SETTING_BOOLEAN: 
+      lua_pushboolean(L, ret.boolean);
       break;
-    }
-    case SHUSO_SETTING_INTEGER: {
-      int ret;
-      if(shuso_setting_integer(S, setting, n-1, &ret)) {
-        lua_pushinteger(L, ret);
-      }
+    case SHUSO_SETTING_INTEGER:
+      lua_pushinteger(L, ret.integer);
       break;
-    }
-    case SHUSO_SETTING_NUMBER: {
-      double ret;
-      if(shuso_setting_number(S, setting, n-1, &ret)) {
-        lua_pushnumber(L, ret);
-      }
+    case SHUSO_SETTING_NUMBER:
+      lua_pushnumber(L, ret.number);
       break;
-    }
-    case SHUSO_SETTING_SIZE: {
-      size_t ret;
-      if(shuso_setting_size(S, setting, n-1, &ret)) {
-        lua_pushinteger(L, ret);
-      }
+    case SHUSO_SETTING_SIZE:
+      lua_pushinteger(L, ret.size);
       break;
-    }
-    case SHUSO_SETTING_STRING: {
-      shuso_str_t ret;
-      if(shuso_setting_string(S, setting, n-1, &ret)) {
-        lua_pushlstring(L, ret.data, ret.len);
-      }
+    case SHUSO_SETTING_STRING:
+      lua_pushlstring(L, ret.string.data, ret.string.len);
       break;
-    }
-    case SHUSO_SETTING_BUFFER: {
-      const shuso_buffer_t *ret;
-      if(shuso_setting_buffer(S, setting, n-1, &ret)) {
-        lua_pushlightuserdata(L, (void *)ret);
-      }
+    case SHUSO_SETTING_BUFFER:
+      //TODO: wrap this into a buffer object or some such
+      lua_pushlightuserdata(L, (void *)ret.buf);
       break;
-    }
   }
   return 1;
 }
