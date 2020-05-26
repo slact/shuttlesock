@@ -129,11 +129,12 @@ int luaS_passthru_error_handler(lua_State *L) {
 bool luaS_pcall(lua_State *L, int nargs, int nresults) {
 #ifndef NDEBUG
   if(!lua_isfunction(L, -(nargs+1))) {
+    luaS_printstack(L, "luaS_pcall on not-a-function");
     shuso_log_error(shuso_state(L), "nargs: %i", nargs);
     assert(lua_isfunction(L, -(nargs+1)));
   }
 #endif
-  luaL_checkstack(L, 2, NULL);
+  luaL_checkstack(L, nresults+2, NULL);
   lua_pushcfunction(L, luaS_traceback_error_handler);
   lua_insert(L, 1);
   

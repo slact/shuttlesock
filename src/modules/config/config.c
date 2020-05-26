@@ -105,9 +105,11 @@ bool luaS_pcall_config_method(lua_State *L, const char *method_name, int nargs, 
 
 bool shuso_config_register_setting(shuso_t *S, shuso_module_setting_t *setting, shuso_module_t *module) {
   lua_State *L = S->lua.state;
+  int top = lua_gettop(L);
   lua_newtable(L);
   
   if(!setting->name) {
+    lua_settop(L, top);
     return shuso_set_error(S, "module %s setting %p name cannot be NULL", module->name, setting);
   }
   
@@ -118,6 +120,7 @@ bool shuso_config_register_setting(shuso_t *S, shuso_module_setting_t *setting, 
   lua_setfield(L, -2, "path");
   
   if(!setting->nargs) {
+    lua_settop(L, top);
     return shuso_set_error(S, "module %s setting %s nargs field cannot be NULL", module->name, setting->name);
   }
   lua_pushstring(L, setting->nargs);
@@ -138,8 +141,11 @@ bool shuso_config_register_setting(shuso_t *S, shuso_module_setting_t *setting, 
   lua_pushstring(L, module->name);
   lua_insert(L, -2);
   if(!luaS_pcall_config_method(L, "register_setting", 2, 2)) {
+    lua_settop(L, top);
     return false;
   }
+  lua_pop(L, 2);
+  assert(lua_gettop(L) == top);
   return true;
 }
 
