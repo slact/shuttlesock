@@ -984,10 +984,7 @@ do --config
     __name="config"
   }
   
-  
   function config:parse(str, opt)
-    print("parse string:\n ", str, "\nFIN")
-    
     assert(type(str) == "string")
     opt = opt or {}
     assert(type(opt) == "table")
