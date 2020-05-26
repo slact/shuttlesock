@@ -88,22 +88,14 @@ function block:setting(name)
   setting = Config.setting(setting_ptr)
   
   if self.path ~= setting.path then
-    --this is an inherited setting. make it so
-    local inherited = setmetatable({}, getmetatable(setting))
+    --this is an inherited setting. mark it as such
+    local inherited_setting = setmetatable({}, getmetatable(setting))
+    inherited_setting.inherited = true
+    
     for k,v in pairs(setting) do
-      if k == "values_cache" then
-        local vals = {
-          default = v.default,
-          inherited = #v["local"] > 0  and v["local"] or v["inherited"],
-          ["local"] = {},
-          merged = v.merged
-        }
-        rawset(inherited, k, vals)
-      else
-        rawset(inherited, k, v)
-      end
+      rawset(inherited_setting, k, v)
     end
-    setting = inherited
+    setting = inherited_setting
   end
   
   self.settings_cache[name] = setting
@@ -170,25 +162,11 @@ function Config.setting(ptr)
     self.block = Config.block(block_ptr)
   end
   
-  self.values_cache = {}
-  
-  for _, vtype in ipairs{"merged", "local", "inherited", "default"} do
-    local values = {}
-    local valcount = Core.config_setting_values_count(ptr, vtype)
-    values.n = valcount
-    for i=1,valcount do
-      table.insert(values, assert(Core.config_setting_value(ptr, i, vtype)))
-    end
-    self.values_cache[vtype] = values
-  end
-  
-  settings_cache[ptr]=self
-  
   return self
 end
 
 
-local possible_value_types = {
+local possible_merge_types = {
   ["merged"] = true,
   ["local"] = true,
   ["inherited"] = true,
@@ -205,7 +183,7 @@ local possible_data_types = {
 }
 
 function setting:each_value(...)
-  local first, last, data_type, value_type
+  local first, last, data_type, merge_type
   for _, v in ipairs({...}) do
     if type(v) == "number" then
       if not first then
@@ -218,8 +196,8 @@ function setting:each_value(...)
     elseif type(v) == "string" then
       if not data_type then
         data_type = v
-      elseif not value_type then
-        value_type = v
+      elseif not merge_type then
+        merge_type = v
       else
         error("unexpected string argument")
       end
@@ -228,13 +206,9 @@ function setting:each_value(...)
     end
   end
   
-  local vals = self.values_cache[value_type]
-  if vals == nil then
-    return function() end
-  end
   first = first or 1
-  local valcount = vals.n
-  if last > valcount then
+  local valcount = self:values_count(merge_type)
+  if not last or last > valcount then
     last = valcount
   end
   local index = first
@@ -242,52 +216,72 @@ function setting:each_value(...)
     if index > last then
       return nil
     end
-    local val = self:value(index, data_type, value_type)
+    local val = self:value(index, data_type, merge_type)
     index = index+1
     return index-1, val
   end
   
 end
 
-function setting:value(n, data_type, value_type)
-  if type(n) == "string" and not value_type then
-    n, data_type, value_type = nil, n, data_type
+local function maybe_inherited_mergetype(self, requested_mergetype)
+  if self.inherited then --this is an inherited setting, therefore the merge_type shifts over a little
+    if requested_mergetype == "local" then
+      --nope, no local values available, 'cause this setting was entirely inherited
+      return nil, "this setting is inherited"
+    elseif requested_mergetype == "inherited" and Core.config_setting_values_count(self.ptr, "local") > 0 then
+      return "local"
+    end
   end
-  local val
+  return requested_mergetype
+end
+
+function setting:values_count(merge_type)
+  merge_type = merge_type or "merged"
+  if not rawget(possible_merge_types, merge_type) then
+    error("invalid value merge type " .. tostring(merge_type))
+  end
+  merge_type = maybe_inherited_mergetype(self, merge_type)
+  if not merge_type then
+    return 0
+  end
+  return assert(Core.config_setting_values_count(self.ptr, merge_type))
+end
+
+function setting:value(n, data_type, merge_type)
+  if type(n) == "string" and not merge_type then
+    n, data_type, merge_type = nil, n, data_type
+  end
   
-  if not value_type and rawget(possible_value_types, data_type) then
-    data_type, value_type = nil, data_type
+  if not merge_type and rawget(possible_merge_types, data_type) then
+    data_type, merge_type = nil, data_type
   end
-  if value_type == "defaults" then
+  if merge_type == "defaults" then
     -- both are permitted because in C this is called 'defaults', but
     -- it's plural only because the singular 'default' is a reserved keyword
-    value_type = "default"
+    merge_type = "default"
   end
   
   n = n or 1
   data_type = data_type or "string"
-  value_type = value_type or "merged"
+  merge_type = merge_type or "merged"
   
   if not rawget(possible_data_types, data_type) then
     error("bad data type " .. tostring(data_type))
   end
-  if not rawget(possible_value_types, value_type) then
-    error("bad value type " .. tostring(value_type))
+  if not rawget(possible_merge_types, merge_type) then
+    error("bad value type " .. tostring(merge_type))
   end
   
-  val = self.values_cache[value_type]
-  if not val then
-    return nil, "invalid value type' " .. tostring(value_type) .. "'"
+  local merge_type_err
+  merge_type, merge_type_err = maybe_inherited_mergetype(self, merge_type)
+  if not merge_type then
+    return nil, merge_type_err
   end
   
-  val = val[n]
+  assert(type(self.ptr) == "userdata")
+  local val, err = Core.config_setting_value(self.ptr, n, merge_type, data_type)
   if not val then
-    return nil, "invalid value index " .. tostring(n)
-  end
-  
-  val = val[data_type]
-  if not val then
-    return nil, "invalid value data type' " .. tostring(value_type) .. "'"
+    return nil, (err or "unknown error retrieving setting value")
   end
   
   return val
