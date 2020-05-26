@@ -168,8 +168,8 @@ bool shuso_config_system_initialize(shuso_t *S) {
   return true;
 }
 
-static shuso_setting_t *lua_setting_to_c_struct(shuso_t *S, lua_State *L, int sidx) {
-  sidx = lua_absindex(L, sidx);
+static shuso_setting_t *lua_setting_to_c_struct(shuso_t *S, lua_State *L) {
+  int sidx = lua_gettop(L);
   shuso_setting_t *setting = shuso_stalloc(&S->stalloc, sizeof(*setting));
   if(!setting) {
     shuso_set_error(S, "failed to alloc config setting");
@@ -278,7 +278,10 @@ static shuso_setting_t *lua_setting_to_c_struct(shuso_t *S, lua_State *L, int si
     }
   }
   
-  luaS_config_pointer_ref(L, setting); //pops the setting table too
+  lua_pushvalue(L, -1);
+  luaS_config_pointer_ref(L, setting); //pops the setting table too, 
+  //but we just pushed a copy onto the stack, this way the stack is the same as at the start of this function
+  assert(sidx == lua_gettop(L));
   return setting;
 }
 
