@@ -980,9 +980,9 @@ do --config
     __index=config,
     __gxcopy_metatable = function()
       return require("shuttlesock.core.config").metatable
-    end
+    end,
+    __name="config"
   }
-  
   
   
   function config:parse(str, opt)
