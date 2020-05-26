@@ -2032,7 +2032,7 @@ static int Lua_shuso_setting_value(lua_State *L) {
     lua_pushfstring(L, "invalid value index %d (as in lua, the indices start at 1, not 0)", n);
     return 2;
   }
-  else if(n >= shuso_setting_values_count(S, setting, mergetype)) { //n is 1-indexed, not 0. remember that.
+  else if(n > shuso_setting_values_count(S, setting, mergetype)) { //n is 1-indexed, not 0. remember that.
     lua_pushnil(L);
     lua_pushfstring(L, "no value at index %d", n);
     return 2;
