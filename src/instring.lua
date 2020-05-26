@@ -63,7 +63,7 @@ function Token.escape(str, cur)
 end
   
 function Token.simple_variable(str, cur)
-  local m = str:match("^%$(%w+)", cur)
+  local m = str:match("^%$([%w_]+)", cur)
   local start = cur
   if not m then
     return nil
@@ -124,13 +124,15 @@ function Instring.parse(setting_value)
   local str = setting_value.raw
   local ok, res, len
   
+  local tokens = {}
+  
   if valtype == "literal" or (valtype == "string" and setting_value.quote_char == "'") then
     ok, res, len = Token.literal(str, 1, true)
     if not ok then
       return nil, (res or "not a literal value"), 1, len
     end
-    return { res }
-  elseif type == "variable" then
+    table.insert(tokens, res)
+  elseif valtype == "variable" then
     ok, res, len = Token.simple_variable(str, 1)
     if ok == nil then
       ok, res, len = Token.bracketed_variable(str, 1)
@@ -138,10 +140,9 @@ function Instring.parse(setting_value)
     if not ok then
       return nil, (res or "not a variable"), 1, len
     end
-    return { res }
+    table.insert(tokens, res)
   else
-    assert(valtype == "string" or valtype == "value")
-    local tokens = {}
+    assert(valtype == "string" or valtype == "value", "unexpected valtype " .. valtype)
     local cur = 1
     while cur <= #str do
       --print("match", str:sub(cur))
@@ -173,13 +174,12 @@ function Instring.parse(setting_value)
       end
       cur = cur + len
     end
-    
-    local instring = {
-      tokens = tokens
-    }
-    
-    return setmetatable(instring, Instring.metatable)
   end
+  
+  local instring = {
+    tokens = tokens
+  }
+  return setmetatable(instring, Instring.metatable)
 end
 
 function Instring.tonumber(str)
