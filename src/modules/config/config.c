@@ -497,7 +497,7 @@ bool shuso_setting_value(shuso_t *S, const shuso_setting_t *setting, size_t nval
       return false;
   }
   
-  if(!instrings || instrings->count > nval) {
+  if(!instrings || instrings->count <= nval) {
     return false;
   }
   shuso_instring_t *instring = &instrings->array[nval];
