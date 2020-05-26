@@ -541,7 +541,7 @@ do --parser
   end
   
   function parser:match_variable()
-    local var = self:match("^%$([%w%.%_]*)")
+    local var = self:match("^(%$[%w%.%_]*)")
     if not var then
       return false
     end
