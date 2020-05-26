@@ -1017,12 +1017,12 @@ do --config
     
     --handle variables
     for setting in self:each_setting() do
-      for i, val in ipairs(setting.values or {}) do
+      for _, val in ipairs(setting.values or {}) do
         local instring, ins_err = Instring.parse(val)
         if not instring then
           return nil, ins_err
         end
-        setting.values[i].instring = instring
+        val.instring = instring
       end
     end
     
@@ -1717,7 +1717,11 @@ do --config
     local vals = self:setting_values(setting, kind)
     local instrings = {}
     for _, v in ipairs(vals) do
-      assert(Instring.is_instring(v.instring))
+      assert(v.instring, "instring missing for value")
+      if not Instring.is_instring(v.instring) then
+        require"mm"(v)
+        error("not an instring")
+      end
       table.insert(instrings, v.instring)
     end
     return instrings
