@@ -440,7 +440,7 @@ bool allocd_ptr_value_correct(char *ptr, size_t sz) {
   return true;
 }
 
-void ___assert_luaL_dofile_args(lua_State *L, const char *filename, int nargs) {  
+void ___assert_luaL_dofile_args(lua_State *L, const char *filename, int nargs) {
   lua_getglobal(L, "string");
   lua_getfield(L, -1, "format");
   lua_remove(L, -2);

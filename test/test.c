@@ -166,65 +166,6 @@ describe(modules) {
   }
 }
 
-static bool config_test_a_setting_init_config(shuso_t *S, shuso_module_t *module, shuso_setting_block_t *block) {
-  return true;
-}
-
-describe(config) {
-  static shuso_module_t    test_module;
-  static test_runcheck_t  *chk = NULL;
-  static shuso_t          *S = NULL;
-  before_each() {
-    S = shusoT_create(&chk, 25);
-    test_module = (shuso_module_t ){
-      .name = "tm",
-      .version="0.0.0",
-    };
-  }
-  after_each() {
-    if(S) {
-      shusoT_destroy(S, &chk);
-    }
-  }
-  
-  test("path matching") {
-    assert_luaL_dofile(S->lua.state, "config_path_matching.lua");
-    shuso_destroy(S);
-    S = NULL;
-  }
-  
-  test("a setting please") {
-    test_module.initialize_config = config_test_a_setting_init_config;
-    test_module.settings = (shuso_module_setting_t []){
-      { 
-        .name="foobar",
-        .path="/",
-        .description="yello",
-        .nargs="1..30",
-        .default_value="42",
-        .block=false
-      },
-      SHUTTLESOCK_SETTINGS_END
-    };
-    shuso_add_module(S, &test_module);
-    shuso_configure_string(S, "a string", " \
-      foobar 10 11 12 13 \"14\"; \n\
-      blorp { \n\
-        shmoo { \n\
-          blorp { \n\
-            flarb 99; \n\
-            #yeah \n\
-            foobar 12; \n\
-          }\n\
-        }\n\
-      }\n\
-    ");
-    shuso_configure_finish(S);
-    shusoT_run_test(S, SHUTTLESOCK_MANAGER, stop_shuttlesock, NULL, (void *)(intptr_t)SHUTTLESOCK_MANAGER);
-    assert_shuso_ran_ok(S);
-  }
-}
-
 int luaS_test_userdata_gxcopy_save(lua_State *L) {
   int *ud = (void *)lua_topointer(L, 1);
   lua_pushlightuserdata(L, ud);
@@ -580,12 +521,6 @@ describe(lua_api) {
       assert_shuso_error(S, "failed to configure.*failed to initialize module.* contains a coroutine");
     }
 
-    test("module with config settings") {
-      assert_luaL_dofile(S->lua.state, "module_config_settings.lua");
-      shuso_run(S);
-      assert_shuso_ran_ok(S);
-    }
-    
     test("module publishing events") {
       assert_luaL_dofile(S->lua.state, "module_publishing_events.lua");
       assert_shuso(S, shuso_configure_finish(S));
@@ -763,6 +698,136 @@ describe(lua_api) {
     }
   }
 }
+
+
+#define assert_conftest_ok(S, confstring) \
+  luaL_checkstack(S->lua.state, 10, "no stack space"); \
+  lua_pushstring(S->lua.state, confstring); \
+  assert_luaL_dofile_args(S->lua.state, "test_config.lua", 2); \
+  assert_shuso(S, )
+
+#define assert_conftest_fail(S, confstring, error_match) \
+  luaL_checkstack(S->lua.state, 10, "no stack space"); \
+  lua_pushstring(S->lua.state, confstring); \
+  assert_luaL_dofile_args(S->lua.state, "test_config.lua", 2); \
+  assert_shuso_error(S, error_match)
+  
+
+describe(configuration) {
+    static shuso_t          *S = NULL;
+  static test_runcheck_t  *chk = NULL;
+  before_each() {
+    S = shusoT_create(&chk, 5555.0);
+    assert_luaL_dofile(S->lua.state, "config_test_module.lua");
+  }
+  after_each() {
+    if(S) shusoT_destroy(S, &chk);
+  }
+  
+  subdesc(setting_paths) {
+    test("generic path matching") {
+      assert_luaL_dofile(S->lua.state, "config_path_matching.lua");
+    }
+    test("unmatched path") {
+      assert_conftest_fail(S, 
+        "block2 { foo val; }",
+        "unknown setting foo"
+      );
+    }
+    test("matched path") {
+      assert_conftest_ok(S, 
+        "block3 { foo val; }"
+      );
+    }
+  }
+  
+  subdesc(blocks) {
+    test("missing block") {
+      assert_conftest_fail(S, 
+        "root_config \"foo\";",
+        "\"root_config\".+ missing block"
+      );
+    }
+    test("unexpected block") {
+      assert_conftest_fail(S, 
+        "bar \"foo\" {}",
+        "\"bar\".+ unexpected block"
+      );
+    }
+    test("semicolon after unexpected block") {
+      assert_conftest_fail(S, 
+        "bar \"foo\" {};",
+        "unexpected \";\""
+      );
+    }
+    test("semicolon after expected block") {
+      assert_conftest_fail(S, 
+        "root_config \"foo\" {};",
+        "unexpected \";\""
+      );
+    }
+    test("optional block present") {
+      assert_conftest_ok(S, 
+        "block_maybe {};"
+      );
+    }
+    test("optional block absent") {
+      assert_conftest_ok(S, 
+        "block_maybe;"
+      );
+    }
+  }
+  
+  subdesc(heredocs) {
+    test("many heredocs on the same line") {
+      assert_luaL_dofile_args(S->lua.state, "test_config_heredocs_valid.lua", 1);
+    }
+    test("unterminated heredoc with no body") {
+      assert_conftest_fail(S, 
+        "bar <<~HEY_HEREDOC;",
+        "unexpected end .* \"HEY_HEREDOC\""
+      );
+    }
+    test("unterminated heredoc with body") {
+      assert_conftest_fail(S, 
+        "bar <<~HEY_HEREDOC;\nwhat\nohno",
+        "unterminated heredoc.* HEY_HEREDOC"
+      );
+    }
+  }
+  
+  subdesc(strings) {
+    test("string values") {
+      assert_luaL_dofile_args(S->lua.state, "test_config_string_values.lua", 1);
+    }
+    test("unterminated string due to EOF") {
+      assert_conftest_fail(S, 
+        "bar \"oh look string",
+        "unterminated string"
+      );
+    }
+    test("unterminated string with stuff after it") {
+      assert_conftest_fail(S, 
+        "bar \"oh look string;\nbar hey;",
+        "unterminated string"
+      );
+    }
+  }
+  
+  subdesc(value_types) {
+    test("all possible value types") {
+      assert_luaL_dofile_args(S->lua.state, "test_config_value_types.lua", 1);
+    }
+  }
+  
+  test("module with a bunch of config settings") {
+    assert_luaL_dofile_args(S->lua.state, "test_config_general.lua", 1);
+    shuso_run(S);
+    assert_shuso_ran_ok(S);
+  }
+}
+
+
 #define IPC_ECHO 130
 
 typedef struct {

@@ -119,6 +119,7 @@ bool shuso_config_register_setting(shuso_t *S, shuso_module_setting_t *setting, 
   lua_pushstring(L, setting->path);
   lua_setfield(L, -2, "path");
   
+  
   if(!setting->nargs) {
     lua_settop(L, top);
     return shuso_set_error(S, "module %s setting %s nargs field cannot be NULL", module->name, setting->name);
@@ -135,6 +136,24 @@ bool shuso_config_register_setting(shuso_t *S, shuso_module_setting_t *setting, 
     lua_pushstring(L, setting->default_value);
     lua_setfield(L, -2, "default");
   }
+  
+  if(setting->aliases) {
+    lua_pushstring(L, setting->aliases);
+    lua_setfield(L, -2, "aliases");
+  }
+  
+  switch(setting->block) {
+    case 0:
+    case 1:
+      lua_pushboolean(L, setting->block);
+      break;
+    case SHUSO_SETTING_BLOCK_OPTIONAL:
+      lua_pushstring(L, "optional");
+      break;
+    default:
+      return shuso_set_error(S, "module %s setting %s 'block' must be 0, 1, or SHUSO_SETTING_BLOCK_OPTIONAL", module->name, setting->name);
+  }
+  lua_setfield(L, -2, "block");
   
   //register_setting parameters
   
@@ -289,7 +308,6 @@ bool shuso_config_system_generate(shuso_t *S) {
   lua_State *L = S->lua.state;
   int top = lua_gettop(L);
   luaL_checkstack(L, 5, NULL);
-  
   luaS_push_config_field(L, "parsed");
   if(!lua_toboolean(L, -1)) {
     if(!shuso_configure_string(S, "empty default", "")) {
@@ -571,48 +589,43 @@ bool shuso_setting_string_matches(shuso_t *S, shuso_setting_t *setting, int n, c
 
 bool shuso_configure_file(shuso_t *S, const char *path) {
   lua_State                   *L = S->lua.state;
-  shuso_config_module_ctx_t   *ctx = S->common->module_ctx.config;
   
-  lua_pushcfunction(L, luaS_passthru_error_handler);
-  int errhandler_index = lua_gettop(L);
-  
-  luaS_get_config_pointer_ref(L, ctx);
-  lua_getfield(L, -1, "load");
-  lua_insert(L, -2);
   lua_pushstring(L, path);
-  int ret = lua_pcall(L, 2, 0, errhandler_index);
-  lua_remove(L, errhandler_index);
-  if(ret != LUA_OK) {
-    shuso_set_error(S, "%s", lua_tostring(L, -1));
-    lua_pop(L, 1);
+  if(!luaS_pcall_config_method(L, "load", 2, 2)) {
+    //error should have been set by luaS_pcall
     return false;
   }
+  if(lua_isnil(L, -2)) {
+    const char *err = lua_isstring(L, -1) ? lua_tostring(L, -1) : "unknown error loading config file"; 
+    shuso_set_error(S, "%s", err);
+    lua_pop(L, 2);
+    return false;
+  }
+  lua_pop(L, 2);
   return true;
 }
 
 bool shuso_configure_string(shuso_t *S,  const char *str_title, const char *str) {
-    lua_State                   *L = S->lua.state;
-  shuso_config_module_ctx_t   *ctx = S->common->module_ctx.config;
+  lua_State                   *L = S->lua.state;
   
-  lua_pushcfunction(L, luaS_passthru_error_handler);
-  int errhandler_index = lua_gettop(L);
-  
-  luaS_get_config_pointer_ref(L, ctx);
-  lua_getfield(L, -1, "parse");
-  lua_insert(L, -2);
   lua_pushstring(L, str);
+  
+  //opt table
   lua_newtable(L);
-  if(str_title) {
-    lua_pushstring(L, str_title);
-    lua_setfield(L, -2, "name");
-  }
-  int ret = lua_pcall(L, 3, 0, errhandler_index);
-  lua_remove(L, errhandler_index);
-  if(ret != LUA_OK) {
-    shuso_set_error(S, "%s", lua_tostring(L, -1));
-    lua_pop(L, 1);
+  lua_pushstring(L, str_title);
+  lua_setfield(L, -2, "name");
+  
+  if(!luaS_pcall_config_method(L, "parse", 2, 2)) {
+    //error should have been set by luaS_pcall
     return false;
   }
+  if(lua_isnil(L, -2)) {
+    const char *err = lua_isstring(L, -1) ? lua_tostring(L, -1) : "unknown error configuring from string"; 
+    shuso_set_error(S, "%s", err);
+    lua_pop(L, 2);
+    return false;
+  }
+  lua_pop(L, 2);
   return true;
 }
 

@@ -172,6 +172,7 @@ static inline void *shuso_stalloc_with_alignment(shuso_stalloc_t *st, size_t sz,
     if((page = add_page(st)) == NULL) {
       return NULL;
     }
+    assert(st->page.last == page);
     //new page is aligned for sure
 #ifdef SHUTTLESOCK_STALLOC_TRACK_SPACE
     st->space.used += sz;

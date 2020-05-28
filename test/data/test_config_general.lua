@@ -1,52 +1,8 @@
+local testmod = ...
 local Module = require "shuttlesock.module"
 local Watcher = require "shuttlesock.watcher"
 local Process = require "shuttlesock.process"
 local Shuso = require "shuttlesock"
-
-local testmod = Module.new {
-  name= "lua_testmod",
-  version = "0.0.0",
-  
-  test_initcfg_times = 0
-}
-
-testmod.settings = {
-  { name="foobar",
-    path="yeet/",
-    description="i dunno",
-    nargs=2,
-    default_value='"hey" 121',
-    block=true
-  },
-  { name="root_config",
-    path="/",
-    description="hmm",
-    nargs=1,
-    default_value='"hey"',
-    block=true
-  },
-  { name="foo",
-    path="block3/",
-    description="inside block3",
-    nargs="1-4",
-    default_value="10 20"
-  },
-  { name="bar",
-    path="**",
-    description="anything goes",
-    nargs="1-10",
-    default_value="11 22 33 44",
-    block=false
-  },
-  { name="ookay",
-    path="**",
-    description="anything goes",
-    nargs="1-10",
-    default_value="1 2 3 4",
-    block=false
-  }
-
-}
 
 testmod:subscribe("core:manager.workers_started", function()
   assert(testmod.test_initcfg_times == 4)
@@ -66,6 +22,7 @@ function testmod:initialize_config(block)
     assert(assert(setting:value()) == "yeep")
     assert(setting:value("local") == "yeep")
     assert(setting:value(1) == "yeep")
+    assert(setting:value(1, "string") == "yeep")
     assert(setting:value(1, "string", "default") == "hey")
     testmod.test_initcfg_times = testmod.test_initcfg_times + 1
   elseif block.name=="block1" then
@@ -107,6 +64,8 @@ function testmod:initialize_config(block)
     local intval = foo:value(1, "integer")
     assert(math.type(intval) == "integer")
     testmod.test_initcfg_times = testmod.test_initcfg_times + 1
+  elseif block.name == "root_config" then
+    assert(#block:settings() == 0)
   else
     error("unexpected block name "..tostring(block.name))
   end
@@ -116,7 +75,7 @@ assert(testmod:add())
 
 local config = 
 [[
-  root_config "yeep";
+  root_config "yeep" {}
   #beeep
   block1 {
     bar block1_1 block1_2;

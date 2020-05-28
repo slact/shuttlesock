@@ -12,7 +12,7 @@ local function mm_setting(setting)
     cpy[k]=v
   end
   cpy.parent = setting.parent and setting.parent.name or "--none--"
-  cpy.block = "..."
+  cpy.block = cpy.block and "..." or "--none--"
   mm(cpy)
 end
 
@@ -404,23 +404,23 @@ do --parser
       token_count = token_count + 1
     end
     self.token_count = token_count
-  
     if self:error() then
       return nil, self:error()
     end
     local unexpected_end
     
     if self.top ~= root_top then
-      require "shuttlesock.core".raise_SIGABRT()
       if self:in_setting() then
-        unexpected_end = ";"
+        unexpected_end = "\";\""
       elseif self:in_block()then
-        unexpected_end = "}"
+        unexpected_end = "\"}\""
       end
+    elseif #self.heredoc > 0 then
+      unexpected_end = "heredoc end \"" .. self.heredoc[#self.heredoc].label .. "\""
     end
     
     if unexpected_end then
-      return nil, self:error(("unexpected end of config %s, expected \"%s\""):format(self.is_file and "file" or "string", unexpected_end), self.top)
+      return nil, self:error(("unexpected end of config %s, expected %s"):format(self.is_file and "file" or "string", unexpected_end), self.top)
     end
     
     self:pop_block() --pop root block
@@ -468,8 +468,10 @@ do --parser
       repeat until not (self:skip_space() or self:skip_comment())
       local token, err = self:next_token()
       if not token then
-        self:error(err)
-        return nil
+        if err then
+          self:error(err)
+        end
+        return nil, err
       end
       return token
     end
@@ -569,12 +571,12 @@ do --parser
   end
   
   function parser:match_setting_name()
-    if not self:match("^[^%s]+") then
-      if self:match("^;") then
-        return nil, "unexpected \";\""
-      elseif self:match("^{") then
-        return nil, "unexpected \"{\""
-      elseif self:match("^%S+") then
+    if self:match("^;") then
+      return nil, "unexpected \";\""
+    elseif self:match("^{") then
+      return nil, "unexpected \"{\""
+    elseif not self:match("^[^%s$;]+") then
+      if self:match("^%S+") then
         return nil, "invalid config setting name \"" .. self:match() .. "\""
       else
         return nil, "expected config setting name"
@@ -693,7 +695,7 @@ do --parser
     local body_close_pattern = "^.*\n"..endspaces..heredoc.label:gsub("([^%w])", "%%%1")
     
     local body_with_end = self:match(body_close_pattern)
-    if not body_close_pattern then
+    if not body_with_end then
       return nil, "unterminated heredoc " .. heredoc.label
     end
     
@@ -1221,29 +1223,51 @@ do --config
   end
   
   function config:handle(handler_name, context)
-    for setting in self:each_setting(context) do
-      local ok, handler, err
-      handler, err = self:find_handler_for_setting(setting)
-      
-      if handler and (not handler_name or handler_name == handler.full_name) then
-        if handler.handler then
-          ok, err = handler.handler(setting.values, handler.default)
-        elseif handler.internal_handler then
-          ok, err = handler.internal_handler(setting, handler.default, self)
-        else
-          ok = true
-        end
-        setting.handled_by = handler.full_name
+    local function handler_errmsg(setting, msg, no_err_prefix)
+      local err_prefix
+      if no_err_prefix then
+        err_prefix = ""
       else
-        ok = true
+        err_prefix = "error handling \""..(setting.full_name or setting.name).."\" setting"
       end
-      if not ok then
-        local err_prefix = "error handling \""..(setting.full_name or setting.name).."\" setting"
-        local parser = self.parsers[setting.parser_index]
-        if parser then
-          return nil, parser:error(err_prefix, setting.position.first) .. ": ".. (err or "unspecified error")
-        else
-          return nil, err_prefix .. ": ".. (err or "unspecified error")
+      local parser = self.parsers[setting.parser_index]
+      if parser then
+        return parser:error(err_prefix, setting.position.first) .. ": ".. (msg or "unspecified error")
+      else
+        return err_prefix .. ": ".. (msg or "unspecified error")
+      end
+    end
+    
+    for setting in self:each_setting(context) do
+      local handler, err = self:find_handler_for_setting(setting)
+      if not handler then
+        if not handler_name then
+          return nil, handler_errmsg(setting, err or "unknown setting", true)
+        end
+      elseif not handler_name or handler_name == handler.full_name then
+        local ok, handler_err = true, nil
+        if handler.handler then
+          ok, handler_err = handler.handler(setting.values, handler.default)
+        elseif handler.internal_handler then
+          ok, handler_err = handler.internal_handler(setting, handler.default, self)
+        end
+        if not ok then
+          return nil, handler_errmsg(setting, tostring(handler_err))
+        end
+        
+        setting.handled_by = handler.full_name
+      
+        if #setting.values < handler.nargs_min then
+          return nil, handler_errmsg(setting, "too few arguments, must have at least " .. handler.nargs_min)
+        end
+        if #setting.values > handler.nargs_max then
+          return nil, handler_errmsg(setting, "too many arguments, must have at most " .. handler.nargs_min)
+        end
+        if handler.block == true and not setting.block then
+          return nil, handler_errmsg(setting, "missing block")
+        end
+        if not handler.block and setting.block then
+          return nil, handler_errmsg(setting, "unexpected block")
         end
       end
     end
@@ -1328,10 +1352,17 @@ do --config
     name = setting.name
     
     if setting.aliases then
-      if type(setting.aliases) ~= "table" then
+      local setting_aliases = setting.aliases
+      if type(setting.aliases) == "string" then
+        setting_aliases = {}
+        for v in setting.aliases:gmatch("[^%s]+") do
+          table.insert(setting_aliases, v)
+        end
+      elseif type(setting.aliases) ~= "table" then
         return nil, failmsg("aliases", "table")
       end
-      for k, v in pairs(setting.aliases) do
+      
+      for k, v in pairs(setting_aliases) do
         if type(k) ~= "number" then
           return nil, failmsg("field 'aliases' must be a number-indexed table")
         end
@@ -1719,7 +1750,6 @@ do --config
     for _, v in ipairs(vals) do
       assert(v.instring, "instring missing for value")
       if not Instring.is_instring(v.instring) then
-        require"mm"(v)
         error("not an instring")
       end
       table.insert(instrings, v.instring)

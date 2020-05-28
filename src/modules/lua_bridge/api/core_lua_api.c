@@ -156,7 +156,10 @@ static int Lua_shuso_configure_string(lua_State *L) {
 static int Lua_shuso_configure_finish(lua_State *L) {
   shuso_t *S = shuso_state(L);
   if(!shuso_configure_finish(S)) {
-    return luaS_shuso_error(L);
+    lua_pushnil(L);
+    luaS_push_shuso_error(L);
+    luaS_printstack(L, "yeehaw");
+    return 2;
   }
   lua_pushboolean(L, 1);
   return 1;
@@ -165,7 +168,9 @@ static int Lua_shuso_configure_finish(lua_State *L) {
 static int Lua_shuso_destroy(lua_State *L) {
   shuso_t *S = shuso_state(L);
   if(!shuso_destroy(S)) {
-    return luaS_shuso_error(L);
+    lua_pushnil(L);
+    luaS_push_shuso_error(L);
+    return 2;
   }
   lua_pushboolean(L, 1);
   return 1;
@@ -174,7 +179,9 @@ static int Lua_shuso_destroy(lua_State *L) {
 static int Lua_shuso_run(lua_State *L) {
   shuso_t *S = shuso_state(L);
   if(!shuso_run(S)) {
-    return luaS_shuso_error(L);
+    lua_pushnil(L);
+    luaS_push_shuso_error(L);
+    return 2;
   }
   lua_pushboolean(L, 1);
   return 1;
@@ -206,7 +213,9 @@ static int Lua_shuso_stop(lua_State *L) {
   shuso_t       *S = shuso_state(L);
   shuso_stop_t   lvl = stop_level_string_arg_to_enum(L, "ask", 1);
   if(!shuso_stop(S, lvl)) {
-    return luaS_shuso_error(L);
+    lua_pushnil(L);
+    luaS_push_shuso_error(L);
+    return 2;
   }
   lua_pushboolean(L, 1);
   return 1;
@@ -287,15 +296,24 @@ static int Lua_shuso_set_log_fd(lua_State *L) {
   shuso_t       *S = shuso_state(L);
   luaL_Stream   *io = luaL_checkudata(L, 1, LUA_FILEHANDLE);
   int fd = fileno(io->f);
+  const char *err = NULL;
+  
   if(fd == -1) {
-    return luaL_error(L, "invalid file");
+    err = "invalid file";
   }
   int fd2 = dup(fd);
   if(fd2 == -1) {
-    return luaL_error(L, "couldn't dup file");
+    err = "couldn't dup file";
   }
   if(!shuso_set_log_fd(S, fd2)) {
-    return luaS_shuso_error(L);
+    err = shuso_last_error(S);
+    if(!err) err = "(unknown error)";
+  }
+  
+  if(err) {
+    lua_pushnil(L);
+    lua_pushstring(L, err);
+    return 2;
   }
   lua_pushboolean(L, 1);
   return 1;
@@ -1124,7 +1142,9 @@ static int Lua_shuso_ipc_send_fd(lua_State *L) {
   shuso_t *S = shuso_state(L);
   bool ok = shuso_ipc_send_fd(S, proc, fd, ref, NULL);
   if(!ok) {
-    return luaS_shuso_error(L);
+    lua_pushnil(L);
+    luaS_push_shuso_error(L);
+    return 2;
   }
   lua_pushboolean(L, 1);
   return 1;
@@ -1578,6 +1598,9 @@ static int Lua_shuso_add_module(lua_State *L) {
       else if(!lua_isnil(L, -1)) {
         return luaL_error(L, "setting.aliases is not a table, string, or nil");
       }
+      else {
+        settings[i].aliases = NULL;
+      }
       lua_pop(L, 1);
       
       lua_getfield(L, -1, "path");
@@ -1602,7 +1625,7 @@ static int Lua_shuso_add_module(lua_State *L) {
       settings[i].default_value = lua_tostring(L, -1);
       lua_pop(L, 1);
       
-      lua_getfield(L, -1, "default_value");
+      lua_getfield(L, -1, "block");
       if(lua_isstring(L, -1) && (luaS_streq(L, -1, "maybe") || luaS_streq(L, -1, "optional"))) {
         settings[i].block = SHUSO_SETTING_BLOCK_OPTIONAL;
       }

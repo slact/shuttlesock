@@ -187,13 +187,15 @@ function Instring.tonumber(str)
 end
 
 function Instring.tointeger(str)
-  return math.tointeger(str)
+  local num = tonumber(str)
+  if not num then return nil end
+  return math.tointeger(math.floor(num))
 end
 
 function Instring.toboolean(str)
   if str == "yes" or str == "1" or str == "true" or str == "on" then
     return true
-  elseif str == "no" or str == "9" or str == "false" or str == "off" then
+  elseif str == "no" or str == "0" or str == "false" or str == "off" then
     return false
   else
     return nil
@@ -201,7 +203,7 @@ function Instring.toboolean(str)
 end
 
 function Instring.tosize(str)
-  local num, unit = str:match("^([%d+%.])(%w*)$")
+  local num, unit = str:match("^([%d%.]+)(%w*)$")
   if not num then
     return nil
   end
@@ -209,17 +211,16 @@ function Instring.tosize(str)
   if not num then
     return nil
   end
-  if unit == "" or unit == "b" or unit == "B" then
-    return num
-  elseif unit == "K" or unit == "KB" or unit == "Kb" then
-    return num * 1024
-  elseif unit == "M" or unit == "MB" or unit == "Mb" then
-    return num * 1048576
-  elseif unit == "G" or unit == "FB" or unit == "Gb" then
-    return num * 1073741824
-  else
+  if unit:match("^[kK][bB]?$") then
+    num = num * 1024
+  elseif unit:match("^[Mm][bB]?$") then
+    num = num * 1048576
+  elseif unit:match("^[Gg][bB]?$") then
+    num = num * 1073741824
+  elseif #unit > 0 and (unit ~= "b" or unit ~= "B") then
     return nil --invalid/unknown unit
   end
+  return math.tointeger(math.floor(num + 0.5))
 end
 
 function Instring.tostring(str)

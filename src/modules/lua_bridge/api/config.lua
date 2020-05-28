@@ -66,8 +66,12 @@ function block:parent_block(parent_level)
   return parent_setting:parent_block(parent_level)
 end
 
-function block.settings() --all local setting in this
-  error("not implemented yet")
+function block:settings()
+  local ret = {}
+  for _, setting in pairs(self.settings_cache) do
+    table.insert(ret, setting)
+  end
+  return ret
 end
 
 function block:setting(name)
@@ -175,11 +179,12 @@ local possible_merge_types = {
 }
 
 local possible_data_types = {
-  string = true,
+  boolean = true,
   integer = true,
   number = true,
-  raw = true,
-  boolean = true
+  size = true,
+  string = true,
+  buffer = true
 }
 
 function setting:each_value(...)
@@ -279,11 +284,11 @@ function setting:value(n, data_type, merge_type)
   end
   
   assert(type(self.ptr) == "userdata")
+  
   local val, err = Core.config_setting_value(self.ptr, n, merge_type, data_type)
-  if not val then
+  if val == nil then
     return nil, (err or "unknown error retrieving setting value")
   end
-  
   return val
 end
 

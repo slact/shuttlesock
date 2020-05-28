@@ -91,7 +91,7 @@ static shuso_instring_t *luaS_instring_lua_to_c_generic(lua_State *L, shuso_sett
         shuso_set_error(S, "no memory for instring literal");
         return NULL;
       }
-      memcpy(token[i].literal.data, lua_tostring(L, -1), len + 1);
+      memcpy(token[i].literal.data, str, len + 1);
       
       instring->buffer.iov[i].iov_base = token[i].literal.data;
       instring->buffer.iov[i].iov_len = len;
@@ -99,6 +99,7 @@ static shuso_instring_t *luaS_instring_lua_to_c_generic(lua_State *L, shuso_sett
       lua_pop(L, 1); //pop .value
     }
     else if(is_variable) {
+      token[i].type = SHUSO_INSTRING_TOKEN_VARIABLE;
       var_count++;
       literal = false;
       
@@ -150,6 +151,10 @@ static shuso_instring_t *luaS_instring_lua_to_c_generic(lua_State *L, shuso_sett
       
       instring->buffer.iov[i].iov_base = NULL;
       instring->buffer.iov[i].iov_len = 0;
+    }
+    else {
+      //never supposed to happen
+      raise(SIGABRT);
     }
     lua_pop(L, 1); //pop [i+1]
   }
@@ -344,7 +349,7 @@ bool shuso_instring_number_value(shuso_t *S, shuso_instring_t *instring, double 
   }
   instring->cached_value.state.number = SHUTTLESOCK_INSTRING_VALUE_VALID;
   lua_State *L = S->lua.state;
-  double ret = lua_tointeger(L, -1);
+  double ret = lua_tonumber(L, -1);
   instring->cached_value.number = ret;
   lua_pop(L, 1);
   if(retval) {

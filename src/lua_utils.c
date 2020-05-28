@@ -673,10 +673,13 @@ int luaS_call_or_resume(lua_State *L, int nargs) {
   }
 }
 
-int luaS_shuso_error(lua_State *L) {
+void luaS_push_shuso_error(lua_State *L) {
   shuso_t *S = shuso_state(L);
   const char *errmsg = shuso_last_error(S);
-  return luaL_error(L, "%s", errmsg == NULL ? "(unknown error)" : errmsg);
+  if(errmsg == NULL) {
+    errmsg = "(unknown error)";
+  }
+  lua_pushstring(L, errmsg);
 }
 
 bool luaS_push_lua_module_field(lua_State *L, const char *module_name, const char *key_name) {
