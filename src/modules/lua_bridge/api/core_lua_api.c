@@ -1955,7 +1955,7 @@ static int Lua_shuso_block_setting_pointer(lua_State *L) {
     return 2;
   }
   
-  luaS_pcall_config_method(L, "find_setting", 2, true);
+  luaS_pcall_config_method(L, "find_setting", 2, 1);
   if(!lua_toboolean(L, -1)) {
     lua_pushstring(L, "setting not found");
     return 2;
@@ -2152,7 +2152,7 @@ static int Lua_shuso_setting_path(lua_State *L) {
   luaL_checktype(L, 1, LUA_TLIGHTUSERDATA);
   luaS_get_config_pointer_ref(L, (void *)lua_topointer(L, 1));
   assert(!lua_isnil(L, -1));
-  luaS_pcall_config_method(L, "get_path", 1, true);
+  luaS_pcall_config_method(L, "get_path", 1, 1);
   return 1;
 }
 static int Lua_shuso_block_path(lua_State *L) {

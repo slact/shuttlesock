@@ -1,4 +1,119 @@
 #include <shuttlesock.h>
+#include <shuttlesock/modules/config/private.h>
+static bool instring_token_literal_lua_to_c(lua_State *L, shuso_instring_token_t *token, struct iovec *iov, int index) {
+  size_t      len;
+  const char *str;
+  shuso_t    *S = shuso_state(L);
+  index = lua_absindex(L, index);
+  token->type = SHUSO_INSTRING_TOKEN_LITERAL;
+  lua_getfield(L, index, "value");
+  str = lua_tolstring(L, -1, &len);
+  token->literal.len = len;
+  token->literal.data = (char *)shuso_stalloc(&S->stalloc, len+1);
+  if(!token->literal.data) {
+    shuso_set_error(S, "no memory for instring literal");
+    return false;
+  }
+  memcpy(token->literal.data, str, len + 1);
+  
+  iov->iov_base = token->literal.data;
+  iov->iov_len = len;
+  
+  lua_pop(L, 1); //pop .value
+  return true;
+}
+
+static bool instring_token_variable_lua_to_c(lua_State *L, shuso_setting_t *setting, shuso_instring_token_t *token, struct iovec *iov, int index) {
+  shuso_t    *S = shuso_state(L);
+
+  token->type = SHUSO_INSTRING_TOKEN_VARIABLE;
+  shuso_variable_t *var = &token->variable;
+  
+  luaL_checkstack(L, 4, NULL);
+  
+  const char *name, *module_name;
+  lua_getfield(L, index, "name");
+  name = lua_tostring(L, -1);
+  lua_pop(L, 1);
+  
+  lua_getfield(L, index, "module_name");
+  module_name = lua_tostring(L, -1);
+  lua_pop(L, 1);
+  
+  var->block = shuso_setting_parent_block(S, setting);
+  
+  
+  //can anyone handle this variable guys?...
+  module_name ? lua_pushstring(L, var->module->name) : lua_pushnil(L);
+  lua_pushstring(L, name);
+  lua_pushlightuserdata(L, var->block);
+  luaS_pcall_config_method(L, "find_variable", 3, 2);
+  if(lua_isnil(L, -2)) {
+    const char *err = lua_isstring(L, -1) ? lua_tostring(L, -1) : "unable to find variable for unknown reason";
+    shuso_set_error(S, err);
+    lua_pop(L, 2);
+    return false;
+  }
+  lua_getfield(L, -1, "eval");
+  var->eval = lua_topointer(L, -1);
+  lua_pop(L, 1);
+  var->pd = NULL;
+  lua_getfield(L, -1, "constant");
+  bool constant = lua_toboolean(L, -1);
+  lua_pop(L, 1); //pop .constant
+  lua_pop(L, 1); //pop variable
+  
+  var->module = module_name ? shuso_get_module(S, module_name) : NULL;
+  
+  var->setting = setting;
+  var->block = shuso_setting_parent_block(S, setting);
+  
+  var->name = shuso_stalloc(&S->stalloc, strlen(name)+1);
+  if(!var->name) {
+    lua_pop(L, 1);
+    shuso_set_error(S, "no memory for instring variable name");
+    return false;
+  }
+  strcpy((char *)var->name, name);
+  lua_pop(L, 1);
+  
+  lua_getfield(L, index, "params");
+  int params_count = luaL_len(L, -1);
+  var->params.size = params_count;
+  if(params_count > 0) {
+    if((var->params.array = shuso_stalloc(&S->stalloc, sizeof(*var->params.array))) == NULL) {
+      return shuso_set_error(S, "no memory for instring variable index array");
+    }
+    for(int j = 0; j < params_count; j++) {
+      const char *str;
+      size_t      len;
+      lua_rawgeti(L, -1, j+1);
+      str = lua_tolstring(L, -1, &len);
+      if((var->params.array[j] = shuso_stalloc(&S->stalloc, len+1)) == NULL) {
+        return shuso_set_error(S, "no memory for instring variable index");
+      }
+      strcpy((char *)var->params.array[j], str);
+      lua_pop(L, 1);
+    }
+  }
+  lua_pop(L, 1);
+  
+
+  lua_pushstring(L, var->name);
+  lua_pushlightuserdata(L, var->block);
+  
+  if(constant) {
+    shuso_str_t str;
+    if(!var->eval(S, var, &str)) {
+      return shuso_set_error(S, "constant variable $%s evaluation failed");
+    }
+    return instring_token_literal_lua_to_c(L, token, iov, index);
+  }
+  
+  iov->iov_base = NULL;
+  iov->iov_len = 0;
+  return true;
+}
 
 static shuso_instring_t *luaS_instring_lua_to_c_generic(lua_State *L, shuso_setting_t *setting, int index, shuso_instring_t *preallocd_instring) {
   index = lua_absindex(L, index);
@@ -69,92 +184,29 @@ static shuso_instring_t *luaS_instring_lua_to_c_generic(lua_State *L, shuso_sett
     return NULL;
   }
   
-  size_t      len;
-  const char *str;
-  
   instring->tokens.count = token_count;
   for(i = 0; i< token_count; i++) {
     lua_rawgeti(L, -1, i+1);
+    
+    
     lua_getfield(L, -1, "type");
-    bool is_literal = luaS_streq_literal(L, -1, "literal");
     bool is_variable = luaS_streq_literal(L, -1, "variable");
+    if(!is_variable) {
+      assert(luaS_streq_literal(L, -1, "literal"));
+    }
     lua_pop(L, 1); //pop .type
     
-    if(is_literal) {
-      token[i].type = SHUSO_INSTRING_TOKEN_LITERAL;
-      lua_getfield(L, -1, "value");
-      str = lua_tolstring(L, -1, &len);
-      token[i].literal.len = len;
-      token[i].literal.data = (char *)shuso_stalloc(&S->stalloc, len+1);
-      if(!token[i].literal.data) {
+    if(!is_variable) {
+      if(!instring_token_literal_lua_to_c(L, &token[i], &instring->buffer.iov[i], -1)) {
         lua_settop(L, top);
-        shuso_set_error(S, "no memory for instring literal");
-        return NULL;
+        return false;
       }
-      memcpy(token[i].literal.data, str, len + 1);
-      
-      instring->buffer.iov[i].iov_base = token[i].literal.data;
-      instring->buffer.iov[i].iov_len = len;
-      
-      lua_pop(L, 1); //pop .value
-    }
-    else if(is_variable) {
-      token[i].type = SHUSO_INSTRING_TOKEN_VARIABLE;
-      var_count++;
-      literal = false;
-      
-      shuso_variable_t *var = &token[i].variable;
-      
-      lua_getfield(L, -1, "module_name");
-      var->module = lua_isstring(L, -1) ? shuso_get_module(S, lua_tostring(L, -1)) : NULL;
-      lua_pop(L, 1);
-      
-      var->setting = setting;
-      var->block = shuso_setting_parent_block(S, setting);
-      
-      lua_getfield(L, -1, "name");
-      str = lua_tolstring(L, -1, &len);
-      var->name = shuso_stalloc(&S->stalloc, len+1);
-      if(!var->name) {
-        lua_settop(L, top);
-        shuso_set_error(S, "no memory for instring variable name");
-        return NULL;
-      }
-      strcpy((char *)var->name, str);
-      lua_pop(L, 1);
-      
-      lua_getfield(L, -1, "params");
-      int params_count = luaL_len(L, -1);
-      var->params.size = params_count;
-      if(params_count == 0) {
-        var->params.size = 0;
-      }
-      else {
-        if((var->params.array = shuso_stalloc(&S->stalloc, sizeof(*var->params.array))) == NULL) {
-          lua_settop(L, top);
-          shuso_set_error(S, "no memory for instring variable index array");
-          return NULL;
-        }
-        for(int j = 0; j < params_count; j++) {
-          lua_rawgeti(L, -1, j+1);
-          str = lua_tolstring(L, -1, &len);
-          if((var->params.array[j] = shuso_stalloc(&S->stalloc, len+1)) == NULL) {
-            lua_settop(L, top);
-            shuso_set_error(S, "no memory for instring variable index");
-            return NULL;
-          }
-          strcpy((char *)var->params.array[j], str);
-          lua_pop(L, 1);
-        }
-      }
-      lua_pop(L, 1);
-      
-      instring->buffer.iov[i].iov_base = NULL;
-      instring->buffer.iov[i].iov_len = 0;
     }
     else {
-      //never supposed to happen
-      raise(SIGABRT);
+      if(!instring_token_variable_lua_to_c(L, setting, &token[i], &instring->buffer.iov[i], -1)) {
+        lua_settop(L, top);
+        return false;
+      }
     }
     lua_pop(L, 1); //pop [i+1]
   }

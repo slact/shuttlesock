@@ -168,6 +168,52 @@ bool shuso_config_register_setting(shuso_t *S, shuso_module_setting_t *setting, 
   return true;
 }
 
+bool shuso_config_register_variable(shuso_t *S, shuso_module_variable_t *variable, shuso_module_t *module) {
+  lua_State *L = S->lua.state;
+  int top = lua_gettop(L);
+  lua_newtable(L);
+  
+  if(!variable->name) {
+    lua_settop(L, top);
+    return shuso_set_error(S, "module %s variable %p name cannot be NULL", module->name, variable);
+  }
+  lua_pushstring(L, variable->name);
+  lua_setfield(L, -2, "name");
+  
+  if(variable->aliases) {
+    lua_pushstring(L, variable->aliases);
+    lua_setfield(L, -2, "aliases");
+  }
+  
+  lua_pushstring(L, variable->path);
+  lua_setfield(L, -2, "path");
+  
+  lua_pushboolean(L, variable->constant);
+  lua_setfield(L, -2, "constant");
+  
+  if(!variable->eval) {
+    return shuso_set_error(S, "module %s variable $%s eval function is NULL", module->name, variable->name);
+  }
+  lua_pushlightuserdata(L, (void *)variable->eval);
+  lua_setfield(L, -2, "eval");
+  
+  if(variable->description) {
+    lua_pushstring(L, variable->description);
+    lua_setfield(L, -2, "description");
+  }
+
+  //register_variable parameters
+  lua_pushstring(L, module->name);
+  lua_insert(L, -2);
+  if(!luaS_pcall_config_method(L, "register_variable", 2, 2)) {
+    lua_settop(L, top);
+    return false;
+  }
+  lua_pop(L, 2);
+  assert(lua_gettop(L) == top);
+  return true;
+}
+
 bool shuso_config_system_initialize(shuso_t *S) {
   lua_State *L = S->lua.state;
   

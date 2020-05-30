@@ -60,6 +60,15 @@ static bool add_module(shuso_t *S, shuso_module_t *module, const char *adding_fu
     }
   }
   
+  //register the config variables
+  if(module->variables) {
+    for(shuso_module_variable_t *variable = &module->variables[0]; variable->name != NULL; variable++) {
+      if(!shuso_config_register_variable(S, variable, module)){
+        return false;
+      }
+    }
+  }
+  
   return true;
 }
 

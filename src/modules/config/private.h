@@ -5,6 +5,7 @@
 
 //for shuttlesock developers' eyes only
 bool shuso_config_register_setting(shuso_t *S, shuso_module_setting_t *setting, shuso_module_t *module);
+bool shuso_config_register_variable(shuso_t *S, shuso_module_variable_t *variable, shuso_module_t *module);
 
 bool shuso_config_system_initialize(shuso_t *S);
 bool shuso_config_system_initialize_worker(shuso_t *workerState, shuso_t *managerState);

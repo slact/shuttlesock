@@ -125,19 +125,22 @@ local config_settings = {
       if not parent_block then
         return nil, "parent block missing"
       end
-      local v1 = setting.value[1]
-      local var = v1.instring[1]
-      var.ignore = true -- don't generate evaluation or variable lookup code for the variable name
+      local v1 = setting.values[1]
+      local var = v1.instring.tokens[1]
       
-      if v1.type ~= "variable" or var.type ~= "variable" then
+      if var.type ~= "variable" or var.type ~= "variable" then
         return nil, setting.value[1].raw .. " is an invalid variable name"
       end
-      
+  
+      -- don't generate evaluation or variable lookup code for the variable name
+      v1.type = "literal"
+  
+  
       if var.params and #var.params > 0 then
         return nil, "setting variable with params is not yet supported"
       end
       
-      parent_block.variables[var.name] = setting.value[2].instring
+      parent_block.variables[var.name] = setting
       
       return true
     end
@@ -1015,9 +1018,8 @@ do --config
     --now handle includes
     assert(self:handle("config:include_path"))
     assert(self:handle("config:include"))
-    assert(self:handle("config:set"))
     
-    --handle variables
+    --handle instrings
     for setting in self:each_setting() do
       for _, val in ipairs(setting.values or {}) do
         local instring, ins_err = Instring.parse(val)
@@ -1027,6 +1029,8 @@ do --config
         val.instring = instring
       end
     end
+    
+    assert(self:handle("config:set"))
     
     self.parsed = true
     
@@ -1509,49 +1513,87 @@ do --config
     return handler
   end
   
-  function config:register_variable(var)
+  function config:register_variable(module_name, var)
     assert(type(var.name) == "string")
     assert(type(var.path) == "string")
     assert(type(var.module_name) == "string")
-    assert(type(var.ptr) == "userdata")
+    assert(type(var.eval) == "userdata")
     
-    local name, kleenestar = var.name:match("^([%w%_]+)(%*?)$")
-    if not name then
-      return nil, "Invalid variable name " .. var.name
+    local function failmsg(...)
+      local n = select("#", ...)
+      if n == 1 then
+        local msg = ...
+        return ("module %s variable $%s %s"):format(module_name, var.name, msg)
+      elseif n == 2 then
+        local field_name, field_type = ...
+        return ("module %s variable $%s field '%s' must be of type %s, but was %s"):format(module_name, var.name, field_name, field_type, type(var[field_name]))
+      end
+      error("weird failmsg call")
+    end
+    
+    local aliases = var.aliases
+    if aliases ~= nil then
+      if type(aliases) == "string" then
+        aliases = {}
+        for v in var.aliases:gmatch("[^%s]+") do
+          table.insert(aliases, v)
+        end
+      elseif type(aliases) ~= "table" then
+        return nil, failmsg("aliases", "table")
+      end
     end
     
     var = {
       raw_name = var.name,
-      name = name,
+      name = var.name,
       path = var.path,
       module_name = var.module_name,
-      ptr = var.ptr,
+      aliases = aliases or {},
+      eval = var.eval
     }
     
-    if #kleenestar == 1 then
-      local vars = config.variables.prefix_match
-      local match_pattern = "^"..name.."([%w%_]*)"
-      vars[match_pattern] = vars[match_pattern] or {}
-      if vars[match_pattern][var.module_name] then
-        return nil, ("Variable %s is already registered by this module (%s)"):format(var.name, var.module_name)
+    local all_names = {[var.name] = "name"}
+    for _, alias in ipairs(var.aliases) do
+      all_names[alias] = "alias"
+    end
+    
+    for varname, nametype in ipairs(all_names) do
+      local name, kleenestar = varname:match("^([%w%_]+)(%*?)$")
+      if not name then
+        return nil, ("Invalid variable %s \"%s\""):format(nametype, varname)
       end
-      vars.match_prefix = true
-      vars.match_suffix_pattern = match_pattern
-      vars[match_pattern][var.module_name] = var
-    else
-      local vars = config.variables.name
-      vars[name] = vars[name] or {}
-      if vars[name][var.module_name] then
-        return nil, ("Variable %s is already registered by this module (%s)"):format(var.name, var.module_name)
+      
+      if #kleenestar == 1 then
+        local vars = config.variables.prefix_match
+        local match_pattern = "^"..name.."([%w%_]*)"
+        vars[match_pattern] = vars[match_pattern] or {}
+        if vars[match_pattern][var.module_name] then
+          return nil, ("Variable %s is already registered by this module (%s)"):format(var.name, var.module_name)
+        end
+        vars.match_prefix = true
+        vars.match_suffix_pattern = match_pattern
+        vars[match_pattern][var.module_name] = var
+      else
+        local vars = config.variables.name
+        vars[name] = vars[name] or {}
+        if vars[name][var.module_name] then
+          return nil, ("Variable %s is already registered by this module (%s)"):format(var.name, var.module_name)
+        end
+        vars[name][var.module_name] = var
       end
-      vars[name][var.module_name] = var
+      
     end
     
     return true
   end
   
   function config:find_variable(name, module_name, block)
-    assert(block, "that's no block!")
+    if type(block) == "userdata" then
+      block = self:ptr_lookup(block)
+    end
+    assert(block, "that's no block, it's a nil!")
+    assert(type(block) == "table")
+    require"mm"(block)
     
     local possible_vars = {}
 
@@ -1567,6 +1609,7 @@ do --config
     local prev_parent_block
     while parent_block and parent_block ~= prev_parent_block do
       if parent_block.variables[name] then
+        require"mm"(parent_block.variables[name])
         table.insert(parent_block.variables[name], possible_vars)
         break
       end

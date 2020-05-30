@@ -820,6 +820,12 @@ describe(configuration) {
     }
   }
   
+  subdesc(variables) {
+    test("set $variable") {
+      assert_luaL_dofile_args(S->lua.state, "config_variable_simple.lua", 1);
+    }
+  }
+  
   test("module with a bunch of config settings") {
     assert_luaL_dofile_args(S->lua.state, "test_config_general.lua", 1);
     shuso_run(S);

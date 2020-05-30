@@ -21,6 +21,7 @@ typedef struct shuso_module_variable_s {
   const char *aliases;
   const char *path;
   const char *description;
+  bool        constant;
   shuso_variable_eval_fn *eval;
 } shuso_module_variable_t;
 
