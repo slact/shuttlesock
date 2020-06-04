@@ -31,6 +31,28 @@ local Server = Module.new {
     "server:maybe_accept",
     "core:worker.stop"
   },
+  variables = {
+    {
+      name="default_listen_host",
+      description="Default listening host for the server module",
+      path="(http|stream)/**",
+      constant=true,
+      eval = function(setting, block, params)
+        require"mm"(block)
+        return "0.0.0.0"
+      end
+    },
+    {
+      name="default_listen_port",
+      description="Default listening port for server location",
+      path="(http|stream)/**",
+      constant = true,
+      eval = function(setting, block, params)
+        --TODO get fancy with the ports
+        return "80"
+      end
+    }
+  },
   raw_hosts = {},
   bindings = {},
   bindings_by_ptr = {}
