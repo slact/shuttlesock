@@ -265,44 +265,6 @@ static shuso_setting_t *lua_setting_to_c_struct(shuso_t *S, lua_State *L) {
   setting->module = lua_tostring(L, -1);
   lua_pop(L, 1);
   
-  struct {
-    const char *name;
-    shuso_instrings_t **instrings;
-  } ins[] = {
-    {"local", &setting->instrings.local},
-    {"default", &setting->instrings.defaults},
-    {"inherited", &setting->instrings.inherited},
-  };
-  
-  for(int i=0; i<3; i++) {
-    assert(lua_istable(L, sidx));
-    
-    lua_pushvalue(L, sidx);
-    lua_pushstring(L, ins[i].name);
-    luaS_pcall_config_method(L, "setting_instrings", 2, 1);
-    assert(lua_istable(L, -1));
-    
-    int cnt = shuso_error_capture_start(S);
-    *ins[i].instrings = luaS_instrings_lua_to_c(L, setting, -1);
-    if(shuso_error_capture_finish(S, cnt)) {
-      shuso_config_error(S, setting, shuso_last_error(S));
-      return false;
-    }
-    assert(*ins[i].instrings != NULL);
-    lua_pop(L, 1);
-  }
-  
-  if(setting->instrings.local->count > 0) {
-    setting->instrings.merged = setting->instrings.local;
-  }
-  else if(setting->instrings.inherited->count > 0) {
-    setting->instrings.merged = setting->instrings.inherited;
-  }
-  else {
-    setting->instrings.merged = setting->instrings.defaults;
-  }
-  assert(setting->instrings.merged != NULL);
-  
   lua_getfield(L, sidx, "parent");
   assert(!lua_isnil(L, -1));
   lua_getfield(L, -1, "block");
@@ -310,6 +272,7 @@ static shuso_setting_t *lua_setting_to_c_struct(shuso_t *S, lua_State *L) {
   lua_getfield(L, -1, "ptr");
   assert(!lua_isnil(L, -1));
   setting->parent_block = (void *)lua_topointer(L, -1);
+  
   lua_pop(L, 3);
   
   lua_getfield(L, -1, "block");
@@ -346,6 +309,46 @@ static shuso_setting_t *lua_setting_to_c_struct(shuso_t *S, lua_State *L) {
   lua_pushvalue(L, -1);
   luaS_config_pointer_ref(L, setting); //pops the setting table too, 
   //but we just pushed a copy onto the stack, this way the stack is the same as at the start of this function
+  
+  struct {
+    const char *name;
+    shuso_instrings_t **instrings;
+  } ins[] = {
+    {"local", &setting->instrings.local},
+    {"default", &setting->instrings.defaults},
+    {"inherited", &setting->instrings.inherited},
+  };
+  
+  for(int i=0; i<3; i++) {
+    assert(lua_istable(L, sidx));
+    
+    lua_pushvalue(L, sidx);
+    lua_pushstring(L, ins[i].name);
+    luaS_pcall_config_method(L, "setting_instrings", 2, 1);
+    assert(lua_istable(L, -1));
+    
+    int cnt = shuso_error_capture_start(S);
+    *ins[i].instrings = luaS_instrings_lua_to_c(L, setting, -1);
+    const char *last_error;
+    if((last_error = shuso_error_capture_finish(S, cnt)) != NULL) {
+      shuso_config_error(S, setting, last_error);
+      return NULL;
+    }
+    assert(*ins[i].instrings != NULL);
+    lua_pop(L, 1);
+  }
+  
+  if(setting->instrings.local->count > 0) {
+    setting->instrings.merged = setting->instrings.local;
+  }
+  else if(setting->instrings.inherited->count > 0) {
+    setting->instrings.merged = setting->instrings.inherited;
+  }
+  else {
+    setting->instrings.merged = setting->instrings.defaults;
+  }
+  assert(setting->instrings.merged != NULL);
+  
   assert(sidx == lua_gettop(L));
   return setting;
 }
@@ -436,7 +439,9 @@ bool shuso_config_system_generate(shuso_t *S) {
   assert(lua_istable(L, -1));
   for(int i=0, num_settings = luaL_len(L, -1); i<num_settings; i++) {
     lua_rawgeti(L, -1, i+1);
-    if(lua_setting_to_c_struct(S, L) == NULL) {
+    shuso_setting_t *ss;
+    if((ss = lua_setting_to_c_struct(S, L)) == NULL) {
+      raise(SIGSTOP);
       lua_settop(L, top);
       return false;
     }

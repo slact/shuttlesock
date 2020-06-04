@@ -25,7 +25,7 @@ static bool instring_token_literal_lua_to_c(lua_State *L, shuso_instring_token_t
 
 static bool instring_token_variable_lua_to_c(lua_State *L, shuso_setting_t *setting, shuso_instring_token_t *token, struct iovec *iov, int index) {
   shuso_t    *S = shuso_state(L);
-
+  index = lua_absindex(L, index);
   token->type = SHUSO_INSTRING_TOKEN_VARIABLE;
   shuso_variable_t *var = &token->variable;
   
@@ -41,11 +41,11 @@ static bool instring_token_variable_lua_to_c(lua_State *L, shuso_setting_t *sett
   lua_pop(L, 1);
   
   var->block = shuso_setting_parent_block(S, setting);
-  
-  
+  assert(var->block);
+  assert(name);
   //can anyone handle this variable guys?...
-  module_name ? lua_pushstring(L, var->module->name) : lua_pushnil(L);
   lua_pushstring(L, name);
+  module_name ? lua_pushstring(L, var->module->name) : lua_pushnil(L);
   lua_pushlightuserdata(L, var->block);
   luaS_pcall_config_method(L, "find_variable", 3, 2);
   if(lua_isnil(L, -2)) {
@@ -70,12 +70,10 @@ static bool instring_token_variable_lua_to_c(lua_State *L, shuso_setting_t *sett
   
   var->name = shuso_stalloc(&S->stalloc, strlen(name)+1);
   if(!var->name) {
-    lua_pop(L, 1);
     shuso_set_error(S, "no memory for instring variable name");
     return false;
   }
   strcpy((char *)var->name, name);
-  lua_pop(L, 1);
   
   lua_getfield(L, index, "params");
   int params_count = luaL_len(L, -1);

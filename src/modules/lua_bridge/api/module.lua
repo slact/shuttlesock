@@ -192,6 +192,7 @@ function module:add()
   end
   
   module_table.settings = self.settings
+  module_table.variables = self.variables
   
   lua_modules[self.name]=self
   ok, err = Core.add_module(module_table)
@@ -225,7 +226,7 @@ function module:subscribe(event_name, subscriber_function, priority)
     --module already added, but the subscribe event name wasn't declared upfront
     error(("Lua module %s can't subscribe to undeclared event %s when it's already been added to Shuttlesock"):format(self.name, event_name), 0)
   end
-    
+  
   if not Module.module_subscribers[self][event_name] then
     Module.module_subscribers[self][event_name] = {}
   end

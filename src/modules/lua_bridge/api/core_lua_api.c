@@ -1526,6 +1526,17 @@ static int Lua_shuso_get_active_module(lua_State *L) {
   return 1;
 }
 
+static bool lua_module_variable_eval(shuso_t *S, shuso_variable_t *var, shuso_str_t *ret_val) {
+  /*luaS_push_lua_module_field(L, "shuttlesock.module", "get_variable");
+  lua_pushlightuserdata(L, var);
+  lua_call(L, 1, 1);
+  assert(lua_istable(L, -1));
+  lua_getfield(L, -1, "variables");
+  assert(lua_istable(L, -1));
+  lua_getfield(L, -1, */
+  return true;
+}
+
 static int Lua_shuso_add_module(lua_State *L) {
   shuso_t *S = shuso_state(L);
   if(!(shuso_runstate_check(S, SHUSO_STATE_CONFIGURING, "add module"))) {
@@ -1562,7 +1573,6 @@ static int Lua_shuso_add_module(lua_State *L) {
   lua_pop(L, 1);
   
   lua_getfield(L, 1, "settings");
-  
   //settings need to be generated, thus also checked
   if(!lua_isnil(L, -1) && !lua_istable(L, -1)) {
     return luaL_error(L, "settings field is not a nil or table", m->name);
@@ -1641,9 +1651,76 @@ static int Lua_shuso_add_module(lua_State *L) {
   }
   lua_pop(L, 1);
   
+  
+  //variables need to be generated, thus also checked
+  lua_getfield(L, 1, "variables");
+  if(!lua_isnil(L, -1) && !lua_istable(L, -1)) {
+    return luaL_error(L, "variables field is not a nil or table", m->name);
+  }
+  if(lua_istable(L, -1)) {
+    int count = luaL_len(L, -1);
+    shuso_module_variable_t *vars = shuso_stalloc(&S->stalloc, sizeof(*vars) * (count+1));
+    if(!vars) {
+      return luaL_error(L, "not enough memory for variables");
+    }
+    for(int i = 0; i < count; i++) {
+      lua_geti(L, -1, i+1);
+      if(!lua_istable(L, -1)) {
+        return luaL_error(L, "variables field is not a table");
+      }
+      
+      lua_getfield(L, -1, "name");
+      if(!lua_isstring(L, -1)) {
+        return luaL_error(L, "variable.name is not a string");
+      }
+      vars[i].name = lua_tostring(L, -1);
+      lua_pop(L, 1);
+      
+      lua_getfield(L, -1, "aliases");
+      if(lua_istable(L, -1)) {
+        luaS_table_concat(L, " ");
+        vars[i].aliases = shuso_stalloc(&S->stalloc, luaL_len(L, -1)+1);
+        if(!vars[i].aliases) {
+          return luaL_error(L, "not enough memory for variable aliases string");
+        }
+        strcpy((char *)vars[i].aliases, lua_tostring(L, -1));
+      }
+      else if(lua_isstring(L, -1)) {
+        vars[i].aliases = lua_tostring(L, -1);
+      }
+      else if(!lua_isnil(L, -1)) {
+        return luaL_error(L, "variable.aliases is not a table, string, or nil");
+      }
+      else {
+        vars[i].aliases = NULL;
+      }
+      lua_pop(L, 1);
+      
+      lua_getfield(L, -1, "description");
+      vars[i].description = lua_isstring(L, -1) ? lua_tostring(L, -1) : NULL;
+      lua_pop(L, 1);
+      
+      lua_getfield(L, -1, "path");
+      vars[i].path = lua_isstring(L, -1) ? lua_tostring(L, -1) : NULL;
+      lua_pop(L, 1);
+      
+      lua_getfield(L, -1, "constant");
+      vars[i].constant = lua_toboolean(L, -1);
+      lua_pop(L, 1);
+      
+      lua_getfield(L, -1, "eval");
+      if(!lua_isfunction(L, -1)) {
+        return luaL_error(L, "variable.eval must be a function");
+      }
+      lua_pop(L, 1);
+      vars[i].eval = lua_module_variable_eval;
+      
+      lua_pop(L, 1);
+    }
+  }
+  
   m->initialize_config = lua_module_initialize_config;
   m->initialize = lua_module_initialize;
-  
   
   if(!shuso_add_module(S, m)) {
     lua_pushnil(L);

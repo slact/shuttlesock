@@ -1588,12 +1588,12 @@ do --config
   end
   
   function config:find_variable(name, module_name, block)
+    assert(type(name) == "string")
     if type(block) == "userdata" then
       block = self:ptr_lookup(block)
     end
     assert(block, "that's no block, it's a nil!")
     assert(type(block) == "table")
-    require"mm"(block)
     
     local possible_vars = {}
 
@@ -1626,7 +1626,7 @@ do --config
       end
     end
     
-    for _, vars in pairs(self.variables.name[name]) do
+    for _, vars in pairs(self.variables.name[name] or {}) do
       for _, var in pairs(vars) do
         table.insert(possible_vars, var)
       end
