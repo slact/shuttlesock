@@ -764,7 +764,7 @@ int shuso_error_capture_start(shuso_t *S) {
 const char *shuso_error_capture_finish(shuso_t *S, int prev_errcount) {
   S->error.do_not_publish_event = false;
   S->error.do_not_log = false;
-  if(prev_errcount == S->error.error_count) {
+  if(prev_errcount < S->error.error_count) {
     return shuso_last_error(S);
   }
   else {
