@@ -140,7 +140,11 @@ bool luaS_pcall(lua_State *L, int nargs, int nresults) {
   
   int rc = lua_pcall(L, nargs, nresults, 1);
   if (rc != LUA_OK) {
+    shuso_t *S = shuso_state(L);
+    bool current_nolog = S->error.do_not_log;
+    S->error.do_not_log = false;
     shuso_set_error(shuso_state(L), "Lua error: %s", lua_tostring(L, -1));
+    S->error.do_not_log = current_nolog;
     lua_pop(L, 1);
     //lua_gc(L, LUA_GCCOLLECT, 0);
   }
