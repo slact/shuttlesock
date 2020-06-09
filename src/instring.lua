@@ -182,6 +182,10 @@ function Instring.parse(setting_value)
   return setmetatable(instring, Instring.metatable)
 end
 
+function Instring.append(cur, next, space)
+  
+end
+
 function Instring.tonumber(str)
   return tonumber(str)
 end
@@ -237,5 +241,7 @@ Instring.metatable = {
     return require("shuttlesock.core.instring").metatable
   end,
 }
+
+Instring.Token = Token
 
 return Instring

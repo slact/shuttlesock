@@ -125,23 +125,47 @@ local config_settings = {
       if not parent_block then
         return nil, "parent block missing"
       end
+      mm_setting(setting)
+      if setting.variable_name_handled then
+        return true
+      end
+  
       local v1 = setting.values[1]
-      local var = v1.instring.tokens[1]
+      local varname = v1.instring.tokens[1]
       
-      if var.type ~= "variable" or var.type ~= "variable" then
+      local var_instring
+      if not setting.values[2] then
+        var_instring = Instring.parse({type="literal", raw=""})
+      else
+        var_instring = setting.values[2].instring
+        for i=3, #setting.values do
+          assert(Instring.append(var_instring, settings.values[i].instring, " "))
+        end
+      end
+      
+      if varname.type ~= "variable" or varname.type ~= "variable" then
         return nil, setting.value[1].raw .. " is an invalid variable name"
       end
   
       -- don't generate evaluation or variable lookup code for the variable name
       v1.type = "literal"
+      v1.instring = assert(Instring.parse(v1)) --re-parse it as a literal, not a string
   
-  
-      if var.params and #var.params > 0 then
+      if varname.params and #varname.params > 0 then
         return nil, "setting variable with params is not yet supported"
       end
       
-      parent_block.variables[var.name] = setting
+      local var = {
+        raw_name = "$"..varname.name,
+        name = varname.name,
+        substitution = true,
+        instring = var_instring,
+        distance = 0
+      }
+  
+      parent_block.variables[varname.name] = var
       
+      setting.variable_name_handled = true
       return true
     end
   }
@@ -1032,9 +1056,15 @@ do --config
     
     assert(self:handle("config:set"))
     
+    self:perform_variable_substitutions()
+    
     self.parsed = true
     
     return self
+  end
+  
+  function config:perform_variable_substitutions()
+    config
   end
   
   function config:block_handled_by_module(block, module_name)
@@ -1184,7 +1214,7 @@ do --config
     
     local label = block_or_setting.name or block_or_setting.setting.name or "(?)"
     
-    message = ('%s for %s "%s"'):format(message, block_or_setting.type or "(?)", label)
+    message = ('%s in %s "%s"'):format(message, block_or_setting.type or "(?)", label)
     
     local parser = self.parsers[block_or_setting.parser_index]
     if not parser then
@@ -1594,8 +1624,6 @@ do --config
     end
     assert(block, "that's no block, it's a nil!")
     assert(type(block) == "table")
-    
-    local possible_vars = {}
 
     if module_name then
       local module = require "shuttlesock.core.module".find(module_name)
@@ -1607,65 +1635,75 @@ do --config
     
     local parent_block = block
     local prev_parent_block
+    local block_distance = 0
+    local setvar
     while parent_block and parent_block ~= prev_parent_block do
       if parent_block.variables[name] then
-        require"mm"(parent_block.variables[name])
-        table.insert(parent_block.variables[name], possible_vars)
+        setvar = parent_block.variables[name]
         break
       end
       
       prev_parent_block = parent_block
       parent_block = parent_block.setting.parent.block
+      block_distance = block_distance+1
+    end
+    if setvar and block_distance == 0 then
+      --variable set in this block taked priority over anything else
+      return setvar
     end
     
+    
+    local possible_module_vars = {}
     for pattern, wildcard_vars in pairs(self.variables.prefix_match) do
       if name:match(pattern) then
         for _, var in pairs(wildcard_vars) do
-          table.insert(possible_vars, var)
+          table.insert(possible_module_vars, var)
         end
       end
     end
     
     for _, vars in pairs(self.variables.name[name] or {}) do
       for _, var in pairs(vars) do
-        table.insert(possible_vars, var)
+        table.insert(possible_module_vars, var)
       end
     end
     
-    if #possible_vars == 0 then
+    if #possible_module_vars == 0 and setvar then
+      return servar
+    else
       return nil, "no such variable $"..name
     end
     
     if module_name then
-      for i, var in pairs(possible_vars) do
+      for i, var in pairs(possible_module_vars) do
         if var.module_name ~= module_name then
-          table.remove(possible_vars, i)
+          table.remove(possible_module_vars, i)
         end
       end
-      if #possible_vars == 0 then
+      if #possible_module_vars == 0 then
         return nil, "no variable $"..name .. " for module " .. module_name
       end
     end
     
-    for i, var in pairs(possible_vars) do
+    for i, var in pairs(possible_module_vars) do
       self:get_path(block)
       if not Config.match_path(block, var.path) then
-        table.remove(possible_vars, i)
+        table.remove(possible_module_vars, i)
       end
     end
     
-    if #possible_vars == 0 then
+    if #possible_module_vars == 0 then
       return nil, "no variable $"..name.." matches for the path of the config block"
-    elseif #possible_vars > 1 then
+    elseif #possible_module_vars > 1 then
       local module_names = {}
-      for _, v in ipairs(possible_vars) do
+      for _, v in ipairs(possible_module_vars) do
         table.insert(module_names, v.module_name)
       end
       table.sort(module_names)
       return nil, "variable $"..name.." is ambiguous, could be for any of these modules: " .. table.concat(module_names, ", ")
     end
     
-    return possible_vars[1]
+    return possible_module_vars[1]
   end
   
   function config:config_string(cur, lvl)
@@ -1795,6 +1833,8 @@ do --config
       if not Instring.is_instring(v.instring) then
         error("not an instring")
       end
+      local substitution_vars = config.
+      local instring_with_setvars_substituted = assert(Instring.substitute(v.instring, substitution_vars))
       table.insert(instrings, v.instring)
     end
     return instrings
