@@ -118,7 +118,7 @@ local config_settings = {
     name    = "set",
     path    = "",
     description = "set variable to value",
-    nargs   = 2,
+    nargs   = "2-30",
     default = nil,
     internal_handler = function(setting, default, config)
       local parent_block = setting.parent.block
@@ -139,7 +139,7 @@ local config_settings = {
       else
         var_instring = setting.values[2].instring
         for i=3, #setting.values do
-          assert(Instring.append(var_instring, settings.values[i].instring, " "))
+          assert(var_instring:append(setting.values[i].instring, " "))
         end
       end
       
@@ -160,7 +160,6 @@ local config_settings = {
         name = varname.name,
         substitution = true,
         instring = var_instring,
-        distance = 0
       }
   
       parent_block.variables[varname.name] = var
@@ -1056,17 +1055,27 @@ do --config
     
     assert(self:handle("config:set"))
     
-    self:perform_variable_substitutions()
-    
     self.parsed = true
     
     return self
   end
-  
-  function config:perform_variable_substitutions()
-    config
+  --[[
+  function config:resolve_variables()
+    assert(not self.variables_handled)
+    for setting in self:each_setting() do
+      for _, val in ipairs(setting.values or {}) do
+        for i, token in ipairs(val.instring.tokens) do
+          if token.type == "variable" then
+            assert(setting.parent.block)
+            local var = self:find_variable(
+          end
+        end
+      end
+    end
+    self.variables_handled = true
+    return self
   end
-  
+  ]]
   function config:block_handled_by_module(block, module_name)
     local setting = block.setting
     self:get_setting_path(setting)
@@ -1630,7 +1639,7 @@ do --config
       if not module then
         return nil, "no such module " .. module_name .. " for variable $" .. name
       end
-      module_name = module.name
+      assert(module_name == module.name)
     end
     
     local parent_block = block
@@ -1668,10 +1677,12 @@ do --config
       end
     end
     
-    if #possible_module_vars == 0 and setvar then
-      return servar
-    else
-      return nil, "no such variable $"..name
+    if #possible_module_vars == 0 then
+      if setvar then
+        return setvar
+      else
+        return nil, "no such variable $"..name
+      end
     end
     
     if module_name then
@@ -1829,12 +1840,34 @@ do --config
     local vals = self:setting_values(setting, kind)
     local instrings = {}
     for _, v in ipairs(vals) do
-      assert(v.instring, "instring missing for value")
-      if not Instring.is_instring(v.instring) then
-        error("not an instring")
+      local ins = v.instring
+      assert(ins, "instring missing for value")
+      assert(Instring.is_instring(ins))
+      
+      local parent_block = assert(setting.parent.block)
+      local instring_copied = false
+      
+      local i = 1
+      while i < #ins.tokens do
+        local token = ins.tokens[i]
+        if token.type == "variable" then
+          local var, err = self:find_variable(token.name, nil, parent_block)
+          if not var then
+            return nil, err
+          end
+          if var.substitution then
+            assert(Instring.is_instring(var.instring))
+            if not instring_copied then
+              ins = ins:copy()
+            end
+            ins:remove(i)
+            ins:insert(i, var.instring)
+            i=i-1 --check if the substitution needs substituting too
+          end
+        end
+        i=i+1
       end
-      local substitution_vars = config.
-      local instring_with_setvars_substituted = assert(Instring.substitute(v.instring, substitution_vars))
+      v.instring = ins
       table.insert(instrings, v.instring)
     end
     return instrings

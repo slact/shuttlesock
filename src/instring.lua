@@ -117,7 +117,6 @@ function Token.literal(str, cur, force)
   end
 end
 
-
 function Instring.parse(setting_value)
   assert(type(setting_value) == "table")
   local valtype = setting_value.type
@@ -232,15 +231,86 @@ function Instring.tostring(str)
 end
 
 function Instring.is_instring(t)
-  return type(t) == "table" and getmetatable(t) == Instring.metatable
+  if type(t) ~= "table" or getmetatable(t) ~= Instring.metatable then
+    return nil, "not an instring"
+  end
+  return true
 end
+
+local instring = {}
 
 Instring.metatable = {
   __name="instring",
   __gxcopy_metatable = function()
     return require("shuttlesock.core.instring").metatable
   end,
+  __index = instring
 }
+
+local function deep_copy(val)
+  local t = type(val)
+  if t == "table" then
+    local tbl = {}
+    setmetatable(tbl, getmetatable(val))
+    for k,v in pairs(val) do
+      rawset(tbl, deep_copy(k), deep_copy(v))
+    end
+    return tbl
+  else
+    return val
+  end
+end
+
+function instring:copy()
+  return deep_copy(self)
+end
+
+function instring:append(other, space)
+  if space then
+    assert(type(space) == "string")
+    local ok, space_token = Token.literal(space, 1, true)
+    assert(ok)
+    table.insert(self.tokens, space_token)
+  end
+  
+  for _, token in ipairs(other.tokens) do
+    table.insert(self.tokens, deep_copy(token))
+  end
+  return self:join_literal_tokens()
+end
+
+function instring:insert(position, other)
+  assert(Instring.is_instring(other))
+  assert(type(position) == "number")
+  assert(position > 0)
+  assert(position <= #self.tokens)
+  for i, token in ipairs(other) do
+    table.insert(self.tokens, position + i - 1, deep_copy(token))
+  end
+  return self:join_literal_tokens()
+end
+
+function instring:join_literal_tokens()
+  local i = 1
+  local prev
+  while i <= #self.tokens do
+    local cur = self.tokens[i]
+    if prev and prev.type == "literal" and cur.type == "literal" then
+      prev.value = prev.value .. cur.value
+      table.remove(self.tokens, i)
+    else
+      prev = cur
+      i = i + 1
+    end
+  end
+end
+
+function instring:remove(token_position)
+  assert(token_position > 0)
+  assert(token_position <= #self.tokens)
+  table.remove(self.tokens, token_position)
+  return self
+end
 
 Instring.Token = Token
 
