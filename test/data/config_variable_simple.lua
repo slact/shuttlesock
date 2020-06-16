@@ -19,4 +19,4 @@ local config =
 ]]
 
 assert(Shuso.configure_string("test_conf", config))
-assert(Shuso:configure_finish())
+assert(Shuso.configure_finish())

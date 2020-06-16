@@ -321,12 +321,10 @@ static shuso_setting_t *lua_setting_to_c_struct(shuso_t *S, lua_State *L) {
   
   for(int i=0; i<3; i++) {
     assert(lua_istable(L, sidx));
-    
     lua_pushvalue(L, sidx);
     lua_pushstring(L, ins[i].name);
     luaS_pcall_config_method(L, "setting_instrings", 2, 1);
     assert(lua_istable(L, -1));
-    
     int cnt = shuso_error_capture_start(S);
     *ins[i].instrings = luaS_instrings_lua_to_c(L, setting, -1);
     const char *last_error;
@@ -337,7 +335,6 @@ static shuso_setting_t *lua_setting_to_c_struct(shuso_t *S, lua_State *L) {
     assert(*ins[i].instrings != NULL);
     lua_pop(L, 1);
   }
-  
   if(setting->instrings.local->count > 0) {
     setting->instrings.merged = setting->instrings.local;
   }

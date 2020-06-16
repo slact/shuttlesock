@@ -125,7 +125,6 @@ local config_settings = {
       if not parent_block then
         return nil, "parent block missing"
       end
-      mm_setting(setting)
       if setting.variable_name_handled then
         return true
       end
@@ -1838,6 +1837,16 @@ do --config
   
   function config:setting_instrings(setting, kind)
     local vals = self:setting_values(setting, kind)
+    
+    local instrings_cache = setting.instrings_cache
+    if not instrings_cache then
+      instrings_cache = {}
+       setting.instrings_cache = instrings_cache
+    end
+    if instrings_cache[kind] then
+      return instrings_cache[kind]
+    end
+    
     local instrings = {}
     for _, v in ipairs(vals) do
       local ins = v.instring
@@ -1848,7 +1857,7 @@ do --config
       local instring_copied = false
       
       local i = 1
-      while i < #ins.tokens do
+      while i <= #ins.tokens do
         local token = ins.tokens[i]
         if token.type == "variable" then
           local var, err = self:find_variable(token.name, nil, parent_block)
@@ -1870,6 +1879,7 @@ do --config
       v.instring = ins
       table.insert(instrings, v.instring)
     end
+    instrings_cache[kind]=instrings
     return instrings
   end
   

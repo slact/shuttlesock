@@ -181,10 +181,6 @@ function Instring.parse(setting_value)
   return setmetatable(instring, Instring.metatable)
 end
 
-function Instring.append(cur, next, space)
-  
-end
-
 function Instring.tonumber(str)
   return tonumber(str)
 end
@@ -283,8 +279,8 @@ function instring:insert(position, other)
   assert(Instring.is_instring(other))
   assert(type(position) == "number")
   assert(position > 0)
-  assert(position <= #self.tokens)
-  for i, token in ipairs(other) do
+  assert(position <= #self.tokens + 1)
+  for i, token in ipairs(other.tokens) do
     table.insert(self.tokens, position + i - 1, deep_copy(token))
   end
   return self:join_literal_tokens()
@@ -303,6 +299,7 @@ function instring:join_literal_tokens()
       i = i + 1
     end
   end
+  return self
 end
 
 function instring:remove(token_position)

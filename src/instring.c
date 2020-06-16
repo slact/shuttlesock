@@ -29,8 +29,9 @@ static bool instring_token_variable_lua_to_c(lua_State *L, shuso_setting_t *sett
   token->type = SHUSO_INSTRING_TOKEN_VARIABLE;
   shuso_variable_t *var = &token->variable;
   
-  luaL_checkstack(L, 4, NULL);
+  int top = lua_gettop(L);
   
+  luaL_checkstack(L, 4, NULL);
   const char *name, *module_name;
   lua_getfield(L, index, "name");
   name = lua_tostring(L, -1);
@@ -43,25 +44,31 @@ static bool instring_token_variable_lua_to_c(lua_State *L, shuso_setting_t *sett
   var->block = shuso_setting_parent_block(S, setting);
   assert(var->block);
   assert(name);
+  
   //can anyone handle this variable guys?...
   lua_pushstring(L, name);
   module_name ? lua_pushstring(L, var->module->name) : lua_pushnil(L);
   lua_pushlightuserdata(L, var->block);
   luaS_pcall_config_method(L, "find_variable", 3, 2);
+
   if(lua_isnil(L, -2)) {
     const char *err = lua_isstring(L, -1) ? lua_tostring(L, -1) : "unable to find variable for unknown reason";
     shuso_set_error(S, err);
     lua_pop(L, 2);
     return false;
   }
+  lua_pop(L, 1); //pop empty err
+  
   lua_getfield(L, -1, "eval");
   var->eval = lua_topointer(L, -1);
+  assert(var->eval);
   lua_pop(L, 1);
   var->pd = NULL;
   lua_getfield(L, -1, "constant");
   bool constant = lua_toboolean(L, -1);
   lua_pop(L, 1); //pop .constant
   lua_pop(L, 1); //pop variable
+  
   
   var->module = module_name ? shuso_get_module(S, module_name) : NULL;
   
@@ -78,6 +85,7 @@ static bool instring_token_variable_lua_to_c(lua_State *L, shuso_setting_t *sett
   lua_getfield(L, index, "params");
   int params_count = luaL_len(L, -1);
   var->params.size = params_count;
+  
   if(params_count > 0) {
     if((var->params.array = shuso_stalloc(&S->stalloc, sizeof(*var->params.array))) == NULL) {
       return shuso_set_error(S, "no memory for instring variable index array");
@@ -96,10 +104,6 @@ static bool instring_token_variable_lua_to_c(lua_State *L, shuso_setting_t *sett
   }
   lua_pop(L, 1);
   
-
-  lua_pushstring(L, var->name);
-  lua_pushlightuserdata(L, var->block);
-  
   if(constant) {
     shuso_str_t str;
     if(!var->eval(S, var, &str)) {
@@ -110,6 +114,7 @@ static bool instring_token_variable_lua_to_c(lua_State *L, shuso_setting_t *sett
   
   iov->iov_base = NULL;
   iov->iov_len = 0;
+  assert(top == lua_gettop(L));
   return true;
 }
 
@@ -146,7 +151,7 @@ static shuso_instring_t *luaS_instring_lua_to_c_generic(lua_State *L, shuso_sett
   
   bool literal = true;
   int  i;
-  
+
   if(preallocd_instring) {
     instring = preallocd_instring;
   }
@@ -186,7 +191,6 @@ static shuso_instring_t *luaS_instring_lua_to_c_generic(lua_State *L, shuso_sett
   for(i = 0; i< token_count; i++) {
     lua_rawgeti(L, -1, i+1);
     
-    
     lua_getfield(L, -1, "type");
     bool is_variable = luaS_streq_literal(L, -1, "variable");
     if(!is_variable) {
@@ -201,6 +205,8 @@ static shuso_instring_t *luaS_instring_lua_to_c_generic(lua_State *L, shuso_sett
       }
     }
     else {
+      literal = false;
+      var_count++;
       if(!instring_token_variable_lua_to_c(L, setting, &token[i], &instring->buffer.iov[i], -1)) {
         lua_settop(L, top);
         return false;
@@ -210,6 +216,7 @@ static shuso_instring_t *luaS_instring_lua_to_c_generic(lua_State *L, shuso_sett
   }
   
   lua_pop(L, 1); //pop ["tokens"]
+  
   instring->variables.count = var_count;
   if(var_count > 0) {
     shuso_variable_t **vars = shuso_stalloc(&S->stalloc, sizeof(*vars) * var_count);
@@ -311,6 +318,7 @@ static void luaS_push_iovec_as_string(lua_State *L, struct iovec *iov, size_t io
   luaL_Buffer buf;
   luaL_buffinit(L, &buf);
   for(unsigned i=0; i<iovlen; i++) {
+    assert(iov[i].iov_len < 1000);
     luaL_addlstring(&buf, iov[i].iov_base, iov[i].iov_len);
   }
   luaL_pushresult(&buf);
