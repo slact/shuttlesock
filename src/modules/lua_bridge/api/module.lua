@@ -13,6 +13,7 @@ local lua_modules = {}
 Module.module_publish_events = {}
 Module.module_subscribers = {}
 Module.event_subscribers = {}
+Module.module_variables = {}
 
 local module = {}
 local module_mt = {
@@ -75,6 +76,77 @@ local function subscribe_to_event_names(self)
   self.subscribe = nil
 end
 
+local function variable_format_valid(var)
+  if var == nil then
+    return nil, "variable being registered is nil"
+  end
+  if type(var) ~= "table" then
+    return nil, "variable being registered must be a table"
+  end
+  if getmetatable(var) then
+    return nil, "variable being registered isn't supposed to have a metatable..."
+  end
+  
+  if var.name == nil then
+    return nil, "variable.name is missing"
+  end
+  if type(var.name) ~= "string" then
+    return nil, "variable.name must be a string"
+  end
+  
+  if var.aliases ~= nil and type(var.aliases) ~= "table" and type(var.aliases) ~= "string" then
+    return nil, "variable aliases, if present, must be a table or string"
+  end
+  
+  if var.description == nil then
+    return nil, "variable.description is missing"
+  end
+  if type(var.description) ~= "string" then
+    return nil, "variable.description is must be a string"
+  end
+  
+  if var.path == nil then
+    return nil, "variable.path is missing"
+  end
+  if type(var.path) ~= "string" then
+    return nil, "variable.path must be a string"
+  end
+
+  if var.constant ~= nil and type(var.constant) ~= "boolean" then
+    return nil, "variable.constant, if present, must be a boolean"
+  end
+  
+  if var.eval == nil then
+    return nil, "variable.eval is missing"
+  end
+  if type(var.eval) ~= "function" then
+    return nil, "variable.eval must be a function"
+  end
+  return true
+end
+  
+
+local function register_variable(self, var)
+  assert(variable_format_valid(var))
+  
+  if Core.runstate() ~= "configuring" then
+    error("can't register module variable while " .. Core.runstate(), 0)
+  end
+  
+  --does this variable already exist?
+  local var_id = self.name .. ":" .. var.name
+  local vars = Module.module_variables
+  if vars[var_id] then
+    return nil, ("variable %s for module %s already registered"):format(var.name, self.name)
+  end
+  
+  table.insert(Module.module_variables, var)
+  assert(vars[#vars] == var)
+  var.registered_index = #vars --used for variable lookup in the c eval function
+  
+  return self
+end
+
 function Module.new(mod, version)
   if type(mod) == "string" then
     assert0(type(version) == "string", "Lua module version missing")
@@ -84,9 +156,16 @@ function Module.new(mod, version)
   assert0(type(mod) == "table")
   setmetatable(mod, module_mt)
   Module.module_subscribers[mod]={}
-  if mod.subscribe then
+  if rawget(mod, "subscribe") then
+    assert(type(rawget(mod, "subscribe")) == "table", "module.subscribe, if present, must be a table")
     subscribe_to_event_names(mod)
   end
+  
+  --just check the bar format for now, don't register the variables yet
+  for _, var in ipairs(mod.variables or {}) do
+    assert(variable_format_valid(var))
+  end
+  
   return mod
 end
 
@@ -116,6 +195,9 @@ function Module.is_lua_module(tbl)
 end
 
 function module:add()
+  if Core.runstate() ~= "configuring" then
+    error("can't add module while " .. Core.runstate(), 0)
+  end
   local ok, err
   
   local module_table = {
@@ -160,6 +242,13 @@ function module:add()
     Module.module_publish_events[self.name] = {}
   end
   
+  if self.variables then
+    assert(type(self.variables) == "table", "module.variables, if present, must be a table")
+    for _, var in ipairs(self.variables) do
+      register_variable(self, var)
+    end
+  end
+  
   local publish_names = {}
   
   for k, v in pairs(rawget(self, "publish") or {}) do
@@ -200,6 +289,17 @@ function module:add()
   self.ptr = Core.module_pointer(self.name)
   assert(type(self.ptr) == "userdata")
   return self
+end
+
+function module:add_variable(var)
+  if lua_modules[self.name] == self then
+    return nil, "Too late to add variable, this module has already been added"
+  end
+  if not self.variables then
+    self.variables = {}
+  end
+  assert(variable_format_valid(var))
+  table.insert(self.variables, var)
 end
 
 function module:subscribe(event_name, subscriber_function, priority)
@@ -253,9 +353,21 @@ end
 Module.metatable = module_mt
 setmetatable(Module, {
   __gxcopy_save_module_state = function()
+    local vars_copy = {}
+    for i, orig_var in ipairs(Module.module_variables) do
+      local var = {}
+      for k, v in pairs(orig_var) do
+        var[k]=v
+      end
+      var.cached_module = nil
+      var.cached_setting = nil
+      var.chacked_block = nil
+      vars_copy[i]=var
+    end
     return {
       lua_modules = lua_modules,
       module_subscribers = Module.module_subscribers,
+      module_variables = vars_copy,
       module_publish_events = Module.module_publish_events,
       event_subscribers = Module.event_subscribers,
       wrapped_modules = wrapped_modules,
@@ -263,10 +375,12 @@ setmetatable(Module, {
   end,
   __gxcopy_load_module_state = function(state)
     lua_modules = state.lua_modules
+    Module.module_variables = state.module_variables
     Module.module_subscribers = state.module_subscribers
     Module.event_subscribers = state.event_subscribers
     Module.module_publish_events = state.module_publish_events
     wrapped_modules = state.wrapped_modules
+    
     return true
   end
 })

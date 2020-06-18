@@ -59,16 +59,22 @@ static bool instring_token_variable_lua_to_c(lua_State *L, shuso_setting_t *sett
   }
   lua_pop(L, 1); //pop empty err
   
+  var->state = NULL; //state always starts as NULL
+  
   lua_getfield(L, -1, "eval");
   var->eval = lua_topointer(L, -1);
   assert(var->eval);
   lua_pop(L, 1);
-  var->pd = NULL;
+  
+  lua_getfield(L, -1, "privdata");
+  if(lua_islightuserdata(L, -1)) {
+    var->privdata = (void *)lua_topointer(L, -1);
+  }
+  lua_pop(L, 1);
   lua_getfield(L, -1, "constant");
   bool constant = lua_toboolean(L, -1);
   lua_pop(L, 1); //pop .constant
   lua_pop(L, 1); //pop variable
-  
   
   var->module = module_name ? shuso_get_module(S, module_name) : NULL;
   

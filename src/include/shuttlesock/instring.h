@@ -14,7 +14,9 @@ typedef struct shuso_variable_s {
     size_t               size;
   }                    params;
   shuso_variable_eval_fn     *eval;
-  void                       *pd;
+  void                       *privdata;
+  void                       *state;
+  
 } shuso_variable_t;
 
 #define SHUTTLESOCK_INSTRING_VALUE_UNKNOWN 0

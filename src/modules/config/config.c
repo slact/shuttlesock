@@ -235,6 +235,7 @@ bool shuso_config_system_initialize(shuso_t *S) {
 
 static shuso_setting_t *lua_setting_to_c_struct(shuso_t *S, lua_State *L) {
   int sidx = lua_gettop(L);
+  int top = lua_gettop(L);
   shuso_setting_t *setting = shuso_stalloc(&S->stalloc, sizeof(*setting));
   if(!setting) {
     shuso_set_error(S, "failed to alloc config setting");
@@ -284,6 +285,7 @@ static shuso_setting_t *lua_setting_to_c_struct(shuso_t *S, lua_State *L) {
     shuso_setting_block_t *block = shuso_stalloc(&S->stalloc, sizeof(*block));
     if(block == NULL) {
       shuso_set_error(S, "failed to allocate memory for config block");
+      lua_settop(L, top);
       return NULL;
     }
     lua_getfield(L, -1, "ptr");
@@ -302,6 +304,7 @@ static shuso_setting_t *lua_setting_to_c_struct(shuso_t *S, lua_State *L) {
     block->setting = setting;
     if(!shuso_context_list_initialize(S, NULL, &block->context_list, &S->stalloc)) {
       shuso_set_error(S, "unable to initialize config block module context list");
+      lua_settop(L, top);
       return NULL;
     }
   }
@@ -320,16 +323,26 @@ static shuso_setting_t *lua_setting_to_c_struct(shuso_t *S, lua_State *L) {
   };
   
   for(int i=0; i<3; i++) {
+    int cnt = shuso_error_capture_start(S);
+    
     assert(lua_istable(L, sidx));
     lua_pushvalue(L, sidx);
     lua_pushstring(L, ins[i].name);
-    luaS_pcall_config_method(L, "setting_instrings", 2, 1);
-    assert(lua_istable(L, -1));
-    int cnt = shuso_error_capture_start(S);
-    *ins[i].instrings = luaS_instrings_lua_to_c(L, setting, -1);
+    luaS_pcall_config_method(L, "setting_instrings", 2, 2);
+    if(lua_isnil(L, -2)) {
+      shuso_set_error(S, "%s", lua_isstring(L, -1) ? lua_tostring(L, -1) : "unkown setting_instring error");
+    }
+    else {
+      lua_pop(L, 1); // pop error description string slot
+      assert(lua_istable(L, -1));
+      
+      *ins[i].instrings = luaS_instrings_lua_to_c(L, setting, -1);
+    }
+    
     const char *last_error;
     if((last_error = shuso_error_capture_finish(S, cnt)) != NULL) {
       shuso_config_error(S, setting, last_error);
+      lua_settop(L, top);
       return NULL;
     }
     assert(*ins[i].instrings != NULL);
@@ -346,7 +359,7 @@ static shuso_setting_t *lua_setting_to_c_struct(shuso_t *S, lua_State *L) {
   }
   assert(setting->instrings.merged != NULL);
   
-  assert(sidx == lua_gettop(L));
+  assert(top == lua_gettop(L));
   return setting;
 }
 

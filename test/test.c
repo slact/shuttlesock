@@ -824,6 +824,9 @@ describe(configuration) {
     test("set $variable") {
       assert_luaL_dofile_args(S->lua.state, "config_variable_simple.lua", 1);
     }
+    test("module $variable") {
+      assert_luaL_dofile_args(S->lua.state, "test_config_module_variables.lua", 1);
+    }
   }
   
   test("module with a bunch of config settings") {

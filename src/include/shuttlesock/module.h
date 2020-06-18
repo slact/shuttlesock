@@ -23,6 +23,7 @@ typedef struct shuso_module_variable_s {
   const char *description;
   bool        constant;
   shuso_variable_eval_fn *eval;
+  void                   *privdata;
 } shuso_module_variable_t;
 
 struct shuso_module_s {

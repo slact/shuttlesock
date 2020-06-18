@@ -1527,14 +1527,85 @@ static int Lua_shuso_get_active_module(lua_State *L) {
 }
 
 static bool lua_module_variable_eval(shuso_t *S, shuso_variable_t *var, shuso_str_t *ret_val) {
-  /*luaS_push_lua_module_field(L, "shuttlesock.module", "get_variable");
-  lua_pushlightuserdata(L, var);
-  lua_call(L, 1, 1);
+  lua_State   *L = S->lua.state;
+  int          top = lua_gettop(L);
+  
+  luaS_push_lua_module_field(L, "shuttlesock.module", "module_variables");
+  lua_rawgeti(L, -1, (uintptr_t )var->privdata);
+  
   assert(lua_istable(L, -1));
-  lua_getfield(L, -1, "variables");
-  assert(lua_istable(L, -1));
-  lua_getfield(L, -1, */
-  return true;
+  lua_remove(L, -2);
+  
+  int          varindex = lua_absindex(L, -1);
+  
+  lua_getfield(L, varindex, "eval");
+  assert(lua_isfunction(L, -1));
+  
+  lua_getfield(L, varindex, "name");
+  
+  lua_getfield(L, varindex, "cached_params");
+  if(lua_isnil(L, -1)) {
+    lua_pop(L, 1);
+    lua_newtable(L);
+    for(size_t i = 0; i < var->params.size; i++) {
+      lua_pushstring(L, var->params.array[i]);
+      lua_rawseti(L, -2, i+1);
+    }
+    
+    lua_pushvalue(L, -1);
+    lua_setfield(L, varindex, "cached_params");
+  }
+  
+  lua_getfield(L, varindex, "cached_previous_value");
+  
+  lua_getfield(L, varindex, "cached_module");
+  if(lua_isnil(L, -1)) {
+    lua_pop(L, 1);
+    luaS_push_lua_module_field(L, "shuttlesock.module", "find");
+    lua_getfield(L, varindex, "module_name");
+    lua_call(L, 1, 1);
+    assert(!lua_isnil(L, -1));
+    
+    lua_pushvalue(L, -1);
+    lua_setfield(L, varindex, "cached_module");
+  }
+  
+  lua_getfield(L, varindex, "cached_setting");
+  if(lua_isnil(L, -1)) {
+    lua_pop(L, 1);
+    luaS_push_lua_module_field(L, "shuttlesock.config", "setting");
+    lua_pushlightuserdata(L, var->setting);
+    lua_call(L, 1, 1);
+    assert(!lua_isnil(L, -1));
+    
+    lua_pushvalue(L, -1);
+    lua_setfield(L, varindex, "cached_setting");
+  }
+  
+  if(!luaS_pcall(L, 5, 1)) {
+    *ret_val = (shuso_str_t ){.data=NULL, .len=0};
+    return true;
+  }
+  
+  if(lua_isboolean(L, -1) && !lua_toboolean(L, -1)) {
+    //no change to current value
+    lua_pop(L, 2);
+    assert(top == lua_gettop(L));
+    return false;
+  }
+  else if(lua_isstring(L, -1)) {
+    ret_val->data = (char *)lua_tolstring(L, -1, &ret_val->len);
+    lua_setfield(L, varindex, "cached_previous_value");
+    assert(top == lua_gettop(L));
+    
+    return true;
+  }
+  else {
+    shuso_set_error(S, "invalid return type for variable $%s eval for module %s: expected false or string, got %s", var->name, var->module->name, lua_typename(L, lua_type(L, -1)));
+    lua_pop(L, 2);
+    assert(top == lua_gettop(L));
+    return true;
+  }
 }
 
 static int Lua_shuso_add_module(lua_State *L) {
@@ -1669,6 +1740,14 @@ static int Lua_shuso_add_module(lua_State *L) {
         return luaL_error(L, "variables field is not a table");
       }
       
+      uintptr_t   registered_index;
+      lua_getfield(L, -1, "registered_index");
+      if(!lua_isnumber(L, -1)) {
+        return luaL_error(L, "variable was not registered");
+      }
+      registered_index = lua_tointeger(L, -1);
+      lua_pop(L, 1);
+      
       lua_getfield(L, -1, "name");
       if(!lua_isstring(L, -1)) {
         return luaL_error(L, "variable.name is not a string");
@@ -1714,7 +1793,7 @@ static int Lua_shuso_add_module(lua_State *L) {
       }
       lua_pop(L, 1);
       vars[i].eval = lua_module_variable_eval;
-      
+      vars[i].privdata = (void *)registered_index;
       lua_pop(L, 1);
     }
   }
