@@ -1793,7 +1793,6 @@ static int Lua_shuso_add_module(lua_State *L) {
       lua_pop(L, 1);
       vars[i].eval = lua_module_variable_eval;
       vars[i].privdata = (void *)registered_index;
-      printf("REGISTED INDEX for var $%s: %d\n", vars[i].name, registered_index);
       lua_pop(L, 1);
     }
     vars[count] = (shuso_module_variable_t ){.name = NULL};
