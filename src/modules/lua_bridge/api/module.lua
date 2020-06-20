@@ -95,7 +95,7 @@ local function variable_format_valid(var)
   end
   
   if var.aliases ~= nil and type(var.aliases) ~= "table" and type(var.aliases) ~= "string" then
-    return nil, "variable aliases, if present, must be a table or string"
+    return nil, "variable.aliases, if present, must be a table or string"
   end
   
   if var.description == nil then
@@ -143,7 +143,7 @@ local function register_variable(self, var)
   table.insert(Module.module_variables, var)
   assert(vars[#vars] == var)
   var.registered_index = #vars --used for variable lookup in the c eval function
-  
+  var.module_name = self.name
   return self
 end
 

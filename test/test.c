@@ -714,10 +714,12 @@ describe(lua_api) {
   
 
 describe(configuration) {
-    static shuso_t          *S = NULL;
+  static shuso_t          *S = NULL;
   static test_runcheck_t  *chk = NULL;
+  static lua_State        *L = NULL;
   before_each() {
     S = shusoT_create(&chk, 5555.0);
+    L = S->lua.state;
     assert_luaL_dofile(S->lua.state, "config_test_module.lua");
   }
   after_each() {
@@ -726,7 +728,7 @@ describe(configuration) {
   
   subdesc(setting_paths) {
     test("generic path matching") {
-      assert_luaL_dofile(S->lua.state, "config_path_matching.lua");
+      assert_luaL_dofile(L, "config_path_matching.lua");
     }
     test("unmatched path") {
       assert_conftest_fail(S, 
@@ -780,7 +782,7 @@ describe(configuration) {
   
   subdesc(heredocs) {
     test("many heredocs on the same line") {
-      assert_luaL_dofile_args(S->lua.state, "test_config_heredocs_valid.lua", 1);
+      assert_luaL_dofile_args(L, "test_config_heredocs_valid.lua", 1);
     }
     test("unterminated heredoc with no body") {
       assert_conftest_fail(S, 
@@ -798,7 +800,7 @@ describe(configuration) {
   
   subdesc(strings) {
     test("string values") {
-      assert_luaL_dofile_args(S->lua.state, "test_config_string_values.lua", 1);
+      assert_luaL_dofile_args(L, "test_config_string_values.lua", 1);
     }
     test("unterminated string due to EOF") {
       assert_conftest_fail(S, 
@@ -816,16 +818,16 @@ describe(configuration) {
   
   subdesc(value_types) {
     test("all possible value types") {
-      assert_luaL_dofile_args(S->lua.state, "test_config_value_types.lua", 1);
+      assert_luaL_dofile_args(L, "test_config_value_types.lua", 1);
     }
   }
   
   subdesc(variables) {
     test("set $variable") {
-      assert_luaL_dofile_args(S->lua.state, "config_variable_simple.lua", 1);
+      assert_luaL_dofile_args(L, "config_variable_simple.lua", 1);
     }
-    test("module $variable") {
-      assert_luaL_dofile_args(S->lua.state, "test_config_module_variables.lua", 1);
+    test("constant module $variable") {
+      assert_luaL_dofile_args(L, "test_config_module_variables.lua", 1);
     }
   }
   

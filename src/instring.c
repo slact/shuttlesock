@@ -71,6 +71,7 @@ static bool instring_token_variable_lua_to_c(lua_State *L, shuso_setting_t *sett
     var->privdata = (void *)lua_topointer(L, -1);
   }
   lua_pop(L, 1);
+  
   lua_getfield(L, -1, "constant");
   bool constant = lua_toboolean(L, -1);
   lua_pop(L, 1); //pop .constant
@@ -472,7 +473,7 @@ bool shuso_instring_string_value(shuso_t *S, shuso_instring_t *instring, shuso_s
     *retval = instring->cached_value.string;
   }
   assert(instring->cached_value.string_lua_ref == LUA_NOREF);
-  instring->cached_value.string_lua_ref = luaL_ref(L, -1);
+  instring->cached_value.string_lua_ref = luaL_ref(L, LUA_REGISTRYINDEX);
   return true;
 }
 

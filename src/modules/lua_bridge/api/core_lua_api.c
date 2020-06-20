@@ -1529,7 +1529,6 @@ static int Lua_shuso_get_active_module(lua_State *L) {
 static bool lua_module_variable_eval(shuso_t *S, shuso_variable_t *var, shuso_str_t *ret_val) {
   lua_State   *L = S->lua.state;
   int          top = lua_gettop(L);
-  
   luaS_push_lua_module_field(L, "shuttlesock.module", "module_variables");
   lua_rawgeti(L, -1, (uintptr_t )var->privdata);
   
@@ -1596,8 +1595,8 @@ static bool lua_module_variable_eval(shuso_t *S, shuso_variable_t *var, shuso_st
   else if(lua_isstring(L, -1)) {
     ret_val->data = (char *)lua_tolstring(L, -1, &ret_val->len);
     lua_setfield(L, varindex, "cached_previous_value");
+    lua_pop(L, 1);
     assert(top == lua_gettop(L));
-    
     return true;
   }
   else {
@@ -1794,8 +1793,11 @@ static int Lua_shuso_add_module(lua_State *L) {
       lua_pop(L, 1);
       vars[i].eval = lua_module_variable_eval;
       vars[i].privdata = (void *)registered_index;
+      printf("REGISTED INDEX for var $%s: %d\n", vars[i].name, registered_index);
       lua_pop(L, 1);
     }
+    vars[count] = (shuso_module_variable_t ){.name = NULL};
+    m->variables = vars;
   }
   
   m->initialize_config = lua_module_initialize_config;
