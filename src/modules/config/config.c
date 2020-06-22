@@ -197,6 +197,9 @@ bool shuso_config_register_variable(shuso_t *S, shuso_module_variable_t *variabl
   lua_pushlightuserdata(L, (void *)variable->eval);
   lua_setfield(L, -2, "eval");
   
+  lua_pushlightuserdata(L, (void *)variable->privdata);
+  lua_setfield(L, -2, "privdata");
+  
   if(variable->description) {
     lua_pushstring(L, variable->description);
     lua_setfield(L, -2, "description");

@@ -85,10 +85,10 @@ local function variable_format_valid(var)
   end
   
   if var.name == nil then
-    return nil, "variable.name is missing"
+    return nil, "variable name is missing"
   end
   if type(var.name) ~= "string" then
-    return nil, "variable.name must be a string"
+    return nil, "variable name must be a string"
   end
   
   if getmetatable(var) then
@@ -128,20 +128,23 @@ end
   
 
 local function register_variable(self, var)
-  local ok, err = variable_format_valid(var)
-  if not ok then
-    return nil, err .. " in module " .. self.name
-  end
+  assert(variable_format_valid(var))
   
   if Core.runstate() ~= "configuring" then
-    return nil, "can't register module variable while " .. Core.runstate()
+    error("can't register module variable while " .. Core.runstate(), 0)
   end
   
+  --does this variable already exist?
+  local var_id = self.name .. ":" .. var.name
   local vars = Module.module_variables
-  table.insert(vars, var)
+  if vars[var_id] then
+    return nil, ("variable %s for module %s already registered"):format(var.name, self.name)
+  end
+  
+  table.insert(Module.module_variables, var)
   assert(vars[#vars] == var)
   var.registered_index = #vars --used for variable lookup in the c eval function
-  
+  var.module_name = self.name
   return self
 end
 
@@ -243,7 +246,7 @@ function module:add()
   if self.variables then
     assert0(type(self.variables) == "table", "module.variables, if present, must be a table")
     for _, var in ipairs(self.variables) do
-      assert0(register_variable(self, var))
+      register_variable(self, var)
     end
   end
   

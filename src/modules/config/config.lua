@@ -1536,10 +1536,11 @@ do --config
   end
   
   function config:register_variable(module_name, var)
+    assert(type(module_name) == "string")
     assert(type(var.name) == "string")
     assert(type(var.path) == "string")
-    assert(type(var.module_name) == "string")
     assert(type(var.eval) == "userdata")
+    assert(type(var.privdata) == "userdata" or var.privdata == nil)
     
     local function failmsg(...)
       local n = select("#", ...)
@@ -1569,9 +1570,10 @@ do --config
       raw_name = var.name,
       name = var.name,
       path = var.path,
-      module_name = var.module_name,
+      module_name = module_name,
       aliases = aliases or {},
-      eval = var.eval
+      eval = var.eval,
+      privdata = var.privdata
     }
     
     local all_names = {[var.name] = "name"}
@@ -1579,33 +1581,36 @@ do --config
       all_names[alias] = "alias"
     end
     
-    for varname, nametype in ipairs(all_names) do
+    for varname, nametype in pairs(all_names) do
       local name, kleenestar = varname:match("^([%w%_]+)(%*?)$")
       if not name then
         return nil, ("Invalid variable %s \"%s\""):format(nametype, varname)
       end
       
+      local vars
+      local var_match_index, var_id
       if #kleenestar == 1 then
-        local vars = config.variables.prefix_match
+        vars = self.variables.prefix_match
+        var.match_prefix = true
         local match_pattern = "^"..name.."([%w%_]*)"
-        vars[match_pattern] = vars[match_pattern] or {}
-        if vars[match_pattern][var.module_name] then
-          return nil, ("Variable %s is already registered by this module (%s)"):format(var.name, var.module_name)
-        end
-        vars.match_prefix = true
-        vars.match_suffix_pattern = match_pattern
-        vars[match_pattern][var.module_name] = var
+        var_match_index = match_pattern
+        var_id = '$'..var.module_name .. ":" .. name.."*"
       else
-        local vars = config.variables.name
-        vars[name] = vars[name] or {}
-        if vars[name][var.module_name] then
-          return nil, ("Variable %s is already registered by this module (%s)"):format(var.name, var.module_name)
-        end
-        vars[name][var.module_name] = var
+        vars = self.variables.name
+        var_match_index = name
+        var_id = '$'..var.module_name..":"..name
       end
       
+      if not vars[var_match_index] then
+        vars[var_match_index] = {}
+      end
+      
+      if vars[var_match_index][var_id] then
+        return nil, ("Variable with name or alias '%s' is already registered by this module (%s)"):format(name, var.module_name)
+      end
+      
+      vars[var_match_index][var_id] = var
     end
-    
     return true
   end
   
@@ -1644,7 +1649,6 @@ do --config
       return setvar
     end
     
-    
     local possible_module_vars = {}
     for pattern, wildcard_vars in pairs(self.variables.prefix_match) do
       if name:match(pattern) then
@@ -1654,10 +1658,8 @@ do --config
       end
     end
     
-    for _, vars in pairs(self.variables.name[name] or {}) do
-      for _, var in pairs(vars) do
-        table.insert(possible_module_vars, var)
-      end
+    for _, var in pairs(self.variables.name[name] or {}) do
+      table.insert(possible_module_vars, var)
     end
     
     if #possible_module_vars == 0 then
@@ -1678,8 +1680,8 @@ do --config
         return nil, "no variable $"..name .. " for module " .. module_name
       end
     end
-    
-    for i, var in pairs(possible_module_vars) do
+
+    for i, var in ipairs(possible_module_vars) do
       self:get_path(block)
       if not Config.match_path(block, var.path) then
         table.remove(possible_module_vars, i)
