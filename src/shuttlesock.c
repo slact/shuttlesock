@@ -169,7 +169,7 @@ bool shuso_runstate_check(shuso_t *S, shuso_runstate_t allowed_state, const char
     case SHUSO_STATE_STOPPED:
       return shuso_set_error(S, "failed to %s: shuttlesock is already stopped", whatcha_doing);
     case SHUSO_STATE_MISCONFIGURED:
-      return shuso_set_error(S, "failed to %s: shuttlesock is misconfigured", whatcha_doing);
+      return shuso_set_error(S, "failed to %s: %s", whatcha_doing, shuso_last_error(S) ? shuso_last_error(S) : "shuttlesock is misconfigured");
     case SHUSO_STATE_CONFIGURING:
       return shuso_set_error(S, "failed to %s: shuttlesock is still being configured", whatcha_doing);
     case SHUSO_STATE_CONFIGURED:
