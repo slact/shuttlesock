@@ -2857,7 +2857,7 @@ static int Lua_shuso_getaddrinfo_noresolve(lua_State *L) {
         hints.ai_family = AF_INET;
       }
       else if(ipnum == 6) {
-  #ifndef SHUTTLESOCK_HAVE_IPV6
+#ifndef SHUTTLESOCK_HAVE_IPV6
         lua_pushnil(L);
         lua_pushstring(L, "IPv6 Not supported");
         return 2;
