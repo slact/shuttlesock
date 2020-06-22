@@ -1058,23 +1058,7 @@ do --config
     
     return self
   end
-  --[[
-  function config:resolve_variables()
-    assert(not self.variables_handled)
-    for setting in self:each_setting() do
-      for _, val in ipairs(setting.values or {}) do
-        for i, token in ipairs(val.instring.tokens) do
-          if token.type == "variable" then
-            assert(setting.parent.block)
-            local var = self:find_variable(
-          end
-        end
-      end
-    end
-    self.variables_handled = true
-    return self
-  end
-  ]]
+
   function config:block_handled_by_module(block, module_name)
     local setting = block.setting
     self:get_setting_path(setting)

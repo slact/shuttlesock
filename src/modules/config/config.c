@@ -451,7 +451,6 @@ bool shuso_config_system_generate(shuso_t *S) {
     lua_rawgeti(L, -1, i+1);
     shuso_setting_t *ss;
     if((ss = lua_setting_to_c_struct(S, L)) == NULL) {
-      raise(SIGSTOP);
       lua_settop(L, top);
       return false;
     }

@@ -158,7 +158,6 @@ static int Lua_shuso_configure_finish(lua_State *L) {
   if(!shuso_configure_finish(S)) {
     lua_pushnil(L);
     luaS_push_shuso_error(L);
-    luaS_printstack(L, "yeehaw");
     return 2;
   }
   lua_pushboolean(L, 1);
