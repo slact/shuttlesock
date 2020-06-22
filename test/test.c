@@ -829,35 +829,35 @@ describe(configuration) {
         assert_luaL_dofile_args(L, "test_config_module_bad_variable_declarations.lua", 3);
       }
       test("variable with a metatable") {
-        assert_luaL_dostring(L, "return {var=setmetatable({},{})}, 'variable .* isn\\'t supposed to have a metatable'");
+        assert_luaL_dostring(L, "return {var=setmetatable({name='foo'},{})}, 'variable $foo .*isn\\'t supposed to have a metatable'");
         assert_luaL_dofile_args(L, "test_config_module_bad_variable_declarations.lua", 3);
       }
       test("variable with no name") {
-        assert_luaL_dostring(L, "return {'name'}, 'variable%.name is missing'");
+        assert_luaL_dostring(L, "return {'name'}, 'variable name is missing'");
         assert_luaL_dofile_args(L, "test_config_module_bad_variable_declarations.lua", 3);
       }
       test("variable with non-string name") {
-        assert_luaL_dostring(L, "return {name={}}, 'variable%.name must be a string'");
+        assert_luaL_dostring(L, "return {name={}}, 'variable name must be a string'");
         assert_luaL_dofile_args(L, "test_config_module_bad_variable_declarations.lua", 3);
       }
-      test("variable with ivalid aliases") {
-        assert_luaL_dostring(L, "return {aliases=25}, 'variable%.aliases.* must be a table or string'");
+      test("variable with invalid aliases") {
+        assert_luaL_dostring(L, "return {aliases=25}, 'variable $testvar aliases.* must be a table or string'");
         assert_luaL_dofile_args(L, "test_config_module_bad_variable_declarations.lua", 3);
       }
       test("variable with no path") {
-        assert_luaL_dostring(L, "return {'path'}, 'variable%.path is missing'");
+        assert_luaL_dostring(L, "return {'path'}, 'variable $testvar path is missing'");
         assert_luaL_dofile_args(L, "test_config_module_bad_variable_declarations.lua", 3);
       }
       test("variable with non-string path") {
-        assert_luaL_dostring(L, "return {path={}}, 'variable%.path must be a string'");
+        assert_luaL_dostring(L, "return {path={}}, 'variable $testvar path must be a string'");
         assert_luaL_dofile_args(L, "test_config_module_bad_variable_declarations.lua", 3);
       }
       test("variable with no eval") {
-        assert_luaL_dostring(L, "return {'eval'}, 'variable%.eval is missing'");
+        assert_luaL_dostring(L, "return {'eval'}, 'variable $testvar eval is missing'");
         assert_luaL_dofile_args(L, "test_config_module_bad_variable_declarations.lua", 3);
       }
       test("variable with non-function eval") {
-        assert_luaL_dostring(L, "return {eval=coroutine.create(function()end)}, 'variable%.eval must be a function'");
+        assert_luaL_dostring(L, "return {eval=coroutine.create(function()end)}, 'variable $testvar eval must be a function'");
         assert_luaL_dofile_args(L, "test_config_module_bad_variable_declarations.lua", 3);
       }
     }

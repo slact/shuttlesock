@@ -83,44 +83,45 @@ local function variable_format_valid(var)
   if type(var) ~= "table" then
     return nil, "variable being registered must be a table"
   end
-  if getmetatable(var) then
-    return nil, "variable being registered isn't supposed to have a metatable..."
-  end
   
   if var.name == nil then
-    return nil, "variable.name is missing"
+    return nil, "variable name is missing"
   end
   if type(var.name) ~= "string" then
-    return nil, "variable.name must be a string"
+    return nil, "variable name must be a string"
+  end
+  
+  if getmetatable(var) then
+    return nil, "variable $"..var.name.." being registered isn't supposed to have a metatable..."
   end
   
   if var.aliases ~= nil and type(var.aliases) ~= "table" and type(var.aliases) ~= "string" then
-    return nil, "variable.aliases, if present, must be a table or string"
+    return nil, "variable $"..var.name.." aliases, if present, must be a table or string"
   end
   
   if var.description == nil then
-    return nil, "variable.description is missing"
+    return nil, "variable $"..var.name.." description is missing"
   end
   if type(var.description) ~= "string" then
-    return nil, "variable.description is must be a string"
+    return nil, "variable $"..var.name.." description is must be a string"
   end
   
   if var.path == nil then
-    return nil, "variable.path is missing"
+    return nil, "variable $"..var.name.." path is missing"
   end
   if type(var.path) ~= "string" then
-    return nil, "variable.path must be a string"
+    return nil, "variable $"..var.name.." path must be a string"
   end
 
   if var.constant ~= nil and type(var.constant) ~= "boolean" then
-    return nil, "variable.constant, if present, must be a boolean"
+    return nil, "variable $"..var.name.." constant, if present, must be a boolean"
   end
   
   if var.eval == nil then
-    return nil, "variable.eval is missing"
+    return nil, "variable $"..var.name.." eval is missing"
   end
   if type(var.eval) ~= "function" then
-    return nil, "variable.eval must be a function"
+    return nil, "variable $"..var.name.." eval must be a function"
   end
   return true
 end
@@ -243,7 +244,7 @@ function module:add()
   end
   
   if self.variables then
-    assert(type(self.variables) == "table", "module.variables, if present, must be a table")
+    assert0(type(self.variables) == "table", "module.variables, if present, must be a table")
     for _, var in ipairs(self.variables) do
       register_variable(self, var)
     end

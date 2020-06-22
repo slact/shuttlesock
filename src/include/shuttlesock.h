@@ -181,7 +181,6 @@ typedef struct shuso_s {
     char                       *msg;
     int                         error_count;
     int                         error_number; //errno
-    char                       *combined_errors;
     bool                        static_memory;
     bool                        do_not_log;
     bool                        do_not_publish_event;

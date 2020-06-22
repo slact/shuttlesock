@@ -252,11 +252,14 @@ bool shuso_configure_finish(shuso_t *S) {
   return true;
   
 fail:
-  if(errmsg) {
-    shuso_set_error(S, errmsg);
+  if(!errmsg) {
+    errmsg = shuso_last_error(S);
+  }
+  if(!errmsg) {
+    errmsg = "unknown error";
   }
   S->common->state = SHUSO_STATE_MISCONFIGURED;
-  shuso_set_error(S, "failed to configure shuttlesock");
+  shuso_set_error(S, "failed to configure shuttlesock: %s", errmsg);
   if(shm_slab_created) shuso_shared_slab_destroy(S, &S->common->shm);
   return false;
 }
@@ -284,9 +287,6 @@ bool shuso_destroy(shuso_t *S) {
   }
   if(!S->error.static_memory) {
     free(S->error.msg);
-  }
-  if(S->error.combined_errors) {
-    free(S->error.combined_errors);
   }
   free(S);
   shuso_resolver_global_cleanup();
@@ -733,28 +733,11 @@ static void shuso_set_error_vararg(shuso_t *S, const char *fmt, va_list args) {
     S->error.static_memory = false;
   }
   va_end(args_again);
-  if(S->common->state == SHUSO_STATE_CONFIGURING) {
-    const char *last_err = shuso_last_error(S);
-    char *config_errors = S->error.combined_errors;
-    int config_errors_len = config_errors == NULL ? 0 : strlen(config_errors);
-    if((config_errors = realloc(config_errors, config_errors_len + strlen(last_err) + 5)) == NULL) {
-      return;
-    }
-    sprintf(&config_errors[config_errors_len], "\n  %s", last_err);
-    S->error.combined_errors = config_errors;
-  }
+  
   if(!S->error.do_not_log) {
     shuso_log_error(S, "%s", S->error.msg);
   }
-  if(S->common->state == SHUSO_STATE_MISCONFIGURED && S->error.combined_errors != NULL) {
-    char *combined = S->error.combined_errors;
-    S->error.combined_errors = NULL;
-    bool prev_do_not_log = S->error.do_not_log;
-    S->error.do_not_log = true;
-    shuso_set_error(S, "%s%s", shuso_last_error(S), combined);
-    S->error.do_not_log = prev_do_not_log;
-    free(combined);
-  }
+  
   if(free_oldmsg) {
     free((void *)free_oldmsg);
   }
