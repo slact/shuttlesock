@@ -206,7 +206,7 @@ bool shuso_master_initialize_modules(shuso_t *S) {
       S->active_module = module;
       int errcount = shuso_error_count(S);
       if(!module->initialize(S, module) || shuso_error_count(S) > errcount) {
-        shuso_set_error(S, "module %s failed to initialize%s", module->name, shuso_last_error(S) ? "" : ", but no error was reported by the module");
+        shuso_set_error(S, "module %s failed to initialize: %s", module->name, shuso_last_error(S) ? shuso_last_error(S) : " no error was reported by the module despite failure");
         S->active_module = prev_active_module;
         return false;
       }
