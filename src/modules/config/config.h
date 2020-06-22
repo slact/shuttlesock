@@ -20,7 +20,7 @@ typedef struct {
     const shuso_setting_block_t **array;
     size_t                  count;
   }                blocks;
-} shuso_config_module_ctx_t;
+} shuso_config_module_common_ctx_t;
 
 
 typedef struct shuso_setting_s {

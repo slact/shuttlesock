@@ -10,7 +10,7 @@ static void config_worker_gxcopy(shuso_t *S, shuso_event_state_t *evs, intptr_t 
   lua_State       *Lworker = S->lua.state;
   lua_State       *Lmanager = Smanager->lua.state;
   
-  luaS_get_config_pointer_ref(Lmanager, Smanager->common->module_ctx.config);
+  luaS_get_config_pointer_ref(Lmanager, Smanager->common->ctx.config);
   if(!luaS_gxcopy(Lmanager, Lworker)) {
     shuso_set_error(S, "failed to copy Lua config stuff");
     lua_pop(Lmanager, 1);
@@ -20,7 +20,7 @@ static void config_worker_gxcopy(shuso_t *S, shuso_event_state_t *evs, intptr_t 
 
   assert(lua_istable(Lworker, -1));
   
-  luaS_config_pointer_ref(Lworker, S->common->module_ctx.config);
+  luaS_config_pointer_ref(Lworker, S->common->ctx.config);
   
   //copy ptr => setting/block/whatever mappings
   
@@ -75,7 +75,7 @@ bool luaS_get_config_pointer_ref(lua_State *L, const void *ptr) {
 
 void luaS_push_config_field(lua_State *L, const char *field) {
   shuso_t                    *S = shuso_state(L);
-  shuso_config_module_ctx_t  *ctx = S->common->module_ctx.config;
+  shuso_config_module_common_ctx_t  *ctx = S->common->ctx.config;
   luaS_get_config_pointer_ref(L, ctx);
   lua_getfield(L, -1, field);
   lua_remove(L, -2);
@@ -84,7 +84,7 @@ void luaS_push_config_field(lua_State *L, const char *field) {
 bool luaS_pcall_config_method(lua_State *L, const char *method_name, int nargs, int nret) {
   shuso_t                    *S = shuso_state(L);
   int                         argstart = lua_absindex(L, -nargs);
-  shuso_config_module_ctx_t  *ctx = S->common->module_ctx.config;
+  shuso_config_module_common_ctx_t  *ctx = S->common->ctx.config;
   
   luaS_get_config_pointer_ref(L, ctx);  
   lua_getfield(L, -1, method_name);
@@ -220,7 +220,7 @@ bool shuso_config_register_variable(shuso_t *S, shuso_module_variable_t *variabl
 bool shuso_config_system_initialize(shuso_t *S) {
   lua_State *L = S->lua.state;
   
-  shuso_config_module_ctx_t *ctx = shuso_stalloc(&S->stalloc, sizeof(*ctx));
+  shuso_config_module_common_ctx_t *ctx = shuso_stalloc(&S->stalloc, sizeof(*ctx));
   if(!ctx) {
     return shuso_set_error(S, "failed to allocate module context");
   }
@@ -230,9 +230,9 @@ bool shuso_config_system_initialize(shuso_t *S) {
   }
   
   luaS_config_pointer_ref(L, ctx);
-  *ctx =(shuso_config_module_ctx_t ) { 0 };
+  *ctx =(shuso_config_module_common_ctx_t ) { 0 };
   
-  S->common->module_ctx.config = ctx;
+  S->common->ctx.config = ctx;
   return true;
 }
 
@@ -495,7 +495,7 @@ bool shuso_config_system_generate(shuso_t *S) {
   }
   lua_pop(L, 1);
   
-  shuso_config_module_ctx_t  *ctx = S->common->module_ctx.config;
+  shuso_config_module_common_ctx_t  *ctx = S->common->ctx.config;
   
   assert(ctx->blocks.root == NULL);
   

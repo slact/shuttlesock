@@ -32,7 +32,7 @@ static void lua_module_gxcopy_loaded_packages(shuso_t *S, shuso_event_state_t *e
 
 static void lua_module_stop_process_event(shuso_t *S, shuso_event_state_t *es, intptr_t code, void *data, void *pd) {
   lua_State *L = S->lua.state;
-  shuso_lua_bridge_module_ctx_t *ctx = shuso_core_context(S, &shuso_lua_bridge_module);
+  shuso_lua_bridge_module_common_ctx_t *ctx = shuso_core_common_context(S, &shuso_lua_bridge_module);
   if(ctx->ipc_messages_active > 0 && shuso_event_delay(S, es, "Lua IPC messages still in transit", 0.050, NULL)) {
     return;
   }
@@ -151,12 +151,12 @@ static bool lua_bridge_module_initialize(shuso_t *S, shuso_module_t *self) {
   
   
   
-  shuso_lua_bridge_module_ctx_t *ctx = shuso_stalloc(&S->stalloc, sizeof(*ctx));
-  *ctx = (shuso_lua_bridge_module_ctx_t ) {
+  shuso_lua_bridge_module_common_ctx_t *ctx = shuso_stalloc(&S->stalloc, sizeof(*ctx));
+  *ctx = (shuso_lua_bridge_module_common_ctx_t ) {
     .ipc_messages_active = 0
   };
   
-  shuso_set_core_context(S, self, ctx);
+  shuso_set_core_common_context(S, self, ctx);
   
   return true;
 }

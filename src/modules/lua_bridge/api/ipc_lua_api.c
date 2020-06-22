@@ -283,7 +283,7 @@ shuso_ipc_lua_data_t *luaS_lua_ipc_pack_data(lua_State *L, int index, const char
   
   lua_settop(L, top);
   
-  shuso_lua_bridge_module_ctx_t *ctx = shuso_core_context(S, &shuso_lua_bridge_module);
+  shuso_lua_bridge_module_common_ctx_t *ctx = shuso_core_common_context(S, &shuso_lua_bridge_module);
   ctx->ipc_messages_active++;
   
   return data;
@@ -360,7 +360,7 @@ bool luaS_lua_ipc_gc_data(lua_State *L, shuso_ipc_lua_data_t *d) {
   }
   
   luaL_unref(L, LUA_REGISTRYINDEX, d->reftable);
-  shuso_lua_bridge_module_ctx_t *ctx = shuso_core_context(S, &shuso_lua_bridge_module);
+  shuso_lua_bridge_module_common_ctx_t *ctx = shuso_core_common_context(S, &shuso_lua_bridge_module);
   ctx->ipc_messages_active--;
   assert(ctx->ipc_messages_active >= 0);
   return true;

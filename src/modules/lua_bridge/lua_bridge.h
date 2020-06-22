@@ -5,7 +5,7 @@ extern shuso_module_t shuso_lua_bridge_module;
 
 typedef struct {
   _Atomic(int)        ipc_messages_active;
-} shuso_lua_bridge_module_ctx_t;
+} shuso_lua_bridge_module_common_ctx_t;
 
 typedef struct {
   bool                (*wrap)(lua_State *L, const char *type, void *data);

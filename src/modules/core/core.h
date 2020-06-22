@@ -33,10 +33,14 @@ typedef struct {
     
     shuso_event_t error;
   } events;
+} shuso_core_module_common_ctx_t;
+
+typedef struct {
+  shuso_module_context_list_t context_list;
 } shuso_core_module_ctx_t;
 
 bool shuso_core_event_publish(shuso_t *S, const char *name, intptr_t code, void *data);
-void *shuso_core_context(shuso_t *S,  shuso_module_t *module);
-bool shuso_set_core_context(shuso_t *S, shuso_module_t *module, void *ctx);
+void *shuso_core_common_context(shuso_t *S,  shuso_module_t *module);
+bool shuso_set_core_common_context(shuso_t *S, shuso_module_t *module, void *ctx);
 
 #endif //SHUTTLESOCK_CORE_MODULE_H
