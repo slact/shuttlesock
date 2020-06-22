@@ -31,6 +31,7 @@ struct shuso_module_s {
   const char             *version;
   const char             *parent_modules;
   shuso_module_init_fn   *initialize;
+  shuso_module_init_fn   *initialize_worker;
   shuso_module_config_init_fn *initialize_config;
   const char             *subscribe; //space-separated list of modname:event_name events this module may subscribe to
   const char             *publish; //space-separated list of event_names this module may publish
