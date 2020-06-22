@@ -244,7 +244,7 @@ bool shuso_configure_finish(shuso_t *S) {
     goto fail;
   }
 
-  if(!shuso_initialize_added_modules(S)) {
+  if(!shuso_master_initialize_modules(S)) {
     goto fail;
   }
   
@@ -339,7 +339,9 @@ static bool shuso_fork_manager(shuso_t *S) {
   shuso_log_notice(S, "SHUTTLESOCK_DEBUG_NO_WORKER_THREADS is enabled, workers will be started inside the manager without their own separate threads");
 #endif
   shuso_log_notice(S, "started %s", shuso_process_as_string(S->procnum));
-  
+  if(!shuso_manager_initialize_modules(S)) {
+    return false;
+  }
   return true;
 }
 
@@ -589,8 +591,13 @@ int               procnum = shuso_process_to_procnum(S, proc);
     goto fail;
   }
   
+  if(!shuso_worker_initialize_modules(wS)) {
+    err = "failed to initialize modules";
+    goto fail;
+  }
+  
   luaS_gxcopy_start(S->lua.state, wS->lua.state);
-  luaS_gxcopy_package_preloaders(S->lua.state, wS->lua.state);;
+  luaS_gxcopy_package_preloaders(S->lua.state, wS->lua.state);
   shuso_core_event_publish(wS, "worker.start.before.lua_gxcopy", SHUSO_OK, S);
   luaS_gxcopy_finish(S->lua.state, wS->lua.state);
   

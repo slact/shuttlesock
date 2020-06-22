@@ -86,35 +86,6 @@ function Module.set_active(active_module)
   return Core.set_active_module(active_module)
 end
 
-function Module.start_initializing_module(module_name)
-  if Module.currently_initializing_module_name then
-    return nil, "another module ("..Module.currently_initializing_module_name..") is already initializing"
-  end
-  local ok, err = Module.find(module_name)
-  if not ok then
-    return ok, err
-  end
-  Module.currently_initializing_module_name = module_name
-  return true
-end
-function Module.finish_initializing_module(module_name)
-  if not Module.currently_initializing_module_name then
-    return nil, "not initializing module "..module_name..", can't finish initialization"
-  end
-  if Module.currently_initializing_module_name ~= module_name then
-    return nil, "currently initializing module "..Module.currently_initializing_module_name..", not "..module_name
-  end
-  Module.currently_initializing_module_name = nil
-  return true
-end
-function Module.currently_initializing_module()
-  if Module.currently_initializing_module_name then
-    return Module.find(Module.currently_initializing_module_name)
-  else
-    return nil, "not currently intializing a module"
-  end
-end
-
 function Module.add_dependency(provider_name, dependent_name)
   assert(type(provider_name) == "string")
   assert(type(dependent_name) == "string")

@@ -161,8 +161,29 @@ bool shuso_add_core_modules(shuso_t *S, char *errbuf, size_t errbuflen) {
   return true;
 }
 
-bool shuso_initialize_added_modules(shuso_t *S) {
-  lua_State *L = S->lua.state;
+bool shuso_manager_initialize_modules(shuso_t *S) {
+  //do nothing for now
+  return true;
+}
+
+bool shuso_worker_initialize_modules(shuso_t *S) {
+  const shuso_module_t *prev_active_module = S->active_module;
+  for(unsigned i=0; i<S->common->modules.count; i++) {
+    shuso_module_t *module = S->common->modules.array[i];
+    S->active_module = module;
+    if(module->initialize_worker) {
+      int errcount = shuso_error_count(S);
+      if(!module->initialize_worker(S, module) || shuso_error_count(S) > errcount) {
+        shuso_set_error(S, "module %s failed to initialize for worker%s", module->name, shuso_last_error(S) ? "" : ", but no error was reported by the module");
+        S->active_module = prev_active_module;
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+bool shuso_master_initialize_modules(shuso_t *S) {
   if(S->common->modules.events == NULL) {
     S->common->modules.events = shuso_stalloc(&S->stalloc, sizeof(void *) * S->common->modules.count);
   }
@@ -181,37 +202,19 @@ bool shuso_initialize_added_modules(shuso_t *S) {
   
   for(unsigned i=0; i<S->common->modules.count; i++) {
     shuso_module_t *module = S->common->modules.array[i];
-    luaS_push_lua_module_field(L, "shuttlesock.core.module", "start_initializing_module");
-    S->active_module = module;
-    lua_pushstring(L, module->name);
-    if(!luaS_function_call_result_ok(L, 1, false)) {
-      S->active_module = prev_active_module;
-      return false;
-    }
     if(module->initialize) {
+      S->active_module = module;
       int errcount = shuso_error_count(S);
-      if(!module->initialize(S, module)) {
-        if(shuso_last_error(S) == NULL) {
-          S->active_module = prev_active_module;
-          return shuso_set_error(S, "module %s failed to initialize, but reported no error", module->name);
-        }
+      if(!module->initialize(S, module) || shuso_error_count(S) > errcount) {
+        shuso_set_error(S, "module %s failed to initialize%s", module->name, shuso_last_error(S) ? "" : ", but no error was reported by the module");
         S->active_module = prev_active_module;
         return false;
       }
-      if(shuso_error_count(S) > errcount) {
-        S->active_module = prev_active_module;
-        return false;
-      }
-    }
-    luaS_push_lua_module_field(L, "shuttlesock.core.module", "finish_initializing_module");
-    lua_pushstring(L, module->name);
-    if(!luaS_function_call_result_ok(L, 1, false)) {
-      S->active_module = prev_active_module;
-      return false;
     }
   }
   for(unsigned i=0; i<S->common->modules.count; i++) {
     shuso_module_t *module = S->common->modules.array[i];
+    S->active_module = module;
     if(!shuso_module_finalize(S, module)) {
       S->active_module = prev_active_module;
       return false;
