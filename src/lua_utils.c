@@ -1609,7 +1609,7 @@ int luaS_sockaddr_lua_to_c(lua_State *L) {
     lua_pop(L, 1);
     
     if(addr_binary) {
-  #ifdef SHUTTLESOCK_HAVE_IPV6
+#ifdef SHUTTLESOCK_HAVE_IPV6
       if(fam == AF_INET6) {
         if(addr_binary_sz > sizeof(sockaddr->in6.sin6_addr)) {
           addr_binary_sz = sizeof(sockaddr->in6.sin6_addr);

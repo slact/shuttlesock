@@ -3,7 +3,7 @@
 #include "core.h"
 
 bool shuso_core_event_publish(shuso_t *S, const char *name, intptr_t code, void *data) {
-  shuso_core_module_ctx_t *ctx = S->common->module_ctx.core;
+  shuso_core_module_common_ctx_t *ctx = S->common->ctx.core;
   shuso_event_t           *ev = (shuso_event_t *)&ctx->events;
   shuso_event_t           *cur;
   int n = sizeof(ctx->events)/sizeof(shuso_event_t);
@@ -21,11 +21,15 @@ static void core_gxcopy(shuso_t *S, shuso_event_state_t *evs, intptr_t status, v
 }
 
 bool shuso_set_core_context(shuso_t *S, shuso_module_t *module, void *ctx) {
-  return shuso_set_context(S, &shuso_core_module, module, ctx, &S->common->module_ctx.core->context_list);
+  return shuso_set_context(S, &shuso_core_module, module, ctx, &S->ctx.core.context_list);
 }
 
-void *shuso_core_context(shuso_t *S, shuso_module_t *module) {
-  return shuso_context(S, &shuso_core_module, module, &S->common->module_ctx.core->context_list);
+bool shuso_set_core_common_context(shuso_t *S, shuso_module_t *module, void *ctx) {
+  return shuso_set_context(S, &shuso_core_module, module, ctx, &S->common->ctx.core->context_list);
+}
+
+void *shuso_core_common_context(shuso_t *S, shuso_module_t *module) {
+  return shuso_context(S, &shuso_core_module, module, &S->common->ctx.core->context_list);
 }
 
 static void stop_thing_callback(shuso_loop *loop, shuso_ev_timer *timer, int events) {
@@ -43,9 +47,6 @@ static void stop_thing_callback(shuso_loop *loop, shuso_ev_timer *timer, int eve
   }
 #endif
 }
-
-
-
 
 static void core_manager_try_stop(shuso_t *S, shuso_event_state_t *evs, intptr_t status, void *data, void *pd) {
   shuso_stop_t forcefulness = (shuso_stop_t )(intptr_t )data;
@@ -132,35 +133,39 @@ static bool stop_event_interrupt_handler(shuso_t *S, shuso_event_t *event, shuso
   return true;
 }
 
+static bool core_module_initialize_worker(shuso_t *S, shuso_module_t *self) {
+  return shuso_context_list_initialize(S, self, &S->ctx.core.context_list, &S->stalloc);
+}
+
 static bool core_module_initialize(shuso_t *S, shuso_module_t *self) {
-  shuso_core_module_ctx_t *ctx = shuso_stalloc(&S->stalloc, sizeof(*ctx));
-  assert(ctx);
+  shuso_core_module_common_ctx_t *common_ctx = shuso_stalloc(&S->stalloc, sizeof(*common_ctx));
+  assert(common_ctx);
   
   shuso_events_initialize(S, self, (shuso_event_init_t[]){
-    {.name="configure",       .event=&ctx->events.configure},
-    {.name="configure.after", .event=&ctx->events.configure_after},
+    {.name="configure",       .event=&common_ctx->events.configure},
+    {.name="configure.after", .event=&common_ctx->events.configure_after},
     
-    {.name="master.start",    .event=&ctx->events.start_master},
-    {.name="manager.start",   .event=&ctx->events.start_manager},
-    {.name="worker.start",    .event=&ctx->events.start_worker},
-    {.name="worker.start.before.lua_gxcopy", .event=&ctx->events.start_worker_before_lua_gxcopy, .data_type="shuttlesock_state"},
-    {.name="worker.start.before", .event=&ctx->events.start_worker_before, .data_type="shuttlesock_state"},
+    {.name="master.start",    .event=&common_ctx->events.start_master},
+    {.name="manager.start",   .event=&common_ctx->events.start_manager},
+    {.name="worker.start",    .event=&common_ctx->events.start_worker},
+    {.name="worker.start.before.lua_gxcopy", .event=&common_ctx->events.start_worker_before_lua_gxcopy, .data_type="shuttlesock_state"},
+    {.name="worker.start.before", .event=&common_ctx->events.start_worker_before, .data_type="shuttlesock_state"},
     
-    {.name="master.stop",     .event=&ctx->events.stop_master,  .interrupt_handler=stop_event_interrupt_handler},
-    {.name="manager.stop",    .event=&ctx->events.stop_manager, .interrupt_handler=stop_event_interrupt_handler},
-    {.name="worker.stop",     .event=&ctx->events.stop_worker,  .interrupt_handler=&stop_event_interrupt_handler},
+    {.name="master.stop",     .event=&common_ctx->events.stop_master,  .interrupt_handler=stop_event_interrupt_handler},
+    {.name="manager.stop",    .event=&common_ctx->events.stop_manager, .interrupt_handler=stop_event_interrupt_handler},
+    {.name="worker.stop",     .event=&common_ctx->events.stop_worker,  .interrupt_handler=&stop_event_interrupt_handler},
     
-    {.name="master.exit",     .event=&ctx->events.exit_master},
-    {.name="manager.exit",    .event=&ctx->events.exit_manager},
-    {.name="worker.exit",     .event=&ctx->events.exit_worker},
+    {.name="master.exit",     .event=&common_ctx->events.exit_master},
+    {.name="manager.exit",    .event=&common_ctx->events.exit_manager},
+    {.name="worker.exit",     .event=&common_ctx->events.exit_worker},
     
-    {.name="manager.workers_started",   .event=&ctx->events.manager_all_workers_started},
-    {.name="master.workers_started",    .event=&ctx->events.master_all_workers_started},
-    {.name="worker.workers_started",    .event=&ctx->events.worker_all_workers_started},
-    {.name="manager.worker_exited",     .event=&ctx->events.worker_exited},
-    {.name="master.manager_exited",     .event=&ctx->events.manager_exited},
+    {.name="manager.workers_started",   .event=&common_ctx->events.manager_all_workers_started},
+    {.name="master.workers_started",    .event=&common_ctx->events.master_all_workers_started},
+    {.name="worker.workers_started",    .event=&common_ctx->events.worker_all_workers_started},
+    {.name="manager.worker_exited",     .event=&common_ctx->events.worker_exited},
+    {.name="master.manager_exited",     .event=&common_ctx->events.manager_exited},
     
-    {.name="error",                     .event=&ctx->events.error,              .data_type="string"},
+    {.name="error",                     .event=&common_ctx->events.error,              .data_type="string"},
     {.name=NULL}
   });
   
@@ -173,10 +178,13 @@ static bool core_module_initialize(shuso_t *S, shuso_module_t *self) {
   shuso_event_listen_with_priority(S, "core:master.stop",   core_master_try_stop, self, SHUTTLESOCK_FIRST_PRIORITY);
   shuso_event_listen_with_priority(S, "core:master.stop",   core_master_stop,   self, SHUTTLESOCK_LAST_PRIORITY);
   
-  bool ok = shuso_context_list_initialize(S, self, &ctx->context_list, &S->stalloc);
+  bool ok = shuso_context_list_initialize(S, self, &common_ctx->context_list, &S->stalloc);
   assert(ok);
   
-  S->common->module_ctx.core = ctx;
+  S->common->ctx.core = common_ctx;
+  
+  ok = shuso_context_list_initialize(S, self, &S->ctx.core.context_list, &S->stalloc);
+  assert(ok);
   
   return true;
 }
@@ -254,12 +262,14 @@ shuso_module_t shuso_core_module = {
     {0}
   },
   .subscribe = 
+   " core:worker.start.before"
    " core:worker.start.before.lua_gxcopy"
    " core:master.stop"
    " core:manager.stop"
    " core:worker.stop"
   ,
   .initialize = core_module_initialize,
+  .initialize_worker = core_module_initialize_worker,
   .initialize_config = core_module_initialize_config
 };
 

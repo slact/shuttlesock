@@ -105,9 +105,9 @@ typedef struct shuso_common_s {
   shuso_runstate_t    state;
   shuso_ipc_handler_t ipc_handlers[256];
   struct {
-    shuso_config_module_ctx_t  *config;
-    shuso_core_module_ctx_t    *core;
-  }                   module_ctx;
+    shuso_config_module_common_ctx_t  *config;
+    shuso_core_module_common_ctx_t    *core;
+  }                   ctx;
   
   shuso_config_t      config;
   struct {
@@ -169,6 +169,9 @@ typedef struct shuso_s {
   shuso_shared_slab_t         shm;
   shuso_resolver_t            resolver;
   const shuso_module_t       *active_module;
+  struct {
+    shuso_core_module_ctx_t     core;
+  }                           ctx;
   void                       *data;  //custom data attached to this shuttlesock context
   struct {
     bool                        ready;

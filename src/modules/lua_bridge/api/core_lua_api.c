@@ -1288,7 +1288,7 @@ static void lua_module_event_listener(shuso_t *S, shuso_event_state_t *evs, intp
 typedef struct {
   shuso_event_t   *events;
   int              events_count;
-} lua_module_core_ctx_t;
+} lua_module_core_common_ctx_t;
 
 static bool lua_module_event_interrupt_handler(shuso_t *S, shuso_event_t *event, shuso_event_state_t *evstate, shuso_event_interrupt_t interrupt, double *sec) {
   lua_State *L = S->lua.state;
@@ -1366,8 +1366,8 @@ static bool lua_module_initialize(shuso_t *S, shuso_module_t *module) {
   lua_State *L = S->lua.state;
   int top = lua_gettop(L);
 
-  lua_module_core_ctx_t *ctx = shuso_stalloc(&S->stalloc, sizeof(*ctx));
-  shuso_set_core_context(S, module, ctx);
+  lua_module_core_common_ctx_t *ctx = shuso_stalloc(&S->stalloc, sizeof(*ctx));
+  shuso_set_core_common_context(S, module, ctx);
   ctx->events = NULL;
   ctx->events_count = 0;
   
@@ -1932,7 +1932,7 @@ static shuso_event_t *lua_module_event_pointer(shuso_t *S, lua_State *L, const c
   int                      top = lua_gettop(L);
   shuso_event_t           *event;
   shuso_module_t          *module = shuso_get_module(S, modname);
-  lua_module_core_ctx_t   *ctx = shuso_core_context(S, module);
+  lua_module_core_common_ctx_t   *ctx = shuso_core_common_context(S, module);
   
   assert(ctx);
   
@@ -2083,7 +2083,7 @@ static void *lua_shared_allocator(void *ud, void *ptr, size_t osize, size_t nsiz
 
 static int Lua_shuso_config_object(lua_State *L) {
   shuso_t *S = shuso_state(L);
-  shuso_config_module_ctx_t  *ctx = S->common->module_ctx.config;
+  shuso_config_module_common_ctx_t  *ctx = S->common->ctx.config;
   luaS_get_config_pointer_ref(L, ctx);
   return 1;
 }
@@ -2856,7 +2856,7 @@ static int Lua_shuso_getaddrinfo_noresolve(lua_State *L) {
         hints.ai_family = AF_INET;
       }
       else if(ipnum == 6) {
-  #ifndef SHUTTLESOCK_HAVE_IPV6
+#ifndef SHUTTLESOCK_HAVE_IPV6
         lua_pushnil(L);
         lua_pushstring(L, "IPv6 Not supported");
         return 2;
