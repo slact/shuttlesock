@@ -52,7 +52,7 @@ typedef struct {
   } variables;
   struct {
     shuso_instring_token_t *array;
-    size_t                   count;
+    size_t                  count;
   } tokens;
   struct {
     shuso_buffer_t      head;
@@ -79,6 +79,8 @@ typedef struct shuso_instrings_s {
 
 shuso_instring_t *luaS_instring_lua_to_c(lua_State *L, shuso_setting_t *setting, int index);
 shuso_instrings_t *luaS_instrings_lua_to_c(lua_State *L, shuso_setting_t *setting, int index);
+shuso_instrings_t *shuso_instrings_copy_for_worker(shuso_t *S, shuso_instrings_t *old);
+
 
 bool shuso_instring_boolean_value(shuso_t *S, shuso_instring_t *instring, bool *retval);
 bool shuso_instring_integer_value(shuso_t *S, shuso_instring_t *instring, int *retval);

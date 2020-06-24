@@ -22,18 +22,31 @@ typedef struct {
   }                blocks;
 } shuso_config_module_common_ctx_t;
 
+typedef struct {
+  shuso_instrings_t      *merged;
+  shuso_instrings_t      *local;
+  shuso_instrings_t      *inherited;
+  shuso_instrings_t      *defaults;
+} shuso_setting_instrings_t;
+
+typedef struct {
+  shuso_setting_instrings_t *settings_instrings;
+  int                        settings_count;
+} shuso_config_module_ctx_t;
+
 
 typedef struct shuso_setting_s {
   const char             *name;
   const char             *module;
   const char             *raw_name;
   const char             *path;
-  struct {
-    shuso_instrings_t      *merged;
-    shuso_instrings_t      *local;
-    shuso_instrings_t      *inherited;
-    shuso_instrings_t      *defaults;
-  }                       instrings;
+  /*
+   * Because setting structs are shared between all workers & manager, 
+   * this needs to be an index reference to a worker-local array rather than 
+   * a (shared) pointer that will get its cached values clobbered by each thread.
+   */
+  int                     instrings_index;
+  
   shuso_setting_block_t  *parent_block;
   shuso_setting_block_t  *block;
 } shuso_setting_t;

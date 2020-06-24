@@ -233,10 +233,13 @@ bool shuso_config_system_initialize(shuso_t *S) {
   *ctx =(shuso_config_module_common_ctx_t ) { 0 };
   
   S->common->ctx.config = ctx;
+  
+  S->ctx.config.settings_count = 0;
+  S->ctx.config.settings_instrings = NULL;
   return true;
 }
 
-static shuso_setting_t *lua_setting_to_c_struct(shuso_t *S, lua_State *L) {
+static shuso_setting_t *lua_setting_to_c_struct(shuso_t *S, lua_State *L, int setting_index) {
   int sidx = lua_gettop(L);
   int top = lua_gettop(L);
   shuso_setting_t *setting = shuso_stalloc(&S->stalloc, sizeof(*setting));
@@ -316,13 +319,19 @@ static shuso_setting_t *lua_setting_to_c_struct(shuso_t *S, lua_State *L) {
   luaS_config_pointer_ref(L, setting); //pops the setting table too, 
   //but we just pushed a copy onto the stack, this way the stack is the same as at the start of this function
   
+  
+  setting->instrings_index = setting_index;
+  assert(setting_index < S->ctx.config.settings_count);
+  
+  shuso_setting_instrings_t *instrings = &S->ctx.config.settings_instrings[setting_index];
+
   struct {
     const char *name;
     shuso_instrings_t **instrings;
   } ins[] = {
-    {"local", &setting->instrings.local},
-    {"default", &setting->instrings.defaults},
-    {"inherited", &setting->instrings.inherited},
+    {"local", &instrings->local},
+    {"default", &instrings->defaults},
+    {"inherited", &instrings->inherited},
   };
   
   for(int i=0; i<3; i++) {
@@ -351,16 +360,17 @@ static shuso_setting_t *lua_setting_to_c_struct(shuso_t *S, lua_State *L) {
     assert(*ins[i].instrings != NULL);
     lua_pop(L, 1);
   }
-  if(setting->instrings.local->count > 0) {
-    setting->instrings.merged = setting->instrings.local;
+  if(instrings->local->count > 0) {
+    instrings->merged = instrings->local;
   }
-  else if(setting->instrings.inherited->count > 0) {
-    setting->instrings.merged = setting->instrings.inherited;
+  else if(instrings->inherited->count > 0) {
+    instrings->merged = instrings->inherited;
   }
   else {
-    setting->instrings.merged = setting->instrings.defaults;
+    instrings->merged = instrings->defaults;
   }
-  assert(setting->instrings.merged != NULL);
+  assert(instrings->merged != NULL);
+  
   
   assert(top == lua_gettop(L));
   return setting;
@@ -422,12 +432,7 @@ bool shuso_config_system_generate(shuso_t *S) {
   }
   *root_setting = (shuso_setting_t ) {
     .name = "::ROOT",
-    .instrings = {
-      .local = NULL,
-      .inherited = NULL,
-      .defaults = NULL,
-      .merged = NULL
-    },
+    .instrings_index = -1,
     .path="",
     .block = root_block,
     .parent_block = NULL
@@ -447,13 +452,30 @@ bool shuso_config_system_generate(shuso_t *S) {
   
   //finished setting up root structs
   
-  //create C structs from config settings
+  
   luaS_pcall_config_method(L, "all_settings", 0, 1);
   assert(lua_istable(L, -1));
-  for(int i=0, num_settings = luaL_len(L, -1); i<num_settings; i++) {
+  int num_settings = luaL_len(L, -1);
+  
+  //we need an instrings array to fill, 'cause instrings cache values
+  if(num_settings > 0) {
+    S->ctx.config.settings_count = num_settings;
+    S->ctx.config.settings_instrings = shuso_stalloc(&S->stalloc, sizeof(*S->ctx.config.settings_instrings) * num_settings);
+    if(S->ctx.config.settings_instrings == NULL) {
+      lua_settop(L, top);
+      return shuso_set_error(S, "failed to allocate memory for settings instring array");
+    }
+  }
+  else {
+    S->ctx.config.settings_count = 0;
+    S->ctx.config.settings_instrings = NULL;
+  }
+
+  //create C structs from config settings
+  for(int i=0; i<num_settings; i++) {
     lua_rawgeti(L, -1, i+1);
-    shuso_setting_t *ss;
-    if((ss = lua_setting_to_c_struct(S, L)) == NULL) {
+    
+    if((lua_setting_to_c_struct(S, L, i)) == NULL) {
       lua_settop(L, top);
       return false;
     }
@@ -558,19 +580,20 @@ bool shuso_setting_value(shuso_t *S, const shuso_setting_t *setting, size_t nval
   if(!setting) {
     return false;
   }
+  shuso_setting_instrings_t *setting_instrings = &S->ctx.config.settings_instrings[setting->instrings_index];
   shuso_instrings_t *instrings;
   switch(mergetype) {
     case SHUSO_SETTING_MERGED:
-      instrings = setting->instrings.merged;
+      instrings = setting_instrings->merged;
       break;
     case SHUSO_SETTING_LOCAL:
-      instrings = setting->instrings.local;
+      instrings = setting_instrings->local;
       break;
     case SHUSO_SETTING_INHERITED:
-      instrings = setting->instrings.inherited;
+      instrings = setting_instrings->inherited;
       break;
     case SHUSO_SETTING_DEFAULT:
-      instrings = setting->instrings.defaults;
+      instrings = setting_instrings->defaults;
       break;
     default:
       shuso_set_error(S, "Fatal API error: invalid setting mergetype %d, shuso_setting_value() was probably called incorrectly", mergetype);
@@ -624,10 +647,11 @@ bool shuso_setting_buffer(shuso_t *S, shuso_setting_t *setting, int n, const shu
 bool shuso_setting_string_matches(shuso_t *S, shuso_setting_t *setting, int n, const char *lua_matchstring) {
   lua_State *L = S->lua.state;
   int top = lua_gettop(L);
-  if(!setting || !setting->instrings.merged || setting->instrings.merged->count < (size_t)n) {
+  shuso_setting_instrings_t *setting_instrings = &S->ctx.config.settings_instrings[setting->instrings_index];
+  if(!setting || !setting_instrings->merged || setting_instrings->merged->count < (size_t)n) {
     return false;
   }
-  shuso_instring_t *instring = &setting->instrings.merged->array[n];
+  shuso_instring_t *instring = &setting_instrings->merged->array[n];
   if(!shuso_instring_string_value(S, instring, NULL)) {
     return false;
   }
@@ -694,18 +718,19 @@ bool shuso_configure_string(shuso_t *S,  const char *str_title, const char *str)
 
 size_t __shuso_setting_values_count(shuso_t *S, const shuso_setting_t *setting, shuso_setting_value_merge_type_t mt) {
   shuso_instrings_t *ins;
+  shuso_setting_instrings_t *setting_instrings = &S->ctx.config.settings_instrings[setting->instrings_index];
   switch(mt) {
     case SHUSO_SETTING_MERGED:
-      ins = setting->instrings.merged;
+      ins = setting_instrings->merged;
       break;
     case SHUSO_SETTING_LOCAL:
-      ins = setting->instrings.local;
+      ins = setting_instrings->local;
       break;
     case SHUSO_SETTING_INHERITED:
-      ins = setting->instrings.inherited;
+      ins = setting_instrings->inherited;
       break;
     case SHUSO_SETTING_DEFAULT:
-      ins = setting->instrings.defaults;
+      ins = setting_instrings->defaults;
       break;
     default:
       shuso_set_error(S, "Fatal API error: invalid setting mergetype %d, shuso_setting_values_count() was probably called incorrectly", mt);
@@ -768,6 +793,42 @@ bool shuso_config_block_error(shuso_t *S, shuso_setting_block_t *b, const char *
   return ret;
 }
 
+static bool config_initialize_worker(shuso_t *S, shuso_module_t *self) {
+  int count = S->ctx.config.settings_count;
+  shuso_setting_instrings_t *settings_instrings = NULL;
+  if(count > 0) {
+    shuso_setting_instrings_t *settings_instrings = shuso_stalloc(&S->stalloc, sizeof(shuso_setting_instrings_t) * count);
+    if(!settings_instrings) {
+      return shuso_set_error(S, "failed to allocate memory for settings instrings array");
+    }
+  }
+  
+  for(int i=0; i<count; i++) {
+    if((settings_instrings[i].local = shuso_instrings_copy_for_worker(S, S->ctx.config.settings_instrings[i].local)) == NULL) {
+      return false;
+    }
+    if((settings_instrings[i].defaults = shuso_instrings_copy_for_worker(S, S->ctx.config.settings_instrings[i].defaults)) == NULL) {
+      return false;
+    }
+    if((settings_instrings[i].inherited = shuso_instrings_copy_for_worker(S, S->ctx.config.settings_instrings[i].inherited)) == NULL) {
+      return false;
+    }
+    if(settings_instrings[i].local->count > 0) {
+      settings_instrings[i].merged = settings_instrings[i].local;
+    }
+    else if(settings_instrings[i].inherited->count > 0) {
+      settings_instrings[i].merged = settings_instrings[i].inherited;
+    }
+    else {
+      settings_instrings[i].merged = settings_instrings[i].defaults;
+    }
+    assert(settings_instrings[i].merged != NULL);
+  }
+  S->ctx.config.settings_instrings = settings_instrings;
+  
+  return true;
+}
+
 static bool config_initialize(shuso_t *S, shuso_module_t *self) {
   lua_State *L = S->lua.state;
   lua_getglobal(L, "require");
@@ -779,7 +840,7 @@ static bool config_initialize(shuso_t *S, shuso_module_t *self) {
   return true;
 }
 
-static bool config_init_config(shuso_t *S, shuso_module_t *self, shuso_setting_block_t *block){
+static bool config_initialize_config(shuso_t *S, shuso_module_t *self, shuso_setting_block_t *block){
   return true;
 }
 
@@ -788,5 +849,6 @@ shuso_module_t shuso_config_module = {
   .version = SHUTTLESOCK_VERSION_STRING,
   .subscribe = "core:worker.start.before.lua_gxcopy",
   .initialize = config_initialize,
-  .initialize_config = config_init_config,
+  .initialize_worker = config_initialize_worker,
+  .initialize_config = config_initialize_config,
 };

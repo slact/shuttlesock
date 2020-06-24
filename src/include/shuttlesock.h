@@ -171,6 +171,7 @@ typedef struct shuso_s {
   const shuso_module_t       *active_module;
   struct {
     shuso_core_module_ctx_t     core;
+    shuso_config_module_ctx_t   config;
   }                           ctx;
   void                       *data;  //custom data attached to this shuttlesock context
   struct {

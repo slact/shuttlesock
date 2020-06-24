@@ -176,6 +176,7 @@ static shuso_instring_t *luaS_instring_lua_to_c_generic(lua_State *L, shuso_sett
     .string = SHUTTLESOCK_INSTRING_VALUE_UNKNOWN
   };
   instring->cached_value.state = instring->cached_value.reset_state;
+  instring->cached_value.string_lua_ref = LUA_NOREF;
   
   shuso_buffer_init(S, &instring->buffer.head, SHUSO_BUF_EXTERNAL, NULL);
   
@@ -264,6 +265,83 @@ static shuso_instring_t *luaS_instring_lua_to_c_generic(lua_State *L, shuso_sett
   return instring;
 }
 
+static bool shuso_instring_copy_for_worker(shuso_t *S, shuso_instring_t *old, shuso_instring_t *new) {
+  *new = *old;
+  
+  if(old->variables.count == 0) {
+    //constant instring, no need to copy
+    return true;
+  }
+  
+  assert(old->tokens.count > 0);
+  assert(old->variables.count > 0);
+  
+  new->variables.array = shuso_stalloc(&S->stalloc, sizeof(*old->variables.array) * old->variables.count);
+  new->tokens.array = shuso_stalloc(&S->stalloc, sizeof(*old->tokens.array) * old->tokens.count);
+  if(!new->variables.array || !new->tokens.array) {
+    return shuso_set_error(S, "no memory for instring copy");
+  }
+  
+  shuso_buffer_init(S, &new->buffer.head, SHUSO_BUF_EXTERNAL, NULL);
+  
+  new->buffer.iov = shuso_stalloc(&S->stalloc, sizeof(struct iovec) * old->tokens.count);
+  if(!new->buffer.iov) {
+    return shuso_set_error(S, "no memory for instring iovec");
+  }
+  shuso_buffer_link_init(S, &new->buffer.link, new->buffer.iov, old->tokens.count);
+  
+  size_t vari=0;
+  for(size_t i=0; i < new->tokens.count; i++) {
+    new->tokens.array[i] = old->tokens.array[i];
+    if(new->tokens.array[i].type == SHUSO_INSTRING_TOKEN_VARIABLE) {
+      new->variables.array[vari++] = &new->tokens.array[i].variable;
+      new->buffer.iov[i] = (struct iovec) {
+        .iov_base = NULL,
+        .iov_len = 0
+      };
+    }
+    else {
+      new->buffer.iov[i] = (struct iovec) {
+        .iov_base = new->tokens.array[i].literal.data,
+        .iov_len = new->tokens.array[i].literal.len
+      };
+    }
+  }
+  
+  assert(vari == old->variables.count);
+  return new;
+}
+
+
+shuso_instrings_t *shuso_instrings_copy_for_worker(shuso_t *S, shuso_instrings_t *old) {
+  if(old->count == 0) {
+    return old;
+  }
+  bool all_literal = true;
+  for(size_t i=0; i<old->count; i++) {
+    if(old->array[i].variables.count > 0) {
+      all_literal = false;
+      break;
+    }
+  }
+  if(all_literal) {
+    return old;
+  }
+  
+  shuso_instrings_t *new;
+  if((new = shuso_stalloc(&S->stalloc, sizeof(*new) + sizeof(shuso_instring_t) * old->count)) == NULL) {
+    shuso_set_error(S, "no memory for instrings array");
+    return NULL;
+  }
+  new->count = old->count;
+  for(size_t i=0; i<new->count; i++) {
+    if(!shuso_instring_copy_for_worker(S, &old->array[i], &new->array[i])) {
+      return NULL;
+    }
+  }
+  
+  return new;
+}
 
 shuso_instring_t *luaS_instring_lua_to_c(lua_State *L, shuso_setting_t *setting, int index) {
   return luaS_instring_lua_to_c_generic(L, setting, index, NULL);
