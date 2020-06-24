@@ -797,7 +797,7 @@ static bool config_initialize_worker(shuso_t *S, shuso_module_t *self) {
   int count = S->ctx.config.settings_count;
   shuso_setting_instrings_t *settings_instrings = NULL;
   if(count > 0) {
-    shuso_setting_instrings_t *settings_instrings = shuso_stalloc(&S->stalloc, sizeof(shuso_setting_instrings_t) * count);
+    settings_instrings = shuso_stalloc(&S->stalloc, sizeof(shuso_setting_instrings_t) * count);
     if(!settings_instrings) {
       return shuso_set_error(S, "failed to allocate memory for settings instrings array");
     }
