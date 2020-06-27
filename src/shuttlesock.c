@@ -591,15 +591,15 @@ int               procnum = shuso_process_to_procnum(S, proc);
     goto fail;
   }
   
-  if(!shuso_worker_initialize_modules(wS)) {
-    err = "failed to initialize modules";
-    goto fail;
-  }
-  
   luaS_gxcopy_start(S->lua.state, wS->lua.state);
   luaS_gxcopy_package_preloaders(S->lua.state, wS->lua.state);
   shuso_core_event_publish(wS, "worker.start.before.lua_gxcopy", SHUSO_OK, S);
   luaS_gxcopy_finish(S->lua.state, wS->lua.state);
+  
+  if(!shuso_worker_initialize_modules(wS, S)) {
+    err = "failed to initialize modules";
+    goto fail;
+  }
   
   shuso_core_event_publish(wS, "worker.start.before", SHUSO_OK, S);
   

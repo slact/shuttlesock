@@ -1059,17 +1059,6 @@ do --config
     return self
   end
 
-  function config:block_handled_by_module(block, module_name)
-    local setting = block.setting
-    self:get_setting_path(setting)
-    for _, handler in pairs(self.handlers) do
-      if Config.match_path(setting, handler) then
-        return true
-      end
-    end
-    return false
-  end
-  
   function config:find_setting(name, context)
     if not context then context = self.root end
     local module
@@ -1282,6 +1271,10 @@ do --config
         end
         
         setting.handled_by = handler.full_name
+        if not setting.module then
+          setting.module = handler.module
+        end
+        assert(setting.module == handler.module)
       
         if #setting.values < handler.nargs_min then
           return nil, handler_errmsg(setting, "too few arguments, must have at least " .. handler.nargs_min)

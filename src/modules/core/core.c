@@ -133,7 +133,7 @@ static bool stop_event_interrupt_handler(shuso_t *S, shuso_event_t *event, shuso
   return true;
 }
 
-static bool core_module_initialize_worker(shuso_t *S, shuso_module_t *self) {
+static bool core_module_initialize_worker(shuso_t *S, shuso_module_t *self, shuso_t *Smanager) {
   return shuso_context_list_initialize(S, self, &S->ctx.core.context_list, &S->stalloc);
 }
 

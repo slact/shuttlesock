@@ -867,6 +867,13 @@ describe(configuration) {
     test("constant module $variable") {
       assert_luaL_dofile_args(L, "test_config_module_variables.lua", 1);
     }
+    subdesc(at_runtime) {
+      test("cacheable variable on different workers") {
+        assert_luaL_dofile_args(L, "test_config_module_variables_once_per_worker.lua", 1);
+        shuso_run(S);
+        assert_shuso_ran_ok(S);
+      }
+    }
   }
   
   test("module with a bunch of config settings") {

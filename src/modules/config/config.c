@@ -269,6 +269,9 @@ static shuso_setting_t *lua_setting_to_c_struct(shuso_t *S, lua_State *L, int se
     lua_getfield(L, -1, "name");
     lua_remove(L, -2);
   }
+  else {
+    assert(lua_isstring(L, -1));
+  }
   setting->module = lua_tostring(L, -1);
   lua_pop(L, 1);
   
@@ -793,9 +796,11 @@ bool shuso_config_block_error(shuso_t *S, shuso_setting_block_t *b, const char *
   return ret;
 }
 
-static bool config_initialize_worker(shuso_t *S, shuso_module_t *self) {
-  int count = S->ctx.config.settings_count;
-  shuso_setting_instrings_t *settings_instrings = NULL;
+static bool config_initialize_worker(shuso_t *S, shuso_module_t *self, shuso_t *Smanager) {
+  int                         count = Smanager->ctx.config.settings_count;
+  shuso_setting_instrings_t  *settings_instrings = NULL;
+  S->ctx.config.settings_count = count;
+  S->ctx.config.settings_instrings = NULL;
   if(count > 0) {
     settings_instrings = shuso_stalloc(&S->stalloc, sizeof(shuso_setting_instrings_t) * count);
     if(!settings_instrings) {
@@ -804,13 +809,13 @@ static bool config_initialize_worker(shuso_t *S, shuso_module_t *self) {
   }
   
   for(int i=0; i<count; i++) {
-    if((settings_instrings[i].local = shuso_instrings_copy_for_worker(S, S->ctx.config.settings_instrings[i].local)) == NULL) {
+    if((settings_instrings[i].local = shuso_instrings_copy_for_worker(S, Smanager->ctx.config.settings_instrings[i].local)) == NULL) {
       return false;
     }
-    if((settings_instrings[i].defaults = shuso_instrings_copy_for_worker(S, S->ctx.config.settings_instrings[i].defaults)) == NULL) {
+    if((settings_instrings[i].defaults = shuso_instrings_copy_for_worker(S, Smanager->ctx.config.settings_instrings[i].defaults)) == NULL) {
       return false;
     }
-    if((settings_instrings[i].inherited = shuso_instrings_copy_for_worker(S, S->ctx.config.settings_instrings[i].inherited)) == NULL) {
+    if((settings_instrings[i].inherited = shuso_instrings_copy_for_worker(S, Smanager->ctx.config.settings_instrings[i].inherited)) == NULL) {
       return false;
     }
     if(settings_instrings[i].local->count > 0) {
