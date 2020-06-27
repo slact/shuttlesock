@@ -25,8 +25,6 @@ typedef struct shuso_event_s {
   shuso_event_listener_t *listeners;
   shuso_event_interrupt_handler_fn *interrupt_handler;
   uint16_t           module_index;
-  unsigned           detached:1;
-  unsigned           firing:1;
 #ifdef SHUTTLESOCK_DEBUG_EVENTS
   size_t             count;
   _Atomic uint64_t   fired_count;
@@ -52,7 +50,6 @@ typedef struct {
   shuso_event_t        *event;
   const char           *data_type;
   shuso_event_interrupt_handler_fn *interrupt_handler;
-  bool                  detached;
 } shuso_event_init_t;
 
 typedef struct shuso_event_state_s {

@@ -30,11 +30,6 @@ bool shuso_event_initialize(shuso_t *S, shuso_module_t *mod, shuso_event_t *mev,
     lua_setfield(L, -2, "data_type");
   }
   
-  if(event_init->detached) {
-    lua_pushboolean(L, 1);
-    lua_setfield(L, -2, "detached");
-  }
-  
   if(event_init->interrupt_handler) {
     union {
       void                              *addr;

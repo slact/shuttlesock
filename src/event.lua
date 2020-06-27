@@ -34,17 +34,13 @@ function Event.find(module_name, event_name)
 end
 
 function Event.get(module_name, event_name, opts)
-  local detached = opts and opts.detached
-  
   if type(module_name)=="string" and not event_name then
     module_name, event_name = module_name:match(Event.MODULE_EVENT_NAME_PATTERN)
   end
   local event
-  if not detached then
-    event = Event.find(module_name, event_name)
-    if event then
-      return event
-    end
+  event = Event.find(module_name, event_name)
+  if event then
+    return event
   end
   
   event = {
@@ -54,9 +50,7 @@ function Event.get(module_name, event_name, opts)
   }
   setmetatable(event, event_mt)
   
-  if not detached then
-    events_by_name[module_name..":"..event_name] = event
-  end
+  events_by_name[module_name..":"..event_name] = event
   return event
 end
 do

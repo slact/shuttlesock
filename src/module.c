@@ -350,10 +350,6 @@ static bool shuso_module_finalize(shuso_t *S, shuso_module_t *mod) {
     event->data_type = lua_tostring(L, -1);
     lua_pop(L, 1);
     
-    lua_getfield(L, -1, "detached");
-    event->detached = lua_toboolean(L, -1);
-    lua_pop(L, 1);
-    
     lua_getfield(L, -1, "interrupt_handler");
     if(lua_islightuserdata(L, -1)) {
       union {

@@ -1,5 +1,4 @@
 local Core = require "shuttlesock.core"
-local CoreEvent = require "shuttlesock.core.event"
 local Event = {}
 
 local deferred_mt = { __index = {
@@ -47,18 +46,6 @@ function evstate:get_publisher()
   local Module = require "shuttlesock.module"
   local publisher = Module.find(self.publisher_name) or Module.wrap(self.publisher_name)
   return publisher
-end
-
-function Event.new_detached(event_init)
-  local event_ptr = assert(Core.create_event())
-  assert(Core.initialize_detached_event(event_init))
-  local module_name = event_init.module or event_init.module_name or Core.get_active_module().name
-  local event_name = event_init.name
-  local event = assert(CoreEvent.get(module_name, event_name, {detached = true}))
-  event.detached = true
-  event.ptr = event_ptr
-  assert(event:initialize({}))
-  return event
 end
 
 function Event.new_event_state(evstate_ptr, full_event_name, publisher_name)
