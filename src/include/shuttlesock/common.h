@@ -127,6 +127,7 @@ typedef void shuso_socket_listener_fn(shuso_t *S, shuso_socket_t *socket, void *
 typedef void shuso_handler_fn(shuso_t *S, void *pd);
 
 typedef bool shuso_module_init_fn(shuso_t *S, shuso_module_t *);
+typedef bool shuso_module_init_worker_fn(shuso_t *S, shuso_module_t *, shuso_t *Smanager);
 typedef bool shuso_module_config_init_fn(shuso_t *S, shuso_module_t *, shuso_setting_block_t *);
 
 typedef void shuso_event_fn(shuso_t *S, shuso_event_state_t *, intptr_t code, void *data, void *pd);

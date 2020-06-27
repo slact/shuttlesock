@@ -166,14 +166,14 @@ bool shuso_manager_initialize_modules(shuso_t *S) {
   return true;
 }
 
-bool shuso_worker_initialize_modules(shuso_t *S) {
+bool shuso_worker_initialize_modules(shuso_t *S, shuso_t *Smanager) {
   const shuso_module_t *prev_active_module = S->active_module;
   for(unsigned i=0; i<S->common->modules.count; i++) {
     shuso_module_t *module = S->common->modules.array[i];
     S->active_module = module;
     if(module->initialize_worker) {
       int errcount = shuso_error_count(S);
-      if(!module->initialize_worker(S, module) || shuso_error_count(S) > errcount) {
+      if(!module->initialize_worker(S, module, Smanager) || shuso_error_count(S) > errcount) {
         shuso_set_error(S, "module %s failed to initialize for worker%s", module->name, shuso_last_error(S) ? "" : ", but no error was reported by the module");
         S->active_module = prev_active_module;
         return false;

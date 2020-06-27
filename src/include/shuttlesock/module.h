@@ -31,7 +31,7 @@ struct shuso_module_s {
   const char             *version;
   const char             *parent_modules;
   shuso_module_init_fn   *initialize;
-  shuso_module_init_fn   *initialize_worker;
+  shuso_module_init_worker_fn *initialize_worker;
   shuso_module_config_init_fn *initialize_config;
   const char             *subscribe; //space-separated list of modname:event_name events this module may subscribe to
   const char             *publish; //space-separated list of event_names this module may publish
@@ -64,7 +64,7 @@ bool shuso_load_module(shuso_t *S, const char *filename);
 
 bool shuso_master_initialize_modules(shuso_t *S);
 bool shuso_manager_initialize_modules(shuso_t *S);
-bool shuso_worker_initialize_modules(shuso_t *S);
+bool shuso_worker_initialize_modules(shuso_t *S, shuso_t *Smanager);
 
 //for module developers:
 shuso_module_t *shuso_get_module_by_name(shuso_t *S, const char *name);
