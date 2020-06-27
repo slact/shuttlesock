@@ -3,6 +3,8 @@ local Shuso = require "shuttlesock"
 local Process = require "shuttlesock.process"
 local Atomics = require "shuttlesock.atomics"
 local Watcher = require "shuttlesock.watcher"
+local coroutine = require "shuttlesock.coroutine"
+local IPC = require "shuttlesock.ipc"
 
 local reps = 10
 
@@ -40,11 +42,16 @@ function testmod:initialize_config(block)
 end
 
 local function verify(self)
+  local workers = Process.count_workers()
   local ok, count, evald, cached = self.shared.ok, self.shared.count, self.shared.evaluated, self.shared.cached
-  if ok ~= count then
-    return nil, "Expected to have ".. count .. "values ok'd, but got " .. ok)
-  elseif self.shared.setting_evaluated_count ~= self.shared.settings_count then
-    return nil, "Settings evaluated too many times"
+  if count ~= workers then
+    return nil, ("Expected %d attempts, got %d"):format(workers, count)
+  elseif ok ~= workers then
+    return nil, "Expected to have ".. workers .. "values ok'd, but got " .. ok
+  elseif workers ~= evald then
+    return nil, ("Expected setting to have been evaluated once per worker (%d times), got %d"):format(workers, evald)
+  elseif cached ~= (reps - 1) * workers then
+    return nil, ("Expected setting to have been pulled from cache %d times, got %d"):format((reps - 1) * workers, cached)
   end
   return true
 end
@@ -55,36 +62,31 @@ testmod:subscribe("core:manager.start", function(self)
     while true do
       local data, sender = receiver:yield()
       if not data and sender == "canceled" then return end
-      assert(data == "worker_done")
-      if self.shared.settings_count > 0 and self.shared.settings_ok == self.shared.settings_count then
+      local ok, err = verify(self)
+      if ok then
         --test completed successfully
-        assert(self.shared.settings_count == self.shared.setting_evaluated_count)
         Shuso.stop()
       end
     end
-  end)
+  end)()
 end)
 
 testmod:subscribe("core:manager.workers_started", function(self)
   coroutine.wrap(function()
-    print("hey!")
     Watcher.timer(3):yield()
-    print("been trying!", self.shared.settings_ok, self.shared.settings_count, self.shared.setting_evaluated_count)
-    if self.shared.settings_ok ~= self.shared.settings_count then
-      Shuso.set_error("Timed out waiting for all settings to be ok")
-    elseif self.shared.setting_evaluated_count ~= self.shared.settings_count then
-      Shuso.set_error("Settings evaluated too many times")
-    end
+    local ok, err = verify(self)
+    if not ok then Shuso.set_error(err) end
     Shuso.stop()
   end)()
 end)
 
 testmod:subscribe("core:worker.start", function(self)
-  self.shared:increment("settings_count", 1)
+  self.shared:increment("count", 1)
   for i=1,reps do
     assert(self.setting:value("integer") == Process.procnum())
   end
-  self.shared:increment("settings_ok", 1)
+  self.shared:increment("ok", 1)
+  IPC.send("manager", "done", 1)
 end)
 
 assert(testmod:add())
