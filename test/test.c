@@ -674,7 +674,7 @@ describe(lua_api) {
       shuso_run(S);
       assert_shuso_ran_ok(S);
     }
-    test("master-worker communiation") {
+    test("master-worker communication") {
       assert_luaL_dofile(S->lua.state, "ipc_master_worker.lua");
       assert_shuso(S, shuso_configure_finish(S));
       shuso_run(S);
