@@ -108,6 +108,13 @@ static int lua_push_nil_error(lua_State *L) {
   return 2;
 }
 
+static void lua_getlib_field(lua_State *L, const char *lib, const char *field) {
+  lua_getglobal(L, lib);
+  assert(lua_istable(L, -1));
+  lua_getfield(L, -1, field);
+  lua_remove(L, -2);
+}
+
 //create a shuttlesock instance from inside Lua
 static int Lua_shuso_create(lua_State *L) {
   if(shuso_state(L)) {
@@ -143,6 +150,8 @@ static int Lua_shuso_configure_string(lua_State *L) {
   lua_pushboolean(L, 1);
   return 1;
 }
+
+
 
 static int Lua_shuso_configure_finish(lua_State *L) {
   shuso_t *S = shuso_state(L);
