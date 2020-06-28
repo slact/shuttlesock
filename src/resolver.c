@@ -37,6 +37,7 @@ static void *init_realloc(void *ptr, size_t sz) {
     }
     a = realloc(a, sizeof(*a)+sz);
     if(a == NULL) {
+      //intentionally don't free a, 'cause this function mimicks realloc()
       return NULL;
     }
     if(sz > old_sz) {
