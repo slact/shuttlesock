@@ -4,12 +4,12 @@
 #include <assert.h>
 #include <unistd.h>
 #include <stdio.h>
-#if defined(SHUTTLESOCK_DEBUG_VALGRIND)
-#include <valgrind/memcheck.h>
-#endif
+
+#define align_native(p)                                                   \
+  (((uintptr_t) (p) + ((uintptr_t)(sizeof(void *)) - 1)) & ~((uintptr_t)(sizeof(void *)) - 1))
 
 #define align_ptr_native(p)                                                   \
-  (void *)(((uintptr_t) (p) + ((uintptr_t)(sizeof(void *)) - 1)) & ~((uintptr_t)(sizeof(void *)) - 1))
+  (void *)align_native(p)
 
 #define align_ptr(p, align)                                                   \
   (void *)(((uintptr_t) (p) + ((uintptr_t)align - 1)) & ~((uintptr_t)align - 1))
@@ -18,13 +18,28 @@
   (size_t )((uintptr_t)(cur) - (uintptr_t)(page))
 
 
+#if defined(SHUTTLESOCK_DEBUG_VALGRIND)
+#define STALLOC_VALGRIND_RZB sizeof(void *)
+_Static_assert(STALLOC_VALGRIND_RZB == align_native(STALLOC_VALGRIND_RZB), "Valgrind mempool redzone size must be a sizeof(void*) multiple");
+#include <valgrind/memcheck.h>
+#endif
+
 static shuso_stalloc_page_t *add_page(shuso_stalloc_t *st) {
-  shuso_stalloc_page_t *page = malloc(st->page.size);
-  if(!page) return NULL;
+  size_t                   pagesize = st->page.size;
+  shuso_stalloc_page_t    *page;
+  char                    *cur;
 #ifdef SHUTTLESOCK_DEBUG_VALGRIND
-  VALGRIND_MAKE_MEM_NOACCESS(page, st->page.size);
-  VALGRIND_MAKE_MEM_UNDEFINED(page, sizeof(*page)); //page header
-  st->page.cur+=sizeof(void *); //add padding
+  char *pagedata = malloc(pagesize+2*STALLOC_VALGRIND_RZB);
+  if(!pagedata) return NULL;
+  VALGRIND_CREATE_MEMPOOL(pagedata, STALLOC_VALGRIND_RZB, false);
+  VALGRIND_MAKE_MEM_NOACCESS(pagedata, pagesize+2*STALLOC_VALGRIND_RZB);
+  page = (void *)(pagedata+STALLOC_VALGRIND_RZB);
+  VALGRIND_MEMPOOL_ALLOC(pagedata, page, sizeof(*page));
+  cur = align_ptr_native(((char *)&page[1]) + STALLOC_VALGRIND_RZB);
+#else
+  page = malloc(pagesize);
+  if(!page) return NULL;
+  cur = align_ptr_native(&page[1]);
 #endif
 
 #ifdef SHUTTLESOCK_STALLOC_TRACK_SPACE
@@ -37,7 +52,8 @@ static shuso_stalloc_page_t *add_page(shuso_stalloc_t *st) {
 #endif
   
   page->prev = st->page.last;
-  st->page.cur = align_ptr_native(&page[sizeof(*page)]);
+
+  st->page.cur = cur;
   st->page.last = page;
   st->page.count++;
 
@@ -45,7 +61,11 @@ static shuso_stalloc_page_t *add_page(shuso_stalloc_t *st) {
   page->space.reserved = page_used_space(page, st->page.cur);
   st->space.free += st->page.size - page->space.reserved;
   st->space.reserved += page->space.reserved;
+#ifdef SHUTTLESOCK_DEBUG_VALGRIND
   page->space.wasted = 0;
+#else
+  page->space.wasted = 0;
+#endif
   page->space.cur = st->page.cur;
   page->space.used = 0;
 #endif
@@ -70,7 +90,13 @@ static void remove_last_page(shuso_stalloc_t *st) {
       st->space.wasted -= freespace_left;
     }
 #endif
+#ifdef SHUTTLESOCK_DEBUG_VALGRIND
+  char *pagedata = &((char *)page)[-STALLOC_VALGRIND_RZB];
+  VALGRIND_DESTROY_MEMPOOL(pagedata);
+  free(pagedata);
+#else
   free(page);
+#endif
 }
 
 bool shuso_stalloc_init(shuso_stalloc_t *st, size_t pagesize) {
@@ -79,7 +105,7 @@ bool shuso_stalloc_init(shuso_stalloc_t *st, size_t pagesize) {
 }
 
 bool shuso_stalloc_init_clean(shuso_stalloc_t *st, size_t pagesize) {
-#if defined(SHUTTLESOCK_DEBUG_STALLOC_NOPOOL)
+#ifdef SHUTTLESOCK_DEBUG_STALLOC_NOPOOL
   st->page.size = 0;
 #else
   st->page.size = pagesize > 0 ? pagesize : shuso_system.page_size;
@@ -93,6 +119,7 @@ bool shuso_stalloc_init_clean(shuso_stalloc_t *st, size_t pagesize) {
 static void *plain_old_malloc(shuso_stalloc_t *st, size_t sz) {
   shuso_stalloc_allocd_t *cur;
 #if defined(SHUTTLESOCK_DEBUG_SANITIZE) || defined(SHUTTLESOCK_DEBUG_VALGRIND)
+  //two separate allocations so that the sanitizer can insert some redzones
   cur = malloc(sizeof(*cur));
   if(!cur) return NULL;
   cur->data = malloc(sz);
@@ -125,73 +152,95 @@ static void plain_old_free_last(shuso_stalloc_t *st) {
   free(cur);
 }
 
-static inline void *shuso_stalloc_with_alignment(shuso_stalloc_t *st, size_t sz, bool align) {
+static ssize_t page_max_free_space(ssize_t pagesize) {
+  size_t headersize = align_native(sizeof(shuso_stalloc_page_t));
+  return pagesize - headersize;
+}
+
+#ifdef SHUTTLESOCK_STALLOC_TRACK_SPACE
+static void stalloc_update_space(shuso_stalloc_t *st, shuso_stalloc_page_t *page, size_t sz, ssize_t before_pad, ssize_t after_pad) {
+  st->space.wasted += before_pad + after_pad;
+  st->space.used += sz;
+  st->space.free -= sz + before_pad + after_pad;
+  page->space.wasted += before_pad + after_pad;
+  page->space.used += sz;
+  page->space.cur = st->page.cur;
+#ifdef SHUTTLESOCK_DEBUG_VALGRIND
+  st->space.wasted -= 2*STALLOC_VALGRIND_RZB;
+  st->space.reserved += 2*STALLOC_VALGRIND_RZB;
+  page->space.wasted -= 2*STALLOC_VALGRIND_RZB;
+  page->space.reserved += 2*STALLOC_VALGRIND_RZB;
+#endif
+}
+#endif
+
+static void *stalloc_in_current_page(shuso_stalloc_t *st, size_t sz, bool align) {
   ssize_t               pagesize = st->page.size;
   shuso_stalloc_page_t *page = st->page.last;
   char                 *cur = st->page.cur;
-  ssize_t               space_left = pagesize - page_used_space(page, cur);
   char                 *ret;
-  ssize_t               align_padding;
-  if(align) {
-    ret = align_ptr_native(cur);
-    align_padding = ret - cur;
-  }
-  else {
-    ret = cur;
-    align_padding = 0;
-  }
+  ssize_t               before_padding, after_padding;
 #ifdef SHUTTLESOCK_DEBUG_VALGRIND
-  ssize_t valgrind_padding = 0;
-  if(ret == cur) {
-    //add padding between used page chunks
-    ret = align_ptr_native(&ret[1]);
-    valgrind_padding = ret - cur;
-    align_padding += valgrind_padding;
-    assert(align_padding >= (ssize_t )sizeof(void *));
-  }
+  ret = align ? align_ptr_native(&cur[STALLOC_VALGRIND_RZB]) : &cur[STALLOC_VALGRIND_RZB];
+  after_padding = STALLOC_VALGRIND_RZB;
+#else
+  ret = align ? align_ptr_native(cur) : cur;
+  after_padding = 0;
 #endif
-  if(space_left - align_padding >= (ssize_t )sz) {
-    st->page.cur = &ret[sz];
+  before_padding = ret - cur;
+  
+  if(pagesize - (ssize_t )page_used_space(page, cur) < before_padding + (ssize_t )sz + after_padding) {
+    //not enough space in this page
+    return NULL;
+  }
+  st->page.cur = &ret[sz + after_padding];
+#ifdef SHUTTLESOCK_DEBUG_VALGRIND
+  VALGRIND_MEMPOOL_ALLOC(&((char *)page)[-STALLOC_VALGRIND_RZB], ret, sz);
+#endif
 #ifdef SHUTTLESOCK_STALLOC_TRACK_SPACE
-    st->space.wasted += align_padding;
-#ifdef SHUTTLESOCK_DEBUG_VALGRIND
-    st->space.wasted -= valgrind_padding;
-    st->space.reserved += valgrind_padding;
+  stalloc_update_space(st, page, sz, before_padding, after_padding);
 #endif
-    st->space.used += sz;
-    st->space.free -= sz + align_padding;
-    page->space.wasted += align_padding;
-    page->space.used += sz;
-    page->space.cur = st->page.cur;
-#endif
-#ifdef SHUTTLESOCK_DEBUG_VALGRIND
-    VALGRIND_MAKE_MEM_UNDEFINED(ret, sz);
-#endif
-  }
-  else if((ssize_t )sz < pagesize) {
-    if((page = add_page(st)) == NULL) {
-      return NULL;
-    }
-    assert(st->page.last == page);
-    //new page is aligned for sure
-#ifdef SHUTTLESOCK_STALLOC_TRACK_SPACE
-    st->space.used += sz;
-    st->space.free -= sz;
-    page->space.used += sz;
-    page->space.cur = st->page.cur;
-#endif
-    ret = st->page.cur;
-    st->page.cur = &ret[sz];
-#ifdef SHUTTLESOCK_DEBUG_VALGRIND
-    VALGRIND_MAKE_MEM_UNDEFINED(ret, sz);
-#endif
-  }
-  else {
-    if((ret = plain_old_malloc(st, sz)) == NULL) {
-      return NULL;
-    }
-  }
   return ret;
+}
+
+static inline void *stalloc_in_new_page(shuso_stalloc_t *st, size_t sz, bool align) {
+  ssize_t      pagesize = st->page.size;
+  ssize_t       before_padding, after_padding;
+#ifdef SHUTTLESOCK_DEBUG_VALGRIND
+  before_padding = STALLOC_VALGRIND_RZB, after_padding = STALLOC_VALGRIND_RZB;
+#else
+  before_padding = 0, after_padding = 0;
+#endif
+  
+  if((ssize_t )page_max_free_space(pagesize) < before_padding + (ssize_t )sz + after_padding) {
+    //not enough space in a brand new page
+    return NULL;
+  }
+  
+  shuso_stalloc_page_t *page;
+  if((page = add_page(st)) == NULL) {
+    return NULL;
+  }
+  assert(st->page.last == page);
+  void *ret = stalloc_in_current_page(st, sz, align);
+  assert(ret);
+  return ret;
+}
+
+static void *shuso_stalloc_with_alignment(shuso_stalloc_t *st, size_t sz, bool align) {  
+  
+  void *ret;
+  
+  if((ret = stalloc_in_current_page(st, sz, align))) {
+    return ret;
+  }
+  if((ret = stalloc_in_new_page(st, sz, align))) {
+    return ret;
+  }
+  if((ret = plain_old_malloc(st, sz))) {
+    return ret;
+  }
+  return NULL;
 }
 
 void *shuso_stalloc(shuso_stalloc_t *st, size_t sz) {
@@ -209,7 +258,7 @@ int shuso_stalloc_push(shuso_stalloc_t *st) {
     .page = st->page.last,
     .page_cur = st->page.cur,
 #ifdef SHUTTLESOCK_STALLOC_TRACK_SPACE
-    .page_space = st->page.last->space,
+    .page_space = (st->page.last == NULL ? (shuso_stalloc_page_space_t ){0} : st->page.last->space),
 #endif
     .allocd = st->allocd.last
   };
@@ -260,6 +309,9 @@ bool shuso_stalloc_pop_to(shuso_stalloc_t *st, unsigned stackpos) {
   
   //roll back page
   st->page.cur = frame->page_cur;
+#ifdef SHUTTLESOCK_DEBUG_VALGRIND
+  VALGRIND_MEMPOOL_TRIM((&((char *)page)[-STALLOC_VALGRIND_RZB]), page, st->page.cur);
+#endif
 #ifdef SHUTTLESOCK_STALLOC_TRACK_SPACE
   size_t used_diff = page ? (page->space.used - frame->page_space.used) : 0;
   size_t wasted_diff = page ? (page->space.wasted - frame->page_space.wasted) : 0;
@@ -280,7 +332,6 @@ bool shuso_stalloc_empty(shuso_stalloc_t *st) {
   while(st->page.last != NULL) {
     remove_last_page(st);
   }
-  
   //leaves the stalloc in a dirty state
   return true;
 }
