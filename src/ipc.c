@@ -521,7 +521,7 @@ static void do_nothing(void) {
 
 const shuso_ipc_handler_t *shuso_ipc_add_handler(shuso_t *S,  const char *name, uint32_t code, shuso_ipc_fn *receive, shuso_ipc_fn *cancel) {
   if(!shuso_runstate_check(S, SHUSO_STATE_CONFIGURING, "add IPC handler")) {
-    return false;
+    return NULL;
   }
   
   shuso_ipc_handler_t *handlers = S->common->ipc_handlers;

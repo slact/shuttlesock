@@ -209,7 +209,7 @@ static shuso_instring_t *luaS_instring_lua_to_c_generic(lua_State *L, shuso_sett
     if(!is_variable) {
       if(!instring_token_literal_lua_to_c(L, &token[i], &instring->buffer.iov[i], -1)) {
         lua_settop(L, top);
-        return false;
+        return NULL;
       }
     }
     else {
@@ -217,7 +217,7 @@ static shuso_instring_t *luaS_instring_lua_to_c_generic(lua_State *L, shuso_sett
       var_count++;
       if(!instring_token_variable_lua_to_c(L, setting, &token[i], &instring->buffer.iov[i], -1)) {
         lua_settop(L, top);
-        return false;
+        return NULL;
       }
     }
     lua_pop(L, 1); //pop [i+1]
