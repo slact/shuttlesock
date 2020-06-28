@@ -28,7 +28,7 @@ linux_task:
   test_release_valgrind_script:
     - ./rebuild.rb release O2
     - ./test.sh valgrind --color --multiplier=0.2
-  codecov:
+  codecov_script:
     - ./rebuild.rb gcc-coverage no-display-coverage
     - bash <(curl -s https://codecov.io/bash)
     - ./rebuild.rb gcc-coverage no-display-coverage nopool
