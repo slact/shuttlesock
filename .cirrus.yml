@@ -11,27 +11,34 @@ linux_task:
     - luarocks install luacov-multiple
     - luarocks install luacheck
   test_basic_script:
-    - ./rebuild.sh
+    - ./rebuild.rb
     - ./test.sh --color
-  codecov_script:
-    - ./rebuild.sh gcc-coverage no-display-coverage
-    - bash <(curl -s https://codecov.io/bash)
   test_optimized_script:
-    - ./rebuild.sh O3
+    - ./rebuild.rb O3
     - ./test.sh --color
   test_optimized_valgrind_script:
-    - ./rebuild.sh O2 valgrind
+    - ./rebuild.rb O2 valgrind
     - ./test.sh valgrind --color --multiplier=0.1
   test_optimized_pool_stats_tracking_valgrind_script:
-    - ./rebuild.sh pool_track_space O2 valgrind
+    - ./rebuild.rb pool_track_space O2 valgrind
     - ./test.sh valgrind --color --multiplier=0.1
   test_no_eventfd_valgrind_script:
-    - ./rebuild.sh no-eventfd O2
+    - ./rebuild.rb no-eventfd O2
     - ./test.sh valgrind --color --multiplier=0.1
   test_release_valgrind_script:
-    - ./rebuild.sh release O2
+    - ./rebuild.rb release O2
     - ./test.sh valgrind --color --multiplier=0.2
-
+  codecov:
+    - ./rebuild.rb gcc-coverage no-display-coverage
+    - bash <(curl -s https://codecov.io/bash)
+    - ./rebuild.rb gcc-coverage no-display-coverage nopool
+    - bash <(curl -s https://codecov.io/bash)
+    - ./rebuild.rb gcc-coverage no-display-coverage nothreads
+    - bash <(curl -s https://codecov.io/bash)
+    - ./rebuild.rb gcc-coverage no-display-coverage pool_track_space valgrind
+    - bash <(curl -s https://codecov.io/bash)
+    - ./rebuild.rb no-display-coverage gcc-coverage no-eventfd
+    - bash <(curl -s https://codecov.io/bash)
 osx_task:
   osx_instance:
     image: catalina-xcode
@@ -41,14 +48,14 @@ osx_task:
     - brew upgrade
     - brew install ccache libev zsh ruby lua luarocks pcre2 openssl c-ares
   test_basic_script:
-    - ./rebuild.sh verbose
+    - ./rebuild.rb verbose
     - ./test.sh --color
   test_optimized_script:
-    - ./rebuild.sh O3
+    - ./rebuild.rb O3
     - ./test.sh --color
 #  test_sanitized_script:
 #    - brew install llvm
-#    - ./rebuild.sh O2 sanitize-address
+#    - ./rebuild.rb O2 sanitize-address
 #    - ./test.sh --color
 freebsd_task:
   freebsd_instance:
