@@ -25,7 +25,7 @@ target_sources(shuttlesock PRIVATE
   src/ipc.c
   src/ipc_commands.c
   src/sysutil.c
-  src/stalloc.c
+  src/pool.c
   src/resolver.c
   src/shared_slab.c
   src/module.c

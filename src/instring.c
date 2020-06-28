@@ -9,7 +9,7 @@ static bool instring_token_literal_lua_to_c(lua_State *L, shuso_instring_token_t
   lua_getfield(L, index, "value");
   str = lua_tolstring(L, -1, &len);
   token->literal.len = len;
-  token->literal.data = (char *)shuso_stalloc(&S->stalloc, len+1);
+  token->literal.data = (char *)shuso_palloc(&S->pool, len+1);
   if(!token->literal.data) {
     shuso_set_error(S, "no memory for instring literal");
     return false;
@@ -82,7 +82,7 @@ static bool instring_token_variable_lua_to_c(lua_State *L, shuso_setting_t *sett
   var->setting = setting;
   var->block = shuso_setting_parent_block(S, setting);
   
-  var->name = shuso_stalloc(&S->stalloc, strlen(name)+1);
+  var->name = shuso_palloc(&S->pool, strlen(name)+1);
   if(!var->name) {
     shuso_set_error(S, "no memory for instring variable name");
     return false;
@@ -94,7 +94,7 @@ static bool instring_token_variable_lua_to_c(lua_State *L, shuso_setting_t *sett
   var->params.size = params_count;
   
   if(params_count > 0) {
-    if((var->params.array = shuso_stalloc(&S->stalloc, sizeof(*var->params.array))) == NULL) {
+    if((var->params.array = shuso_palloc(&S->pool, sizeof(*var->params.array))) == NULL) {
       return shuso_set_error(S, "no memory for instring variable index array");
     }
     for(int j = 0; j < params_count; j++) {
@@ -102,7 +102,7 @@ static bool instring_token_variable_lua_to_c(lua_State *L, shuso_setting_t *sett
       size_t      len;
       lua_rawgeti(L, -1, j+1);
       str = lua_tolstring(L, -1, &len);
-      if((var->params.array[j] = shuso_stalloc(&S->stalloc, len+1)) == NULL) {
+      if((var->params.array[j] = shuso_palloc(&S->pool, len+1)) == NULL) {
         return shuso_set_error(S, "no memory for instring variable index");
       }
       strcpy((char *)var->params.array[j], str);
@@ -162,7 +162,7 @@ static shuso_instring_t *luaS_instring_lua_to_c_generic(lua_State *L, shuso_sett
   if(preallocd_instring) {
     instring = preallocd_instring;
   }
-  else if((instring = shuso_stalloc(&S->stalloc, sizeof(*instring))) == NULL) {
+  else if((instring = shuso_palloc(&S->pool, sizeof(*instring))) == NULL) {
     lua_settop(L, top);
     shuso_set_error(S, "no memory for instring");
     return NULL;
@@ -180,7 +180,7 @@ static shuso_instring_t *luaS_instring_lua_to_c_generic(lua_State *L, shuso_sett
   
   shuso_buffer_init(S, &instring->buffer.head, SHUSO_BUF_EXTERNAL, NULL);
   
-  instring->buffer.iov = shuso_stalloc(&S->stalloc, sizeof(struct iovec) * token_count);
+  instring->buffer.iov = shuso_palloc(&S->pool, sizeof(struct iovec) * token_count);
   if(!instring->buffer.iov) {
     lua_settop(L, top);
     shuso_set_error(S, "no memory for instring iovec");
@@ -188,7 +188,7 @@ static shuso_instring_t *luaS_instring_lua_to_c_generic(lua_State *L, shuso_sett
   }
   shuso_buffer_link_init(S, &instring->buffer.link, instring->buffer.iov, token_count);
   
-  shuso_instring_token_t *token = shuso_stalloc(&S->stalloc, sizeof(*token)*token_count);
+  shuso_instring_token_t *token = shuso_palloc(&S->pool, sizeof(*token)*token_count);
   if(!token) {
     lua_settop(L, top);
     shuso_set_error(S, "no memory for instring token");
@@ -227,7 +227,7 @@ static shuso_instring_t *luaS_instring_lua_to_c_generic(lua_State *L, shuso_sett
   
   instring->variables.count = var_count;
   if(var_count > 0) {
-    shuso_variable_t **vars = shuso_stalloc(&S->stalloc, sizeof(*vars) * var_count);
+    shuso_variable_t **vars = shuso_palloc(&S->pool, sizeof(*vars) * var_count);
     int j = 0;
     for(i = 0; i< token_count; i++) {
       if(token[i].type == SHUSO_INSTRING_TOKEN_VARIABLE) {
@@ -276,15 +276,15 @@ static bool shuso_instring_copy_for_worker(shuso_t *S, shuso_instring_t *old, sh
   assert(old->tokens.count > 0);
   assert(old->variables.count > 0);
   
-  new->variables.array = shuso_stalloc(&S->stalloc, sizeof(*old->variables.array) * old->variables.count);
-  new->tokens.array = shuso_stalloc(&S->stalloc, sizeof(*old->tokens.array) * old->tokens.count);
+  new->variables.array = shuso_palloc(&S->pool, sizeof(*old->variables.array) * old->variables.count);
+  new->tokens.array = shuso_palloc(&S->pool, sizeof(*old->tokens.array) * old->tokens.count);
   if(!new->variables.array || !new->tokens.array) {
     return shuso_set_error(S, "no memory for instring copy");
   }
   
   shuso_buffer_init(S, &new->buffer.head, SHUSO_BUF_EXTERNAL, NULL);
   
-  new->buffer.iov = shuso_stalloc(&S->stalloc, sizeof(struct iovec) * old->tokens.count);
+  new->buffer.iov = shuso_palloc(&S->pool, sizeof(struct iovec) * old->tokens.count);
   if(!new->buffer.iov) {
     return shuso_set_error(S, "no memory for instring iovec");
   }
@@ -329,7 +329,7 @@ shuso_instrings_t *shuso_instrings_copy_for_worker(shuso_t *S, shuso_instrings_t
   }
   
   shuso_instrings_t *new;
-  if((new = shuso_stalloc(&S->stalloc, sizeof(*new) + sizeof(shuso_instring_t) * old->count)) == NULL) {
+  if((new = shuso_palloc(&S->pool, sizeof(*new) + sizeof(shuso_instring_t) * old->count)) == NULL) {
     shuso_set_error(S, "no memory for instrings array");
     return NULL;
   }
@@ -352,7 +352,7 @@ shuso_instrings_t *luaS_instrings_lua_to_c(lua_State *L, shuso_setting_t *settin
   int top = lua_gettop(L);
   index = lua_absindex(L, index);
   size_t instring_count = luaL_len(L, index);
-  shuso_instrings_t *instrings = shuso_stalloc(&S->stalloc, sizeof(*instrings) + sizeof(*instrings->array) * instring_count);
+  shuso_instrings_t *instrings = shuso_palloc(&S->pool, sizeof(*instrings) + sizeof(*instrings->array) * instring_count);
   if(instrings == NULL) {
     shuso_set_error(S, "no memory for instrings array");
     return NULL;

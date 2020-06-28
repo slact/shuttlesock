@@ -119,7 +119,7 @@ bool shuso_lua_event_register_data_wrapper(shuso_t *S, const char *name, shuso_l
   luaS_push_lua_module_field(L, "shuttlesock.core", "event_data_wrappers");
   assert(lua_istable(L, -1));
   
-  shuso_lua_event_data_wrapper_t *stored_wrapper = shuso_stalloc(&S->stalloc, sizeof(*stored_wrapper));
+  shuso_lua_event_data_wrapper_t *stored_wrapper = shuso_palloc(&S->pool, sizeof(*stored_wrapper));
   if(!stored_wrapper) {
     lua_settop(L, top);
     return false;
@@ -151,7 +151,7 @@ static bool lua_bridge_module_initialize(shuso_t *S, shuso_module_t *self) {
   
   
   
-  shuso_lua_bridge_module_common_ctx_t *ctx = shuso_stalloc(&S->stalloc, sizeof(*ctx));
+  shuso_lua_bridge_module_common_ctx_t *ctx = shuso_palloc(&S->pool, sizeof(*ctx));
   *ctx = (shuso_lua_bridge_module_common_ctx_t ) {
     .ipc_messages_active = 0
   };

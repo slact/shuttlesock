@@ -220,7 +220,7 @@ bool shuso_config_register_variable(shuso_t *S, shuso_module_variable_t *variabl
 bool shuso_config_system_initialize(shuso_t *S) {
   lua_State *L = S->lua.state;
   
-  shuso_config_module_common_ctx_t *ctx = shuso_stalloc(&S->stalloc, sizeof(*ctx));
+  shuso_config_module_common_ctx_t *ctx = shuso_palloc(&S->pool, sizeof(*ctx));
   if(!ctx) {
     return shuso_set_error(S, "failed to allocate module context");
   }
@@ -242,7 +242,7 @@ bool shuso_config_system_initialize(shuso_t *S) {
 static shuso_setting_t *lua_setting_to_c_struct(shuso_t *S, lua_State *L, int setting_index) {
   int sidx = lua_gettop(L);
   int top = lua_gettop(L);
-  shuso_setting_t *setting = shuso_stalloc(&S->stalloc, sizeof(*setting));
+  shuso_setting_t *setting = shuso_palloc(&S->pool, sizeof(*setting));
   if(!setting) {
     shuso_set_error(S, "failed to alloc config setting");
     return NULL;
@@ -291,7 +291,7 @@ static shuso_setting_t *lua_setting_to_c_struct(shuso_t *S, lua_State *L, int se
     setting->block = NULL;
   }
   else {
-    shuso_setting_block_t *block = shuso_stalloc(&S->stalloc, sizeof(*block));
+    shuso_setting_block_t *block = shuso_palloc(&S->pool, sizeof(*block));
     if(block == NULL) {
       shuso_set_error(S, "failed to allocate memory for config block");
       lua_settop(L, top);
@@ -311,7 +311,7 @@ static shuso_setting_t *lua_setting_to_c_struct(shuso_t *S, lua_State *L, int se
     luaS_config_pointer_ref(L, block); //also pops the block table
     setting->block = block;
     block->setting = setting;
-    if(!shuso_context_list_initialize(S, NULL, &block->context_list, &S->stalloc)) {
+    if(!shuso_context_list_initialize(S, NULL, &block->context_list, &S->pool)) {
       shuso_set_error(S, "unable to initialize config block module context list");
       lua_settop(L, top);
       return NULL;
@@ -405,7 +405,7 @@ bool shuso_config_system_generate(shuso_t *S) {
   }
   lua_pop(L, 1); //pop 2nd return val
   
-  shuso_setting_block_t *root_block = shuso_stalloc(&S->stalloc, sizeof(*root_block));
+  shuso_setting_block_t *root_block = shuso_palloc(&S->pool, sizeof(*root_block));
   if(root_block == NULL) {
     lua_settop(L, top);
     return shuso_set_error(S, "failed to allocate memory for config root block");
@@ -416,7 +416,7 @@ bool shuso_config_system_generate(shuso_t *S) {
     .path="",
   };
   
-  if(!shuso_context_list_initialize(S, NULL, &root_block->context_list, &S->stalloc)) {
+  if(!shuso_context_list_initialize(S, NULL, &root_block->context_list, &S->pool)) {
     lua_settop(L, top);
     return shuso_set_error(S, "unable to initialize root block module context list");
   }
@@ -428,7 +428,7 @@ bool shuso_config_system_generate(shuso_t *S) {
   
   luaS_config_pointer_ref(L, root_block); //also pops the block table
   
-  shuso_setting_t *root_setting = shuso_stalloc(&S->stalloc, sizeof(*root_setting));
+  shuso_setting_t *root_setting = shuso_palloc(&S->pool, sizeof(*root_setting));
   if(!root_setting) {
     lua_settop(L, top);
     return shuso_set_error(S, "failed to allocate memory for config root");
@@ -463,7 +463,7 @@ bool shuso_config_system_generate(shuso_t *S) {
   //we need an instrings array to fill, 'cause instrings cache values
   if(num_settings > 0) {
     S->ctx.config.settings_count = num_settings;
-    S->ctx.config.settings_instrings = shuso_stalloc(&S->stalloc, sizeof(*S->ctx.config.settings_instrings) * num_settings);
+    S->ctx.config.settings_instrings = shuso_palloc(&S->pool, sizeof(*S->ctx.config.settings_instrings) * num_settings);
     if(S->ctx.config.settings_instrings == NULL) {
       lua_settop(L, top);
       return shuso_set_error(S, "failed to allocate memory for settings instring array");
@@ -539,7 +539,7 @@ bool shuso_config_system_generate(shuso_t *S) {
   luaS_pcall_config_method(L, "all_blocks", 0, 1);
   assert(lua_istable(L, -1));
   ctx->blocks.count = luaL_len(L, -1);
-  ctx->blocks.array = shuso_stalloc(&S->stalloc, sizeof(*ctx->blocks.array) * ctx->blocks.count);
+  ctx->blocks.array = shuso_palloc(&S->pool, sizeof(*ctx->blocks.array) * ctx->blocks.count);
   if(ctx->blocks.array == NULL) {
     lua_settop(L, top);
     return shuso_set_error(S, "failed to allocate config block array");
@@ -802,7 +802,7 @@ static bool config_initialize_worker(shuso_t *S, shuso_module_t *self, shuso_t *
   S->ctx.config.settings_count = count;
   S->ctx.config.settings_instrings = NULL;
   if(count > 0) {
-    settings_instrings = shuso_stalloc(&S->stalloc, sizeof(shuso_setting_instrings_t) * count);
+    settings_instrings = shuso_palloc(&S->pool, sizeof(shuso_setting_instrings_t) * count);
     if(!settings_instrings) {
       return shuso_set_error(S, "failed to allocate memory for settings instrings array");
     }

@@ -414,8 +414,8 @@ rebuild = Opts.new do
   valgrind :debug_flag,
     cmake_define: {SHUTTLESOCK_DEBUG_VALGRIND: true}
   
-  stalloc_track_space :debug_flag,
-    cmake_define: {SHUTTLESOCK_STALLOC_TRACK_SPACE: true}
+  pool_track_space :debug_flag,
+    cmake_define: {SHUTTLESOCK_POOL_TRACK_SPACE: true}
   
   sanitize :debug_flag,
     alt: ['clang-sanitize', 'sanitize-memory'],
@@ -491,7 +491,7 @@ rebuild = Opts.new do
   
   no_pool :debug_flag,
     alt: ["nopool"],
-    cmake_define: {SHUTTLESOCK_DEBUG_STALLOC_NOPOOL: true}
+    cmake_define: {SHUTTLESOCK_DEBUG_NOPOOL: true}
 
   luacov :debug_flag,
     alt: ["lua_coverage"],

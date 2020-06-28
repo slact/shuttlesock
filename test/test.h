@@ -201,11 +201,13 @@ typedef struct {
   off_t  count;
   off_t  large;
   size_t used;
-  int    stack_count;
-  shuso_stalloc_frame_t stack[SHUTTLESOCK_STALLOC_STACK_SIZE];
-} test_stalloc_stats_t;
+  struct {
+    int    count;
+    shuso_pool_level_t array[SHUTTLESOCK_POOL_MAX_LEVELS];
+  }     levels;
+} test_pool_stats_t;
 
-void fill_stalloc(shuso_stalloc_t *st, test_stalloc_stats_t *stats, size_t minsz, size_t maxsz, int large_alloc_interval, int total_items, int stack_push_count);
+void fill_pool(shuso_pool_t *pool, test_pool_stats_t *stats, size_t minsz, size_t maxsz, int large_alloc_interval, int total_items, int levels_add_count);
 
 bool allocd_ptr_value_correct(char *ptr, size_t sz);
 

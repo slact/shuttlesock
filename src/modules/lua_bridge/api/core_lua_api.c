@@ -1366,7 +1366,7 @@ static bool lua_module_initialize(shuso_t *S, shuso_module_t *module) {
   lua_State *L = S->lua.state;
   int top = lua_gettop(L);
 
-  lua_module_core_common_ctx_t *ctx = shuso_stalloc(&S->stalloc, sizeof(*ctx));
+  lua_module_core_common_ctx_t *ctx = shuso_palloc(&S->pool, sizeof(*ctx));
   shuso_set_core_common_context(S, module, ctx);
   ctx->events = NULL;
   ctx->events_count = 0;
@@ -1384,7 +1384,7 @@ static bool lua_module_initialize(shuso_t *S, shuso_module_t *module) {
   lua_remove(L, -2);
   int npub;
   if(lua_istable(L, -1) && (npub = luaS_table_count(L, -1)) > 0) {
-    shuso_event_t *events = shuso_stalloc(&S->stalloc, sizeof(*events) * npub);
+    shuso_event_t *events = shuso_palloc(&S->pool, sizeof(*events) * npub);
     if(events == NULL) {
       lua_settop(L, top);
       return shuso_set_error(S, "failed to allocate lua module published events array");
@@ -1612,12 +1612,12 @@ static int Lua_shuso_add_module(lua_State *L) {
     return luaL_error(L, shuso_last_error(S));
   }
   luaL_checktype(L, 1, LUA_TTABLE);
-  shuso_module_t *m = shuso_stalloc(&S->stalloc, sizeof(*m));
+  shuso_module_t *m = shuso_palloc(&S->pool, sizeof(*m));
   if(m == NULL) {
     return luaL_error(L, "failed to allocate lua module struct");
   }
   memset(m, '\0', sizeof(*m));
-  //shuso_lua_module_data_t *d = shuso_stalloc(&S->stalloc, sizeof(*d));
+  //shuso_lua_module_data_t *d = shuso_palloc(&S->pool, sizeof(*d));
   //m->privdata = d;
   
   //don't need to check these fields, their values will be checked by the C module adder
@@ -1648,7 +1648,7 @@ static int Lua_shuso_add_module(lua_State *L) {
   }
   if(lua_istable(L, -1)) {
     int count = luaL_len(L, -1);
-    shuso_module_setting_t *settings = shuso_stalloc(&S->stalloc, sizeof(*settings) * (count+1));
+    shuso_module_setting_t *settings = shuso_palloc(&S->pool, sizeof(*settings) * (count+1));
     if(!settings) {
       return luaL_error(L, "not enough memory for settings");
     }
@@ -1668,7 +1668,7 @@ static int Lua_shuso_add_module(lua_State *L) {
       lua_getfield(L, -1, "aliases");
       if(lua_istable(L, -1)) {
         luaS_table_concat(L, " ");
-        settings[i].aliases = shuso_stalloc(&S->stalloc, luaL_len(L, -1)+1);
+        settings[i].aliases = shuso_palloc(&S->pool, luaL_len(L, -1)+1);
         strcpy((char *)settings[i].aliases, lua_tostring(L, -1));
       }
       else if(lua_isstring(L, -1)) {
@@ -1728,7 +1728,7 @@ static int Lua_shuso_add_module(lua_State *L) {
   }
   if(lua_istable(L, -1)) {
     int count = luaL_len(L, -1);
-    shuso_module_variable_t *vars = shuso_stalloc(&S->stalloc, sizeof(*vars) * (count+1));
+    shuso_module_variable_t *vars = shuso_palloc(&S->pool, sizeof(*vars) * (count+1));
     if(!vars) {
       return luaL_error(L, "not enough memory for variables");
     }
@@ -1756,7 +1756,7 @@ static int Lua_shuso_add_module(lua_State *L) {
       lua_getfield(L, -1, "aliases");
       if(lua_istable(L, -1)) {
         luaS_table_concat(L, " ");
-        vars[i].aliases = shuso_stalloc(&S->stalloc, luaL_len(L, -1)+1);
+        vars[i].aliases = shuso_palloc(&S->pool, luaL_len(L, -1)+1);
         if(!vars[i].aliases) {
           return luaL_error(L, "not enough memory for variable aliases string");
         }

@@ -15,7 +15,7 @@ void shuso_buffer_init(shuso_t *S, shuso_buffer_t *buf, shuso_buffer_memory_type
       assert(allocator_data == NULL);
       break;
     
-    case SHUSO_BUF_STALLOC:
+    case SHUSO_BUF_POOL:
     case SHUSO_BUF_FIXED:
     case SHUSO_BUF_SHARED:
       assert(allocator_data);
@@ -36,8 +36,8 @@ void *shuso_buffer_allocate(shuso_t *S, shuso_buffer_t *buf, size_t sz) {
     case SHUSO_BUF_HEAP:
       data = malloc(sz);
       break;
-    case SHUSO_BUF_STALLOC:
-      data = shuso_stalloc(buf->stalloc_pool, sz);
+    case SHUSO_BUF_POOL:
+      data = shuso_palloc(buf->pool, sz);
       break;
     case SHUSO_BUF_FIXED:
       //TODO
@@ -81,7 +81,7 @@ void shuso_buffer_free(shuso_t *S, shuso_buffer_t *buf, shuso_buffer_link_t *lin
     case SHUSO_BUF_HEAP:
       free(link);
       break;
-    case SHUSO_BUF_STALLOC:
+    case SHUSO_BUF_POOL:
       //can't free
       break;
     case SHUSO_BUF_FIXED:

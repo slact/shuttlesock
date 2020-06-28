@@ -2,7 +2,7 @@
 #define SHUTTLESOCK_BUFFER_H
 
 #include <shuttlesock/common.h>
-#include <shuttlesock/stalloc.h>
+#include <shuttlesock/pool.h>
 #include <shuttlesock/shared_slab.h>
 #include <sys/uio.h>
 #include <sys/socket.h>
@@ -16,7 +16,7 @@ typedef enum {
 typedef enum {
   SHUSO_BUF_DEFAULT = 0,
   SHUSO_BUF_HEAP,
-  SHUSO_BUF_STALLOC,
+  SHUSO_BUF_POOL,
   SHUSO_BUF_FIXED,
   SHUSO_BUF_SHARED,
   SHUSO_BUF_MMAPPED,
@@ -49,7 +49,7 @@ typedef struct {
   shuso_buffer_link_t        *last;
   shuso_buffer_memory_type_t  memory_type;
   union {
-    shuso_stalloc_t          *stalloc_pool;
+    shuso_pool_t          *pool;
     void                     *fixed_pool;
     shuso_shared_slab_t      *shm;
     void                     *allocator_data;

@@ -349,53 +349,53 @@ bool shusoT_destroy(shuso_t *S, test_runcheck_t **chkptr) {
 #define randrange(min, max) \
   (min + rand() / (RAND_MAX / (max - min + 1) + 1))
 
-void fill_stalloc(shuso_stalloc_t *st, test_stalloc_stats_t *stats, size_t minsz, size_t maxsz, int large_alloc_interval, int total_items, int stack_push_count) {
+void fill_pool(shuso_pool_t *pool, test_pool_stats_t *stats, size_t minsz, size_t maxsz, int large_alloc_interval, int total_items, int level_add_count) {
   char *chr;
-  int stacknum = 0;
-  int stack_push_interval = total_items / stack_push_count;
-  assert(stack_push_count + st->stack.count <= SHUTTLESOCK_STALLOC_STACK_SIZE);
+  int level = 0;
+  int level_add_interval = total_items / level_add_count;
+  assert(level_add_count + pool->levels.count <= SHUTTLESOCK_POOL_MAX_LEVELS);
   srand(0);
-  size_t largesz = st->page.size + 10;
+  size_t largesz = pool->page.size + 10;
   stats->largesz = largesz;
   for(int i=1; i<=total_items; i++) {
     if(large_alloc_interval > 0 && i % large_alloc_interval == 0) {
-      chr = shuso_stalloc(st, largesz);
+      chr = shuso_palloc(pool, largesz);
       stats->used += largesz;
       memset(chr, 0x31, largesz);
-      assertneq((void *)st->allocd.last->data, NULL);
-      asserteq((void *)chr, (void *)st->allocd.last->data);
+      assertneq((void *)pool->allocd.last->data, NULL);
+      asserteq((void *)chr, (void *)pool->allocd.last->data);
       stats->count++;
       stats->large++;
     }
     else {
       size_t sz = randrange(minsz, maxsz);
-#ifndef SHUTTLESOCK_DEBUG_STALLOC_NOPOOL
-      assert(sz < st->page.size);
+#ifndef SHUTTLESOCK_DEBUG_NOPOOL
+      assert(sz < pool->page.size);
 #endif
       assert(sz > 0);
-      chr = shuso_stalloc(st, sz);
+      chr = shuso_palloc(pool, sz);
       assert(chr != NULL);
       stats->used += sz;
       stats->count++;
-#ifndef SHUTTLESOCK_DEBUG_STALLOC_NOPOOL
-      if(st->allocd.last) {
-        assert(st->allocd.last->data != chr);
+#ifndef SHUTTLESOCK_DEBUG_NOPOOL
+      if(pool->allocd.last) {
+        assert(pool->allocd.last->data != chr);
       }
 #else
-      assert(st->allocd.last->data == chr);
+      assert(pool->allocd.last->data == chr);
 #endif
     }
-    if(stack_push_interval > 0 && i%stack_push_interval == 0) {
-      int nextstack = shuso_stalloc_push(st);
-      assert(nextstack > 0);
-      stacknum++;
-      asserteq(stacknum, nextstack);
-      stats->stack_count++;
-      if(nextstack <= SHUTTLESOCK_STALLOC_STACK_SIZE) {
-        stats->stack[nextstack-1] = *st->stack.stack[nextstack-1];
+    if(level_add_interval > 0 && i%level_add_interval == 0) {
+      int nextlevel = shuso_pool_mark_level(pool);
+      assert(nextlevel > 0);
+      level++;
+      asserteq(level, nextlevel);
+      stats->levels.count++;
+      if(nextlevel <= SHUTTLESOCK_POOL_MAX_LEVELS) {
+        stats->levels.array[nextlevel-1] = *pool->levels.array[nextlevel-1];
       }
       else {
-        snow_fail("stack out of bounds");
+        snow_fail("pool level out of bounds");
       }
     }
   }

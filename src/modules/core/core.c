@@ -134,11 +134,11 @@ static bool stop_event_interrupt_handler(shuso_t *S, shuso_event_t *event, shuso
 }
 
 static bool core_module_initialize_worker(shuso_t *S, shuso_module_t *self, shuso_t *Smanager) {
-  return shuso_context_list_initialize(S, self, &S->ctx.core.context_list, &S->stalloc);
+  return shuso_context_list_initialize(S, self, &S->ctx.core.context_list, &S->pool);
 }
 
 static bool core_module_initialize(shuso_t *S, shuso_module_t *self) {
-  shuso_core_module_common_ctx_t *common_ctx = shuso_stalloc(&S->stalloc, sizeof(*common_ctx));
+  shuso_core_module_common_ctx_t *common_ctx = shuso_palloc(&S->pool, sizeof(*common_ctx));
   assert(common_ctx);
   
   shuso_events_initialize(S, self, (shuso_event_init_t[]){
@@ -178,12 +178,12 @@ static bool core_module_initialize(shuso_t *S, shuso_module_t *self) {
   shuso_event_listen_with_priority(S, "core:master.stop",   core_master_try_stop, self, SHUTTLESOCK_FIRST_PRIORITY);
   shuso_event_listen_with_priority(S, "core:master.stop",   core_master_stop,   self, SHUTTLESOCK_LAST_PRIORITY);
   
-  bool ok = shuso_context_list_initialize(S, self, &common_ctx->context_list, &S->stalloc);
+  bool ok = shuso_context_list_initialize(S, self, &common_ctx->context_list, &S->pool);
   assert(ok);
   
   S->common->ctx.core = common_ctx;
   
-  ok = shuso_context_list_initialize(S, self, &S->ctx.core.context_list, &S->stalloc);
+  ok = shuso_context_list_initialize(S, self, &S->ctx.core.context_list, &S->pool);
   assert(ok);
   
   return true;

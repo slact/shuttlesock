@@ -1108,92 +1108,92 @@ describe(ipc) {
 #define MEM_DEFINED(addr) \
  (VALGRIND_CHECK_MEM_IS_ADDRESSABLE(addr) == 0 && VALGRIND_CHECK_MEM_IS_DEFINED(addr) == 0)
 
-describe(stack_allocator) {
-  static shuso_stalloc_t st;
+describe(pool_allocator) {
+  static shuso_pool_t pool;
   before_each() {
     shuso_system_initialize();
-    shuso_stalloc_init(&st, 0);
+    shuso_pool_init(&pool, 0);
   }
   after_each() {
-    shuso_stalloc_empty(&st);
+    shuso_pool_empty(&pool);
   }
   
   test("page header alignment") {
-    asserteq(sizeof(shuso_stalloc_page_t) % sizeof(void *), 0, "page header struct must be native pointer size aligned");
+    asserteq(sizeof(shuso_pool_page_t) % sizeof(void *), 0, "page header struct must be native pointer size aligned");
   }
   test("handful of pointer-size allocs") {
     void *ptr[10];
     for(int i=0; i<10; i++) {
-      ptr[i] = shuso_stalloc(&st, sizeof(void *));
+      ptr[i] = shuso_palloc(&pool, sizeof(void *));
       ptr[i] = (void *)(intptr_t)i;
       ptr[i] = &((char *)&ptr[i])[1];
       for(int j=0; j<i; j++) {
         assertneq(ptr[i], ptr[j], "those should be different allocations");
       }
     }
-#ifndef SHUTTLESOCK_DEBUG_STALLOC_NOPOOL
-    asserteq(st.allocd.last, NULL, "nothing should have been mallocd");
+#ifndef SHUTTLESOCK_DEBUG_NOPOOL
+    asserteq(pool.allocd.last, NULL, "nothing should have been mallocd");
 #endif
   }
   
   test("some very large allocs") {
     char *chr[10];
-    size_t sz = st.page.size + 10;
+    size_t sz = pool.page.size + 10;
     for(int i=0; i<10; i++) {
-      chr[i] = shuso_stalloc(&st, sz);
+      chr[i] = shuso_palloc(&pool, sz);
       memset(chr[i], 0x12, sz);
       for(int j=0; j<i; j++) {
         assertneq((void *)chr[i], (void *)chr[j], "those should be different allocations");
       }
-      assertneq(st.allocd.last, NULL, "alloc shouldn't be NULL");
-      asserteq((void *)st.allocd.last->data, (void *)chr[i], "wrong last alloc");
+      assertneq(pool.allocd.last, NULL, "alloc shouldn't be NULL");
+      asserteq((void *)pool.allocd.last->data, (void *)chr[i], "wrong last alloc");
     }
   }
   
   test("a few pages' worth") {
     static char *chr[500];
     size_t sz;
-    sz = st.page.size / 5;
+    sz = pool.page.size / 5;
     if(sz == 0) sz = 10;
     
     for(int i=0; i<500; i++) {
-      chr[i] = shuso_stalloc(&st, sz);
+      chr[i] = shuso_palloc(&pool, sz);
       memset(chr[i], 0x12, sz);
       for(int j=0; j<i; j++) {
         assertneq((void *)chr[i], (void *)chr[j], "those should be different allocations");
       }
-#ifndef SHUTTLESOCK_DEBUG_STALLOC_NOPOOL
-      asserteq(st.allocd.last, NULL, "nothing should have been mallocd");
+#ifndef SHUTTLESOCK_DEBUG_NOPOOL
+      asserteq(pool.allocd.last, NULL, "nothing should have been mallocd");
 #endif
     }
-#ifndef SHUTTLESOCK_DEBUG_STALLOC_NOPOOL
-    assert(st.page.count>1, "should have more than 1 page");
+#ifndef SHUTTLESOCK_DEBUG_NOPOOL
+    assert(pool.page.count>1, "should have more than 1 page");
 #else
-    assert(st.page.count == 0, "should have 0 pages in no-pool mode");
+    assert(pool.page.count == 0, "should have 0 pages in no-pool mode");
 #endif
   }
-  subdesc(stack) {
-    static test_stalloc_stats_t stats;
+  subdesc(levels) {
+    static test_pool_stats_t stats;
     before_each() {
-      shuso_stalloc_init(&st, 0);
+      shuso_pool_init(&pool, 0);
       memset(&stats, 0x00, sizeof(stats));
     }
     after_each() {
-      shuso_stalloc_empty(&st);
+      shuso_pool_empty(&pool);
     }
     
     
-    test("push") {
-      fill_stalloc(&st, &stats, 1, 256, 30, 1000, 8);
+    test("mark") {
+      fill_pool(&pool, &stats, 1, 256, 30, 1000, 8);
     }
     
-    test("push/pop") {
-      fill_stalloc(&st, &stats, 1, 256, 30, 1000, 8);
-      shuso_stalloc_pop_to(&st, 3);
-      assert(st.allocd.last == stats.stack[2].allocd);
-      assert(st.page.last == stats.stack[2].page);
-      assert(st.page.cur == stats.stack[2].page_cur);
-      shuso_stalloc_pop_to(&st, 0);
+    test("mark/drain") {
+      fill_pool(&pool, &stats, 1, 256, 30, 1000, 8);
+      shuso_pool_drain_to_level(&pool, 3);
+      assert(pool.allocd.last == stats.levels.array[2].allocd);
+      assert(pool.page.last == stats.levels.array[2].page);
+      assert(pool.page.cur == stats.levels.array[2].page_cur);
+      shuso_pool_drain_to_level(&pool, 0);
     }
   }
   

@@ -11,14 +11,14 @@
 
 static int luaS_create_binding_data(lua_State *L) {
   shuso_t                  *S = shuso_state(L);
-  shuso_server_binding_t   *binding = shuso_stalloc(&S->stalloc, sizeof(*binding));
+  shuso_server_binding_t   *binding = shuso_palloc(&S->pool, sizeof(*binding));
   if(!binding) {
     return luaL_error(L, "failed to allocate memory for server binding");
   }
   binding->lua_hostnum = lua_tointeger(L, 2);
   lua_getfield(L, 1, "server_type");
   const char *server_type = lua_tostring(L, -1);
-  binding->server_type = shuso_stalloc(&S->stalloc, strlen(server_type)+1);
+  binding->server_type = shuso_palloc(&S->pool, strlen(server_type)+1);
   if(!binding->server_type) {
     return luaL_error(L, "failed to allocate memory for server binding server_type string");
   }
@@ -27,14 +27,14 @@ static int luaS_create_binding_data(lua_State *L) {
   
   lua_getfield(L, 1, "name");
   const char *name = lua_tostring(L, -1);
-  binding->host.name = shuso_stalloc(&S->stalloc, strlen(name)+1);
+  binding->host.name = shuso_palloc(&S->pool, strlen(name)+1);
   if(!binding->host.name) {
     return luaL_error(L, "failed to allocate memory for server binding server_type string");
   }
   strcpy((char *)binding->host.name, name);
   lua_pop(L, 1); //pop ["name"]
     
-  binding->host.sockaddr = shuso_stalloc(&S->stalloc, sizeof(*binding->host.sockaddr));
+  binding->host.sockaddr = shuso_palloc(&S->pool, sizeof(*binding->host.sockaddr));
   if(!binding->host.sockaddr) {
     return luaL_error(L,"couldn't allocate host sockaddr");
   }
@@ -68,7 +68,7 @@ static int luaS_create_binding_data(lua_State *L) {
   lua_getfield(L, 1, "listen");
   int listen_count = luaL_len(L, -1);
   binding->config.count = listen_count;
-  binding->config.array = shuso_stalloc(&S->stalloc, sizeof(*binding->config.array) * listen_count);
+  binding->config.array = shuso_palloc(&S->pool, sizeof(*binding->config.array) * listen_count);
   if(!binding->config.array) {
     return luaL_error(L, "couldn't allocate server host config array");
   }
@@ -200,7 +200,7 @@ static int luaS_start_worker_io_listener_coroutine(lua_State *L) {
   shuso_server_binding_t    *binding = (void *)lua_topointer(L, 3);
   assert(binding);
   
-  data = shuso_stalloc(&S->stalloc, sizeof(*data));
+  data = shuso_palloc(&S->pool, sizeof(*data));
   if(!data) {
     return luaL_error(L, "failed to allocate shuso_io data for listener socket");
   }

@@ -76,7 +76,7 @@ shuso_t *shuso_create(const char **err) {
 shuso_t *shuso_create_with_lua(lua_State *lua, const char **err) {
   shuso_common_t     *common_ctx = NULL;
   shuso_t            *S = NULL;
-  bool                stalloc_initialized = false;
+  bool                pool_initialized = false;
   bool                resolver_global_initialized = false;
   const char         *errmsg = NULL;
   
@@ -123,8 +123,8 @@ shuso_t *shuso_create_with_lua(lua_State *lua, const char **err) {
   common_ctx->state = SHUSO_STATE_CONFIGURING;
   common_ctx->log.fd = fileno(stdout);
   
-  stalloc_initialized = shuso_stalloc_init(&S->stalloc, 0);
-  if(!stalloc_initialized) {
+  pool_initialized = shuso_pool_init(&S->pool, 0);
+  if(!pool_initialized) {
     goto fail;
   }
   
@@ -148,7 +148,7 @@ shuso_t *shuso_create_with_lua(lua_State *lua, const char **err) {
   
 fail:
   if(resolver_global_initialized) shuso_resolver_global_cleanup();
-  if(stalloc_initialized) shuso_stalloc_empty(&S->stalloc);
+  if(pool_initialized) shuso_pool_empty(&S->pool);
   if(S && S->lua.state && !S->lua.external) {
     shuso_lua_destroy(S);
   }
@@ -277,7 +277,7 @@ bool shuso_destroy(shuso_t *S) {
   if(S->ev.loop) {
     ev_loop_destroy(S->ev.loop);
   }
-  shuso_stalloc_empty(&S->stalloc);
+  shuso_pool_empty(&S->pool);
   shuso_shared_slab_destroy(S, &S->common->shm);
   if(S->common->modules.array) {
     free(S->common->modules.array);
@@ -454,7 +454,7 @@ bool shuso_run(shuso_t *S) {
   shuso_cleanup_loop(S);
   shuso_resolver_cleanup(&S->resolver);
   *S->process->state = SHUSO_STATE_STOPPED;
-  shuso_stalloc_empty(&S->stalloc);
+  shuso_pool_empty(&S->pool);
   shuso_log_notice(S, "stopped %s", shuso_process_as_string(S->procnum));
   return true;
   
@@ -499,7 +499,7 @@ void shuso_worker_shutdown(shuso_t *S) {
   shuso_lua_destroy(S);
   shuso_log_notice(S, "stopped worker %i", S->procnum);
   shuso_resolver_cleanup(&S->resolver);
-  shuso_stalloc_empty(&S->stalloc);
+  shuso_pool_empty(&S->pool);
   free(S);
   *worker_state = SHUSO_STATE_STOPPED;
 }
@@ -540,7 +540,7 @@ void shuso_worker_shutdown(shuso_t *S) {
 static shuso_t *shuso_initialize_worker(shuso_t *S, shuso_process_t *proc) {
 int               procnum = shuso_process_to_procnum(S, proc);
   const char       *err = NULL;
-  bool              stalloc_initialized = false;
+  bool              pool_initialized = false;
   bool              resolver_initialized = false;
   bool              shared_ipc_created = false;
   
@@ -572,8 +572,8 @@ int               procnum = shuso_process_to_procnum(S, proc);
   wS->process->S = wS;
   wS->procnum = procnum;
   
-  if(!(stalloc_initialized = shuso_stalloc_init(&wS->stalloc, 0))) {
-    err = "failed to initialize stalloc";
+  if(!(pool_initialized = shuso_pool_init(&wS->pool, 0))) {
+    err = "failed to initialize pool";
     goto fail;
   }
   
@@ -608,7 +608,7 @@ int               procnum = shuso_process_to_procnum(S, proc);
 fail:
   if(shared_ipc_created) shuso_ipc_channel_shared_destroy(S, proc);
   if(resolver_initialized) shuso_resolver_cleanup(&wS->resolver);
-  if(stalloc_initialized) shuso_stalloc_empty(&wS->stalloc);
+  if(pool_initialized) shuso_pool_empty(&wS->pool);
   if(wS) free(wS);
   shuso_set_error(S, "failed to initialize worker %d: %s", (int)procnum, err);
   return NULL;

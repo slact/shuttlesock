@@ -16,7 +16,7 @@
 #include <shuttlesock/sbuf.h>
 #include <shuttlesock/llist.h>
 #include <shuttlesock/ipc.h>
-#include <shuttlesock/stalloc.h>
+#include <shuttlesock/pool.h>
 #include <shuttlesock/resolver.h>
 #include <shuttlesock/shared_slab.h>
 #include <shuttlesock/log.h>
@@ -165,7 +165,7 @@ typedef struct shuso_s {
     
     lua_reference_t             config_parser;
   }                           lua;
-  shuso_stalloc_t             stalloc;
+  shuso_pool_t                pool;
   shuso_shared_slab_t         shm;
   shuso_resolver_t            resolver;
   const shuso_module_t       *active_module;

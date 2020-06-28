@@ -185,7 +185,7 @@ bool shuso_worker_initialize_modules(shuso_t *S, shuso_t *Smanager) {
 
 bool shuso_master_initialize_modules(shuso_t *S) {
   if(S->common->modules.events == NULL) {
-    S->common->modules.events = shuso_stalloc(&S->stalloc, sizeof(void *) * S->common->modules.count);
+    S->common->modules.events = shuso_palloc(&S->pool, sizeof(void *) * S->common->modules.count);
   }
   if(S->common->modules.events == NULL) {
     return shuso_set_error(S, "failed to allocate memory for modules' events array");
@@ -249,7 +249,7 @@ static bool shuso_module_freeze(shuso_t *S, shuso_module_t *mod) {
     return false;
   }
   int n = luaL_len(L, -1);
-  mod->parent_modules_index_map = shuso_stalloc(&S->stalloc, sizeof(*mod->parent_modules_index_map) * n);
+  mod->parent_modules_index_map = shuso_palloc(&S->pool, sizeof(*mod->parent_modules_index_map) * n);
   if(mod->parent_modules_index_map == NULL) {
     return shuso_set_error(S, "failed to allocate parent_modules_index_map");
   }
@@ -281,7 +281,7 @@ static bool shuso_module_freeze(shuso_t *S, shuso_module_t *mod) {
   size_t  submodule_presence_map_size = sizeof(*mod->submodules.submodule_presence_map) * total_module_count;
   lua_pop(L, 1);
   
-  if((mod->submodules.submodule_presence_map = shuso_stalloc(&S->stalloc, submodule_presence_map_size)) == NULL) {
+  if((mod->submodules.submodule_presence_map = shuso_palloc(&S->pool, submodule_presence_map_size)) == NULL) {
     return shuso_set_error(S, "failed to allocate memory for submodule_presence_map");
   }
   memset(mod->submodules.submodule_presence_map, '\0', submodule_presence_map_size);
@@ -291,7 +291,7 @@ static bool shuso_module_freeze(shuso_t *S, shuso_module_t *mod) {
     mod->submodules.array = NULL;
   }
   else {
-    if((mod->submodules.array = shuso_stalloc(&S->stalloc, sizeof(*mod->submodules.array) * n)) == NULL) {
+    if((mod->submodules.array = shuso_palloc(&S->pool, sizeof(*mod->submodules.array) * n)) == NULL) {
       return shuso_set_error(S, "failed to allocate memory for submodules array");
     }
     for(int i=1; i<=n; i++) {
@@ -375,7 +375,7 @@ static bool shuso_module_finalize(shuso_t *S, shuso_module_t *mod) {
     int listeners_count = luaL_len(L, -1);
     
     shuso_event_listener_t *cur;
-    shuso_event_listener_t *listeners = shuso_stalloc(&S->stalloc, sizeof(*listeners) * (listeners_count+1));
+    shuso_event_listener_t *listeners = shuso_palloc(&S->pool, sizeof(*listeners) * (listeners_count+1));
     if(listeners == NULL) {
       return shuso_set_error(S, "failed to allocate memory for event listeners");
     }
@@ -427,7 +427,7 @@ static bool shuso_module_finalize(shuso_t *S, shuso_module_t *mod) {
   return true;
 }
 
-bool shuso_context_list_initialize(shuso_t *S, shuso_module_t *parent, shuso_module_context_list_t *context_list, shuso_stalloc_t *stalloc) {
+bool shuso_context_list_initialize(shuso_t *S, shuso_module_t *parent, shuso_module_context_list_t *context_list, shuso_pool_t *pool) {
   if(parent == NULL) {
     parent = &shuso_core_module;
   }
@@ -436,7 +436,7 @@ bool shuso_context_list_initialize(shuso_t *S, shuso_module_t *parent, shuso_mod
 #endif
   int n = parent->submodules.count;
   if(n > 0) {
-    context_list->context = shuso_stalloc(stalloc, sizeof(void *) * n);
+    context_list->context = shuso_palloc(pool, sizeof(void *) * n);
     if(!context_list->context) {
       return shuso_set_error(S, "failed to allocate context_list");
     }

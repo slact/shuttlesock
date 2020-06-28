@@ -296,7 +296,7 @@ int               recv_notice_fd;
   else {
     out_count = 2 + *S->common->process.workers_end;
   }
-  S->ipc.io.send = shuso_stalloc(&S->stalloc, sizeof(*S->ipc.io.send) * out_count);
+  S->ipc.io.send = shuso_palloc(&S->pool, sizeof(*S->ipc.io.send) * out_count);
   if(!S->ipc.io.send) {
     shuso_log_error(S, "failed to allocate shuso_io for IPC");
     return false;
