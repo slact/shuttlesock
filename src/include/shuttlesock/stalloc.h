@@ -73,13 +73,13 @@ typedef struct shuso_stalloc_s {
   }         stack;
 } shuso_stalloc_t;
 
-bool shuso_stalloc_init(shuso_stalloc_t *st, size_t pagesize);
-bool shuso_stalloc_init_clean(shuso_stalloc_t *st, size_t pagesize);
+bool shuso_stalloc_init(shuso_stalloc_t *st, size_t pagesize); //idempotent
+bool shuso_stalloc_init_clean(shuso_stalloc_t *st, size_t pagesize); //idempotent
 void *shuso_stalloc(shuso_stalloc_t *, size_t sz);
 void *shuso_stalloc_unaligned(shuso_stalloc_t *, size_t sz);
 int shuso_stalloc_push(shuso_stalloc_t *);
 bool shuso_stalloc_pop_to(shuso_stalloc_t *, unsigned stackpos);
-bool shuso_stalloc_empty(shuso_stalloc_t *);
+bool shuso_stalloc_empty(shuso_stalloc_t *); //idempotent
 
 typedef enum {
   SPACE_FREE = 0,
