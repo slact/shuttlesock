@@ -420,17 +420,18 @@ rebuild = Opts.new do
   sanitize :debug_flag,
     alt: ['clang-sanitize', 'sanitize-memory'],
     info: 'build with the clang memory sanitizer',
-    build: 'DebugMSan',
+    build: 'DebugMemorySanitizer',
     imply: [:clang, :libs_static],
     cmake_define: {SHUTTLESOCK_DEBUG_SANITIZE: true}
   
   sanitize_threads :debug_flag, alt: ["sanitize-thread"],
-    build: "DebugTSan",
+    build: "DebugThreadSanitizer",
+    imply: [:clang]
     imply: [:clang]
   
   sanitize_address :debug_flag,
     info: 'build with the clang address sanitizer',
-    build: 'DebugASan',
+    build: 'DebugAddressSanitizer',
     imply: [:clang, :libs_static],
     cmake_define: {SHUTTLESOCK_DEBUG_SANITIZE: true}
   

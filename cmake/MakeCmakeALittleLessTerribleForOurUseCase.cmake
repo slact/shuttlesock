@@ -59,15 +59,15 @@ endif()
 
 set(msan_blacklist ${CMAKE_CURRENT_SOURCE_DIR}/memory-sanitizer-blacklist.txt)
 
-add_build_mode(DebugMSan 
+add_build_mode(DebugMemorySanitizer 
   "-fno-omit-frame-pointer -fsanitize=memory -fsanitize=undefined -fsanitize-memory-track-origins=2 -fsanitize-blacklist=${msan_blacklist}"
   "-fsanitize=memory -fsanitize=undefined -fsanitize-blacklist=${msan_blacklist} -fsanitize-memory-track-origins=2 ${link_ubsan}"
 )
-add_build_mode(DebugASan 
+add_build_mode(DebugAddressSanitizer 
   "-fno-omit-frame-pointer -fsanitize-address-use-after-scope -fsanitize=address -fsanitize=undefined ${leak_sanitizer} -fsanitize-blacklist=${msan_blacklist}"
   "-fsanitize=address -fsanitize=undefined -fsanitize-blacklist=${msan_blacklist} ${link_ubsan}"
 )
-add_build_mode(DebugTSan
+add_build_mode(DebugThreadSanitizer
   "-fsanitize=thread -fsanitize=undefined"
   "-fsanitize=thread -fsanitize=undefined ${link_ubsan}"
 )
@@ -106,7 +106,7 @@ endif()
 
 set( CMAKE_BUILD_TYPE "${CMAKE_BUILD_TYPE}" CACHE 
   STRING
-    "Choose the type of build, options are: Debug DebugASan DebugMSan DebugTSan DebugCoverageGCC DebugCoverageClang Release RelWithDebInfo MinSizeRel."
+    "Choose the type of build, options are: Debug DebugAddressSanitizer DebugMemorySanitizer DebugThreadSanitizer DebugCoverageGCC DebugCoverageClang Release RelWithDebInfo MinSizeRel."
   FORCE
 )
 
