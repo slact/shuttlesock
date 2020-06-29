@@ -427,6 +427,9 @@ rebuild = Opts.new do
   sanitize_threads :debug_flag, alt: ["sanitize-thread"],
     build: "DebugThreadSanitizer",
     imply: [:clang]
+  
+  sanitize_control_flow_integrity :debug_flag, alt: ["sanitize-cfi"],
+    build: "DebugCFISanitizer",
     imply: [:clang]
   
   sanitize_address :debug_flag,

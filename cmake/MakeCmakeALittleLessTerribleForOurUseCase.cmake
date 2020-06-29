@@ -71,6 +71,10 @@ add_build_mode(DebugThreadSanitizer
   "-fsanitize=thread -fsanitize=undefined"
   "-fsanitize=thread -fsanitize=undefined ${link_ubsan}"
 )
+add_build_mode(DebugCFISanitizer
+  "-fsanitize=cfi -fvisibility=hidden -flto"
+  "-fuse-ld=lld"
+)
 
 if("${CMAKE_C_COMPILER_ID}" MATCHES "^(Apple)?Clang$")
   add_build_mode(DebugCoverage
