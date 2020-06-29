@@ -31,11 +31,12 @@ function(get_shared_cflags cflags_var)
   set(${cflags_var} ${CMAKE_C_FLAGS_${MODE}} PARENT_SCOPE)
 endfunction()
 
-function(add_build_mode mode cflags linker_flags)
+function(add_build_mode mode cflags linker_flags exe_linker_flags)
   string(TOUPPER ${mode} MODE)
   set(CMAKE_CXX_FLAGS_${MODE} "${cflags}" CACHE STRING "C++ flags for build mode ${mode}" FORCE)
   set(CMAKE_C_FLAGS_${MODE} "${cflags}"  CACHE STRING "C flags for build mode ${mode}" FORCE)
-  set(CMAKE_SHARED_LINKER_FLAGS_${MODE} "${linker_flags}"  CACHE STRING "Linker flags for build mode ${mode}" FORCE)
+  set(CMAKE_SHARED_LINKER_FLAGS_${MODE} "${linker_flags}"  CACHE STRING "Shared linker flags for build mode ${mode}" FORCE)
+  set(CMAKE_EXE_LINKER_FLAGS_${MODE} "${exe_linker_flags}"  CACHE STRING "Static linker flags for build mode ${mode}" FORCE)
   mark_as_advanced(
     CMAKE_CXX_FLAGS_${MODE}
     CMAKE_C_FLAGS_${MODE}
@@ -62,29 +63,35 @@ set(msan_blacklist ${CMAKE_CURRENT_SOURCE_DIR}/memory-sanitizer-blacklist.txt)
 add_build_mode(DebugMemorySanitizer 
   "-fno-omit-frame-pointer -fsanitize=memory -fsanitize=undefined -fsanitize-memory-track-origins=2 -fsanitize-blacklist=${msan_blacklist}"
   "-fsanitize=memory -fsanitize=undefined -fsanitize-blacklist=${msan_blacklist} -fsanitize-memory-track-origins=2 ${link_ubsan}"
+  ""
 )
 add_build_mode(DebugAddressSanitizer 
   "-fno-omit-frame-pointer -fsanitize-address-use-after-scope -fsanitize=address -fsanitize=undefined ${leak_sanitizer} -fsanitize-blacklist=${msan_blacklist}"
   "-fsanitize=address -fsanitize=undefined -fsanitize-blacklist=${msan_blacklist} ${link_ubsan}"
+  ""
 )
 add_build_mode(DebugThreadSanitizer
   "-fsanitize=thread -fsanitize=undefined"
   "-fsanitize=thread -fsanitize=undefined ${link_ubsan}"
+  ""
 )
 add_build_mode(DebugCFISanitizer
-  "-fsanitize=cfi -fvisibility=hidden -flto"
-  "-fuse-ld=lld"
+  "-fsanitize=cfi -fno-sanitize-trap=all -fsanitize-recover=all -fvisibility=default -flto"
+  "-fuse-ld=gold -flto"
+  "-fuse-ld=gold -flto"
 )
 
 if("${CMAKE_C_COMPILER_ID}" MATCHES "^(Apple)?Clang$")
   add_build_mode(DebugCoverage
     "-fprofile-instr-generate -fcoverage-mapping"
     "-fprofile-instr-generate -fcoverage-mapping"
+    ""
   )
 else()
   add_build_mode(DebugCoverage
     "-fprofile-arcs -ftest-coverage"
     "-fprofile-arcs -ftest-coverage"
+    ""
   )
 endif()
 
@@ -104,7 +111,8 @@ endif()
 if ("${CMAKE_C_COMPILER_ID}" STREQUAL "GNU")
   add_compiler_flags(-fdiagnostics-color=always)
 elseif("${CMAKE_C_COMPILER_ID}" MATCHES "^(Apple)?Clang$")
-  add_compiler_flags(-fcolor-diagnostics)
+  add_compiler_flags(-fcolor-diagnostics -flto)
+  add_linker_flags(-fuse-ld=gold -flto)
 endif()
 
 
