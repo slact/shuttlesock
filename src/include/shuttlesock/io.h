@@ -52,13 +52,19 @@ typedef struct shuso_io_s {
     shuso_hostinfo_t *hostinfo; 
     void             *result_data;
   };
-  shuso_sockaddr_t *sockaddr; //needs to be separate because sendto/recvfrom use a buffer _and_ a sockaddr
+  union {
+    shuso_sockaddr_t *sockaddr; //needs to be separate because sendto/recvfrom use a buffer _and_ a sockaddr
+    size_t            iovec_incomplete_send_current_iovcnt_offset;
+  };
   union {
     size_t            iovcnt;
     ssize_t           len;
     int               intdata;
   };
-  int               flags; //needs to be separate because sendto/recvfrom takes flags _and_ a length
+  union {
+    int               flags; //needs to be separate because sendto/recvfrom takes flags _and_ a length
+    size_t            iovec_incomplete_send_current_start_offset;
+  };
   
   union {
     ssize_t           result;
