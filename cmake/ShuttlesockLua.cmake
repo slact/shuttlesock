@@ -1,7 +1,9 @@
-set(LUA_RELEASE_VERSION "5.3.5")
-set(LUA_RELEASE_MD5 4f4b4f323fd3514a68e0ab3da8ce3455)
+set(LUA_RELEASE_VERSION "5.4.0")
+set(LUA_RELEASE_MD5 dbf155764e5d433fc55ae80ea7060b60 )
 
-set(LUA_MIN_VERSION "5.3")
+set(SHUTTLESOCK_LUA_MIN_VERSION "5.4" CACHE INTERNAL "Lua version minimum requirement")
+set(LUA_MIN_VERSION "5.4" )
+string(REPLACE "\." "" LUA_MIN_VERSION_NO_DOT "${LUA_MIN_VERSION}")
 
 function(shuttlesock_link_lua STATIC_BUILD LUA_EXTRA_CFLAGS)
   #lua (we want 5.3)
@@ -19,7 +21,7 @@ function(shuttlesock_link_lua STATIC_BUILD LUA_EXTRA_CFLAGS)
   endif()
   if(STATIC_BUILD)
     #we want to see if Lua is installed locally to copy its package.path and package.cpath
-    find_program(LUA_BINARY NAMES lua53 lua5.3 lua)
+    find_program(LUA_BINARY NAMES "lua${LUA_MIN_VERSION_NO_DOT}" "lua${LUA_MIN_VERSION}" lua)
     if(LUA_BINARY)
       execute_process(
         COMMAND "${LUA_BINARY}" -v
@@ -91,7 +93,7 @@ function (shuttlesock_build_lua LUA_EXTRA_CFLAGS)
     PREFIX ${LUA_PREFIX_DIR}
     BUILD_COMMAND make 
       "CC=${SHUTTLESOCK_SHARED_CC}"
-      "MYCFLAGS=${SHUTTLESOCK_SHARED_CFLAGS} -O${OPTIMIZE_LEVEL} ${LUA_EXTRA_CFLAGS} -fPIC -g -DLUA_COMPAT_5_2 -DLUA_COMPAT_5_1"
+      "MYCFLAGS=${SHUTTLESOCK_SHARED_CFLAGS} -O${OPTIMIZE_LEVEL} ${LUA_EXTRA_CFLAGS} -fPIC -g -DLUA_COMPAT_5_3 -DLUA_COMPAT_5_2 -DLUA_COMPAT_5_1"
       "MYLDFLAGS=${SHUTTLESOCK_SHARED_LDFLAGS}"
       ${LUA_MAKE_PARALLEL_FLAG}
       ${LUA_BUILD_TARGET}
