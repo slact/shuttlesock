@@ -387,7 +387,8 @@ static void watcher_callback(struct ev_loop *loop, ev_watcher *watcher, int even
     coro = lua_tothread(L, -1);
     lua_pop(L, 1);
     lua_rawgeti(coro, LUA_REGISTRYINDEX, w->ref.self);
-    rc = luaS_resume(coro, L, 1);
+    int nret;
+    rc = luaS_resume(coro, L, 1, &nret);
   }
   
   if((handler_is_coroutine && rc == LUA_OK) /* coroutine is finished */

@@ -3,9 +3,10 @@ include(CMakeParseArguments)
 set(packed_lua_scripts_target_deps "" CACHE INTERNAL "packed lua scripts deps" FORCE)
 set(packed_lua_scripts_config "" CACHE INTERNAL "packed lua scripts config" FORCE)
 
-set(LUA_VERSION_STRING "5.3")
+set(LUA_VERSION_STRING "${SHUTTLESOCK_LUA_MIN_VERSION}")
+string(REPLACE "\." "" LUA_VERSION_STRING_NO_DOT "${LUA_VERSION_STRING}")
 
-find_program(LUA_PROGRAM NAMES lua53 lua5.3 lua)
+find_program(LUA_PROGRAM NAMES "lua${LUA_VERSION_STRING_NO_DOT}" "lua${LUA_VERSION_STRING}" lua)
 if(LUA_PROGRAM)
   execute_process(
     COMMAND "${LUA_PROGRAM}" -v
@@ -46,7 +47,7 @@ if(NOT DEFINED HAVE_LUACHECK)
 endif()
 
 if(NOT SHUTTLESOCK_NO_LUAC OR SHUTTLESOCK_NO_LUAC_VERSION_CHECK)
-  find_program(LUAC_PROGRAM NAMES luac53 luac5.3 luac)
+  find_program(LUAC_PROGRAM NAMES  "luac${LUA_VERSION_STRING_NO_DOT}" "luac${LUA_VERSION_STRING}" luac)
 endif()
 if(LUAC_PROGRAM)
   execute_process(

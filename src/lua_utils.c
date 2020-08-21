@@ -1,3 +1,4 @@
+
 #include <shuttlesock.h>
 #include <shuttlesock/embedded_lua_scripts.h>
 #include <shuttlesock/modules/lua_bridge/api/lazy_atomics.h>
@@ -572,11 +573,16 @@ bool shuso_lua_destroy(shuso_t *S) {
   return true;
 }
 
-int luaS_resume(lua_State *thread, lua_State *from, int nargs) {
+int luaS_resume(lua_State *thread, lua_State *from, int nargs, int *nresults) {
   int          rc;
   const char  *errmsg;
   //shuso_log_debug(shuso_state(thread), "resume coroutine %p from %p (main %p)", (void *)thread, (void *)from, (void *)S->lua.state);
-  rc = lua_resume(thread, from, nargs);
+  int nres;
+  rc = lua_resume(thread, from, nargs, &nres);
+  if(nresults != NULL) {
+    *nresults = nres;
+  }
+
   //shuso_log_debug(shuso_state(thread), "done with coroutine %p from %p (main %p) rc %d", (void *)thread, (void *)from, (void *)(shuso_state(thread))->lua.state, rc);
   switch(rc) {
     case LUA_OK:
@@ -592,26 +598,20 @@ int luaS_resume(lua_State *thread, lua_State *from, int nargs) {
   return rc;
 }
 
-static int auxresume(lua_State *L, lua_State *co, int narg) {
-  int status;
+static int auxresume (lua_State *L, lua_State *co, int narg) {
+  int status, nres;
   if (!lua_checkstack(co, narg)) {
     lua_pushliteral(L, "too many arguments to resume");
-    return -1;  /* error flag */
-  }
-  if (lua_status(co) == LUA_OK && lua_gettop(co) == 0) {
-    lua_pushliteral(L, "cannot resume dead coroutine");
     return -1;  /* error flag */
   }
   assert(co != L);
   lua_xmove(L, co, narg);
 #ifdef SHUSO_LUA_DEBUG_ERRORS
-    status = luaS_resume(co, NULL, narg);
+    status = luaS_resume(co, NULL, narg, &nres);
 #else
-    status = lua_resume(co, NULL, narg);
+    status = lua_resume(co, NULL, narg, &nres);
 #endif
   if (status == LUA_OK || status == LUA_YIELD) {
-    int nres = lua_gettop(co);
-    //shuso_log_debug(shuso_state(L), "stacksize: %d, checkstack: %d", lua_gettop(L), nres+1);
     if (!lua_checkstack(L, nres + 1)) {
       lua_pop(co, nres);  /* remove results anyway */
       lua_pushliteral(L, "too many results to resume");
@@ -666,10 +666,11 @@ int luaS_call_or_resume(lua_State *L, int nargs) {
       coro = lua_tothread(L, state_or_func_index);
       luaL_checkstack(coro, nargs, NULL);
       lua_xmove(L, coro, nargs);
+      int nresults;
 #ifdef SHUSO_LUA_DEBUG_ERRORS
-      luaS_resume(coro, L, nargs);
+      luaS_resume(coro, L, nargs, &nresults);
 #else
-      lua_resume(coro, L, nargs);
+      lua_resume(coro, L, nargs, &nresults);
 #endif
       return 0;
     default:

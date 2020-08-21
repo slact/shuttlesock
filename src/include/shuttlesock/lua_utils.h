@@ -49,7 +49,9 @@ void luaS_call(lua_State *L, int nargs, int nresults);
 bool luaS_call_noerror(lua_State *L, int nargs, int nrets);
 
 bool luaS_pcall(lua_State *L, int nargs, int nresults);
-int luaS_resume(lua_State *thread, lua_State *from, int nargs);
+
+int luaS_resume(lua_State *thread, lua_State *from, int nargs, int *nret);
+
 int luaS_coroutine_resume(lua_State *L, lua_State *coro, int nargs); //auto-xmoving lua_resume
 int luaS_call_or_resume(lua_State *L, int nargs);
 bool luaS_function_call_result_ok(lua_State *L, int nargs, bool preserve_result);

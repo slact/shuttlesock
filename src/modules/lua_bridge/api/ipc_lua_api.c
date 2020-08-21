@@ -300,14 +300,14 @@ static void lua_ipc_return_to_caller(shuso_t *S, lua_State *L, bool success) {
   else if(lua_isthread(L, -1)) {
     lua_State *thread = lua_tothread(L, -1);
     lua_pop(L, 1);
-    int threadtop = lua_gettop(thread);
     lua_pushboolean(thread, success);
     if(!success) {
       lua_pushstring(thread, "something went wrong");
     }
-    if(luaS_resume(thread, L, success ? 1 : 2) == LUA_YIELD) {
+    int nresults;
+    if(luaS_resume(thread, L, success ? 1 : 2, &nresults) == LUA_YIELD) {
       //discard yielded values
-      lua_settop(thread, threadtop);
+      lua_settop(thread, nresults);
     }
   }
   else {
