@@ -23,9 +23,11 @@ function(shuttlesock_link_liburing STATIC_BUILD)
           #include <liburing.h>
           int main(void) {
             struct io_uring_probe *probe = io_uring_get_probe();
-            int ret = io_uring_opcode_supported(probe, IORING_OP_NOP);
-            free(probe);
-            return ret == 1 ? 0 : 1;
+            if(probe) {
+              io_uring_opcode_supported(probe, IORING_OP_NOP);
+              free(probe);
+            }
+            return 0;
           }
         " LIBURING_HAS_OPCODE_SUPPORTED)
         set(LIBURING_HAS_OPCODE_SUPPORTED "${LIBURING_HAS_OPCODE_SUPPORTED}" CACHE INTERNAL "")
