@@ -1,6 +1,4 @@
 set(LIBURING_RELEASE_VERSION 0.7)
-set(LIBURING_RELEASE_MD5 "d41d8cd98f00b204e9800998ecf8427e")
-
 
 function(shuttlesock_link_liburing STATIC_BUILD)
   
@@ -63,8 +61,8 @@ function(shuttlesock_link_liburing STATIC_BUILD)
     
     include(ExternalProject)
     ExternalProject_Add(liburing
-      URL "https://git.kernel.dk/cgit/liburing/snapshot/liburing-${LIBURING_RELEASE_VERSION}.tar.gz"
-      URL_MD5 "${LIBURING_RELEASE_MD5}"
+      GIT_REPOSITORY "https://git.kernel.dk/liburing"
+      GIT_TAG "liburing-${LIBURING_RELEASE_VERSION}"
       DOWNLOAD_NO_PROGRESS 1
       PREFIX ${LIBURING_PREFIX_DIR}
       DOWNLOAD_DIR "${THIRDPARTY_DOWNLOAD}"
