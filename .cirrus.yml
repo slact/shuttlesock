@@ -4,7 +4,7 @@ archlinux_task:
   env:
     CODECOV_TOKEN: 47866546-4d0f-4b92-8359-083764e1123f
   setup_script:
-    --pacman -Syu --noconfirm
+    - pacman -Syu --noconfirm
     - pacman -Sy --noconfirm base-devel git gcc valgrind clang ccache cmake libev zsh ruby lua luarocks openssl c-ares pcre2 nghttp2
     - luarocks install luacov
     - luarocks install cluacov
