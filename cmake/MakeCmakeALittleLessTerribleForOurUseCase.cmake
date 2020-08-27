@@ -111,10 +111,11 @@ endif()
 if ("${CMAKE_C_COMPILER_ID}" STREQUAL "GNU")
   add_compiler_flags(-fdiagnostics-color=always)
 elseif("${CMAKE_C_COMPILER_ID}" MATCHES "^(Apple)?Clang$")
-  add_compiler_flags(-fcolor-diagnostics -flto)
-  add_linker_flags(-fuse-ld=gold -flto)
+  add_compiler_flags(-fcolor-diagnostics)
+  #gold-related stuff. TODO: detect ldgold 
+  #add_compiler_flags(-flto)
+  #add_linker_flags(-fuse-ld=gold -flto)
 endif()
-
 
 set( CMAKE_BUILD_TYPE "${CMAKE_BUILD_TYPE}" CACHE 
   STRING
