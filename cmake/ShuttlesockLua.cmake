@@ -6,7 +6,6 @@ set(LUA_MIN_VERSION "5.4" )
 string(REPLACE "\." "" LUA_MIN_VERSION_NO_DOT "${LUA_MIN_VERSION}")
 
 function(shuttlesock_link_lua STATIC_BUILD LUA_EXTRA_CFLAGS)
-  #lua (we want 5.3)
   
   if(NOT STATIC_BUILD)
     set(Lua_FIND_VERSION "${LUA_MIN_VERSION}")
@@ -28,7 +27,7 @@ function(shuttlesock_link_lua STATIC_BUILD LUA_EXTRA_CFLAGS)
         OUTPUT_VARIABLE lua_output
       )
       message("version output: ${lua_output}")
-      string(FIND "${lua_output}" "Lua 5.3" lua_version_match)
+      string(FIND "${lua_output}" "Lua ${LUA_MIN_VERSION}" lua_version_match)
       if(NOT "${lua_version_match}" EQUAL "-1")
         execute_process(
           COMMAND "${LUA_BINARY}" -e "io.stdout:write(package.path)"
