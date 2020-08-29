@@ -28,7 +28,11 @@ endfunction()
 
 function(get_shared_cflags cflags_var)
   string(TOUPPER ${CMAKE_BUILD_TYPE} MODE)
-  set(${cflags_var} ${CMAKE_C_FLAGS_${MODE}} PARENT_SCOPE)
+  if(CMAKE_OSX_SYSROOT)
+    set(${cflags_var} "${CMAKE_C_FLAGS_${MODE}} -isysroot ${CMAKE_OSX_SYSROOT}" PARENT_SCOPE)
+  else()
+    set(${cflags_var} ${CMAKE_C_FLAGS_${MODE}} PARENT_SCOPE)
+  endif()
 endfunction()
 
 function(add_build_mode mode cflags linker_flags exe_linker_flags)

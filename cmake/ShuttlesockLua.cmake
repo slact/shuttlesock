@@ -82,10 +82,6 @@ function (shuttlesock_build_lua LUA_EXTRA_CFLAGS)
     set(LUA_MAKE_PARALLEL_FLAG -j${processor_count})
   endif()
   
-  if(CMAKE_OSX_SYSROOT)
-    set(LUA_ISYSROOT "-isysroot ${CMAKE_OSX_SYSROOT}")
-  endif()
-  
   include(ExternalProject)
   ExternalProject_Add(lua
     URL "https://www.lua.org/ftp/lua-${LUA_RELEASE_VERSION}.tar.gz"
@@ -96,7 +92,7 @@ function (shuttlesock_build_lua LUA_EXTRA_CFLAGS)
     PREFIX ${LUA_PREFIX_DIR}
     BUILD_COMMAND make 
       "CC=${SHUTTLESOCK_SHARED_CC}"
-      "MYCFLAGS=${SHUTTLESOCK_SHARED_CFLAGS} -O${OPTIMIZE_LEVEL} ${LUA_EXTRA_CFLAGS} ${LUA_ISYSROOT} -fPIC -g -DLUA_COMPAT_5_3 -DLUA_COMPAT_5_2 -DLUA_COMPAT_5_1"
+      "MYCFLAGS=${SHUTTLESOCK_SHARED_CFLAGS} -O${OPTIMIZE_LEVEL} ${LUA_EXTRA_CFLAGS} -fPIC -g -DLUA_COMPAT_5_3 -DLUA_COMPAT_5_2 -DLUA_COMPAT_5_1"
       "MYLDFLAGS=${SHUTTLESOCK_SHARED_LDFLAGS}"
       ${LUA_MAKE_PARALLEL_FLAG}
       ${LUA_BUILD_TARGET}
