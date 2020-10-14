@@ -1,6 +1,4 @@
-set(LIBURING_RELEASE_VERSION 0.6)
-set(LIBURING_RELEASE_MD5 "e99b34d961e933faa694328f266949a9")
-
+set(LIBURING_RELEASE_VERSION 0.7)
 
 function(shuttlesock_link_liburing STATIC_BUILD)
   
@@ -25,9 +23,11 @@ function(shuttlesock_link_liburing STATIC_BUILD)
           #include <liburing.h>
           int main(void) {
             struct io_uring_probe *probe = io_uring_get_probe();
-            int ret = io_uring_opcode_supported(probe, IORING_OP_NOP);
-            free(probe);
-            return ret == 1 ? 0 : 1;
+            if(probe) {
+              io_uring_opcode_supported(probe, IORING_OP_NOP);
+              free(probe);
+            }
+            return 0;
           }
         " LIBURING_HAS_OPCODE_SUPPORTED)
         set(LIBURING_HAS_OPCODE_SUPPORTED "${LIBURING_HAS_OPCODE_SUPPORTED}" CACHE INTERNAL "")
@@ -63,8 +63,8 @@ function(shuttlesock_link_liburing STATIC_BUILD)
     
     include(ExternalProject)
     ExternalProject_Add(liburing
-      URL "https://git.kernel.dk/cgit/liburing/snapshot/liburing-${LIBURING_RELEASE_VERSION}.tar.gz"
-      URL_MD5 "${LIBURING_RELEASE_MD5}"
+      GIT_REPOSITORY "https://git.kernel.dk/liburing"
+      GIT_TAG "liburing-${LIBURING_RELEASE_VERSION}"
       DOWNLOAD_NO_PROGRESS 1
       PREFIX ${LIBURING_PREFIX_DIR}
       DOWNLOAD_DIR "${THIRDPARTY_DOWNLOAD}"

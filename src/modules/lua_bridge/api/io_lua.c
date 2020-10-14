@@ -83,7 +83,7 @@ static void lua_io_handler(shuso_t *S, shuso_io_t *io) {
   data->op_complete = true;
   data->op = SHUSO_IO_OP_NONE;
   if(lua_status(thread) == LUA_YIELD) {
-    int rc = luaS_resume(thread, NULL, data->num_results);
+    int rc = luaS_resume(thread, NULL, data->num_results, NULL);
     if(rc != LUA_YIELD) {
       //coroutine is finished -- with or without errors
       lua_State *L = io->S->lua.state;

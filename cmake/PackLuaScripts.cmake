@@ -3,22 +3,29 @@ include(CMakeParseArguments)
 set(packed_lua_scripts_target_deps "" CACHE INTERNAL "packed lua scripts deps" FORCE)
 set(packed_lua_scripts_config "" CACHE INTERNAL "packed lua scripts config" FORCE)
 
-set(LUA_VERSION_STRING "5.3")
+set(LUA_VERSION_STRING "${SHUTTLESOCK_LUA_MIN_VERSION}")
+string(REPLACE "\." "" LUA_VERSION_STRING_NO_DOT "${LUA_VERSION_STRING}")
 
-find_program(LUA_PROGRAM NAMES lua53 lua5.3 lua)
-if(LUA_PROGRAM)
-  execute_process(
-    COMMAND "${LUA_PROGRAM}" -v
-    OUTPUT_VARIABLE lua_output
-  )
-  string(FIND "${lua_output}" "Lua ${LUA_VERSION_STRING}" lua_version_match)
-  if("${lua_version_match}" EQUAL "-1")
-    message(FATAL_ERROR "Wrong Lua program version, expected ${LUA_VERSION_STRING}, got ${lua_output}")
+if(NOT SHUTTLESOCK_BUILD_LUA)
+  find_program(LUA_PROGRAM NAMES "lua${LUA_VERSION_STRING_NO_DOT}" "lua${LUA_VERSION_STRING}" lua)
+  if(LUA_PROGRAM)
+    execute_process(
+      COMMAND "${LUA_PROGRAM}" -v
+      OUTPUT_VARIABLE lua_output
+    )
+    string(FIND "${lua_output}" "Lua ${LUA_VERSION_STRING}" lua_version_match)
+    if("${lua_version_match}" EQUAL "-1")
+      message(STATUS "Wrong Lua version installed, expected ${LUA_VERSION_STRING}, got ${lua_output}. Will compile the right version.")
+      set(LUA_PROGRAM "")
+    endif()
   endif()
-else()
-  
-  include(ShuttlesockLua)
-  shuttlesock_build_lua("")
+endif()
+
+if(NOT LUA_PROGRAM)
+  if(NOT SHUTTLESOCK_BUILD_LUA)
+    include(ShuttlesockLua)
+    shuttlesock_build_lua("")
+  endif()
   
   set(HAVE_LUACHECK OFF)
   set(SHUTTLESOCK_NO_LUAC_VERSION_CHECK ON)
@@ -45,10 +52,12 @@ if(NOT DEFINED HAVE_LUACHECK)
   endif()
 endif()
 
-if(NOT SHUTTLESOCK_NO_LUAC OR SHUTTLESOCK_NO_LUAC_VERSION_CHECK)
-  find_program(LUAC_PROGRAM NAMES luac53 luac5.3 luac)
+if(SHUTTLESOCK_NO_LUAC)
+  set(LUAC_PROGRAM "")
+elseif(NOT LUAC_PROGRAM)
+  find_program(LUAC_PROGRAM NAMES  "luac${LUA_VERSION_STRING_NO_DOT}" "luac${LUA_VERSION_STRING}" luac)
 endif()
-if(LUAC_PROGRAM)
+if(LUAC_PROGRAM AND NOT SHUTTLESOCK_NO_LUAC_VERSION_CHECK)
   execute_process(
     COMMAND "${LUAC_PROGRAM}" -v
     OUTPUT_VARIABLE luac_output

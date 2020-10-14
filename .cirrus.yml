@@ -1,15 +1,16 @@
-linux_task:
+archlinux_task:
   container:
-    image: gcc:latest
+    image: archlinux:latest
   env:
     CODECOV_TOKEN: 47866546-4d0f-4b92-8359-083764e1123f
   setup_script:
-    - apt-get update
-    - apt-get install -y --no-install-recommends valgrind ccache clang cmake libev-dev zsh ruby lua5.3 liblua5.3-dev luarocks libssl-dev libc-ares-dev libpcre2-dev libnghttp2-dev
+    - pacman -Syu --noconfirm
+    - pacman -Sy --noconfirm base-devel git gcc valgrind clang ccache cmake libev zsh ruby lua luarocks openssl c-ares pcre2 nghttp2
     - luarocks install luacov
     - luarocks install cluacov
     - luarocks install luacov-multiple
     - luarocks install luacheck
+    - echo "ok good"
   test_basic_script:
     - ./rebuild.rb
     - ./test.sh --color
@@ -39,6 +40,18 @@ linux_task:
     - bash <(curl -s https://codecov.io/bash)
     - ./rebuild.rb no-display-coverage gcc-coverage no-eventfd
     - bash <(curl -s https://codecov.io/bash)
+#linux_task:
+#  container:
+#    image: gcc:latest
+#  env:
+#    CODECOV_TOKEN: 47866546-4d0f-4b92-8359-083764e1123f
+#  setup_script:
+#    - apt-get update
+#    - apt-get install -y --no-install-recommends valgrind ccache clang cmake libev-dev zsh ruby lua5.3 liblua5.3-dev luarocks libssl-dev libc-ares-dev libpcre2-dev libnghttp2-dev
+#    - luarocks install luacov
+#    - luarocks install cluacov
+#    - luarocks install luacov-multiple
+#    - luarocks install luacheck  
 osx_task:
   osx_instance:
     image: catalina-xcode
