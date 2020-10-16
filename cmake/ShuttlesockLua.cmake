@@ -6,6 +6,8 @@ set(LUA_54_RELEASE_MD5 1d575faef1c907292edd79e7a2784d30 )
 set(LUA_53_RELEASE_VERSION "5.3.6")
 set(LUA_53_RELEASE_MD5 83f23dbd5230140a3770d5f54076948d )
 
+set(LUA_SUPPORTED_VERSIONS_INFO_STRING "5.3, 5.4")
+
 function(shuttlesock_link_lua LUA_VERSION STATIC_BUILD LUA_EXTRA_CFLAGS)
   
   if(LUA_VERSION STREQUAL "")
@@ -19,10 +21,10 @@ function(shuttlesock_link_lua LUA_VERSION STATIC_BUILD LUA_EXTRA_CFLAGS)
     set(LUA_RELEASE_VERSION "${LUA_${LUA_VERSION_NO_DOT}_RELEASE_VERSION}")
     set(LUA_RELEASE_MD5 "${LUA_${LUA_VERSION_NO_DOT}_RELEASE_MD5}")
     if(LUA_RELEASE_VERSION STREQUAL "")
-      message(FATAL_ERROR "Lua version ${LUA_VERSION} not supported")
+      message(FATAL_ERROR "Lua version ${LUA_VERSION} not supported. (Supported: ${LUA_SUPPORTED_VERSIONS_INFO_STRING})")
     endif()
   else()
-    message(FATAL_ERROR "Invalid Lua version ${LUA_VERSION}")
+    message(FATAL_ERROR "Invalid Lua version ${LUA_VERSION}.  (Supported: ${LUA_SUPPORTED_VERSIONS_INFO_STRING})")
   endif()
   
   string(REPLACE "\." ";" LUA_VERSION_SPLIT "${LUA_VERSION}")
