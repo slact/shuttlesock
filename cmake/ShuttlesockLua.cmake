@@ -1,33 +1,61 @@
-set(LUA_RELEASE_VERSION "5.4.0")
-set(LUA_RELEASE_MD5 dbf155764e5d433fc55ae80ea7060b60 )
+set(SHUTTLESOCK_LUA_DEFAULT_VERSION "5.4" CACHE INTERNAL "Lua default version")
 
-set(SHUTTLESOCK_LUA_MIN_VERSION "5.4" CACHE INTERNAL "Lua version minimum requirement")
-set(LUA_MIN_VERSION "5.4" )
-string(REPLACE "\." "" LUA_MIN_VERSION_NO_DOT "${LUA_MIN_VERSION}")
+set(LUA_54_RELEASE_VERSION "5.4.1")
+set(LUA_54_RELEASE_MD5 1d575faef1c907292edd79e7a2784d30 )
 
-function(shuttlesock_link_lua STATIC_BUILD LUA_EXTRA_CFLAGS)
+set(LUA_53_RELEASE_VERSION "5.3.6")
+set(LUA_53_RELEASE_MD5 83f23dbd5230140a3770d5f54076948d )
+
+function(shuttlesock_link_lua LUA_VERSION STATIC_BUILD LUA_EXTRA_CFLAGS)
+  
+  if(LUA_VERSION STREQUAL "")
+    set(LUA_VERSION "${SHUTTLESOCK_LUA_DEFAULT_VERSION}")
+  endif()
+  
+  if(LUA_VERSION MATCHES "^[0-9]+\.[0-9]+\.[0-9]+$")
+    message(FATAL_ERROR "Lua Version too specific. Major and minor only (5.4), no patch (5.4.1)")
+  elseif(LUA_VERSION MATCHES "^[0-9]+\.[0-9]+$")
+    string(REPLACE "\." "" LUA_VERSION_NO_DOT "${LUA_VERSION}")
+    set(LUA_RELEASE_VERSION "${LUA_${LUA_VERSION_NO_DOT}_RELEASE_VERSION}")
+    set(LUA_RELEASE_MD5 "${LUA_${LUA_VERSION_NO_DOT}_RELEASE_MD5}")
+    if(LUA_RELEASE_VERSION STREQUAL "")
+      message(FATAL_ERROR "Lua version ${LUA_VERSION} not supported")
+    endif()
+  else()
+    message(FATAL_ERROR "Invalid Lua version ${LUA_VERSION}")
+  endif()
+  
+  string(REPLACE "\." ";" LUA_VERSION_SPLIT "${LUA_VERSION}")
   
   if(NOT STATIC_BUILD)
-    set(Lua_FIND_VERSION "${LUA_MIN_VERSION}")
+    # the FindLua CMake module is a colossal atrocity,
+    # just like all of CMake. Undocumented parameters, arcane variables,
+    # fuck it into the deepest pits of hell.
+    list(GET LUA_VERSION_SPLIT 0 Lua_FIND_VERSION_MAJOR)
+    list(GET LUA_VERSION_SPLIT 1 Lua_FIND_VERSION_MINOR)
+    set(Lua_FIND_VERSION_COUNT "${Lua_FIND_VERSION_MAJOR}")
+    set(Lua_FIND_VERSION_EXACT "${LUA_VERSION}")
+    message(STATUS "Check if Lua ${LUA_VERSION} is installed")
     include(FindLua)
     if(LUA_INCLUDE_DIR)
+    message(STATUS "Check if Lua ${LUA_VERSION} is installed - yes (${LUA_VERSION_MAJOR}.${LUA_VERSION_MINOR}.${LUA_VERSION_PATCH})")
       target_include_directories(shuttlesock PUBLIC ${LUA_INCLUDE_DIR})
       target_link_libraries(shuttlesock PUBLIC ${LUA_LIBRARIES})
     else()
-      message(STATUS "Could not find Lua ${Lua_FIND_VERSION}. Will build from source.")
+      message(STATUS "Check if Lua ${LUA_VERSION} is installed - no. Will build from source.")
       set(STATIC_BUILD ON)
     endif()
   endif()
   if(STATIC_BUILD)
     #we want to see if Lua is installed locally to copy its package.path and package.cpath
-    find_program(LUA_BINARY NAMES "lua${LUA_MIN_VERSION_NO_DOT}" "lua${LUA_MIN_VERSION}" lua)
+    find_program(LUA_BINARY NAMES "lua${LUA_VERSION_NO_DOT}" "lua${LUA_VERSION}" lua)
     if(LUA_BINARY)
       execute_process(
         COMMAND "${LUA_BINARY}" -v
         OUTPUT_VARIABLE lua_output
       )
-      message("version output: ${lua_output}")
-      string(FIND "${lua_output}" "Lua ${LUA_MIN_VERSION}" lua_version_match)
+      #message("version output: ${lua_output}")
+      string(FIND "${lua_output}" "Lua ${LUA_VERSION}" lua_version_match)
       if(NOT "${lua_version_match}" EQUAL "-1")
         execute_process(
           COMMAND "${LUA_BINARY}" -e "io.stdout:write(package.path)"
@@ -42,7 +70,7 @@ function(shuttlesock_link_lua STATIC_BUILD LUA_EXTRA_CFLAGS)
       endif()
     endif()
     
-    shuttlesock_build_lua("${LUA_EXTRA_CFLAGS}")
+    shuttlesock_build_lua(${LUA_RELEASE_VERSION} ${LUA_RELEASE_MD5} "${LUA_EXTRA_CFLAGS}")
     target_link_libraries(shuttlesock PUBLIC ${THIRDPARTY_PREFIX}/lib/liblua.a)
     if(CMAKE_SYSTEM_NAME STREQUAL Linux)
       target_link_libraries(shuttlesock PRIVATE m) #lua links to libm on linux only
@@ -51,7 +79,7 @@ function(shuttlesock_link_lua STATIC_BUILD LUA_EXTRA_CFLAGS)
   endif()
 endfunction()
 
-function (shuttlesock_build_lua LUA_EXTRA_CFLAGS)
+function (shuttlesock_build_lua LUA_RELEASE_VERSION LUA_RELEASE_MD5 LUA_EXTRA_CFLAGS)
   if(SHUTTLESOCK_BUILD_LUA)
     #already building it
     return()

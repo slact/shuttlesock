@@ -403,6 +403,7 @@ rebuild = Opts.new do
     display_as: "O0 O1 O2 O3",
     info: "compiler optimization flag",
     match: /^O([0123sg])/,
+    cmake_define: {OPTIMIZE_LEVEL: ""},
     run: (Proc.new do |opt, arg|
       opt.cmake_define= {OPTIMIZE_LEVEL: opt.matches[1]}
     end)
@@ -518,6 +519,15 @@ rebuild = Opts.new do
     repeatable: true,
     run: (Proc.new do |opt, arg|
       opt.cmake_opts=[arg]
+    end)
+  
+  lua_version :flag,
+    display_as: "lua=...",
+    info: "USe specified Lua version",
+    match: /^lua=(.*)/,
+    cmake_define: {LUA_VERSION: ""},
+    run: (Proc.new do |opt, arg|
+      opt.cmake_define= {LUA_VERSION: opt.matches[1]}
     end)
   
   lua_apicheck :debug_flag,

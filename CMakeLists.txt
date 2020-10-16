@@ -83,7 +83,7 @@ shuttlesock_link_libev("${LIBEV_BUILD_STATIC}" "${LIBEV_BUILD_STATIC_EXTRAFLAGS}
 
 #Lua 5.4
 include(ShuttlesockLua)
-shuttlesock_link_lua("${LUA_BUILD_STATIC}" "${LUA_BUILD_STATIC_EXTRAFLAGS}")
+shuttlesock_link_lua("${LUA_VERSION}" "${LUA_BUILD_STATIC}" "${LUA_BUILD_STATIC_EXTRAFLAGS}")
 
 #c-ares
 include(ShuttlesockC-ares)

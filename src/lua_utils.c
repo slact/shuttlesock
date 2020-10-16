@@ -578,7 +578,12 @@ int luaS_resume(lua_State *thread, lua_State *from, int nargs, int *nresults) {
   const char  *errmsg;
   //shuso_log_debug(shuso_state(thread), "resume coroutine %p from %p (main %p)", (void *)thread, (void *)from, (void *)S->lua.state);
   int nres;
+#if LUA_VERSION_NUM >= 504
   rc = lua_resume(thread, from, nargs, &nres);
+#else
+  rc = lua_resume(thread, from, nargs);
+  nres = lua_gettop(thread);
+#endif
   if(nresults != NULL) {
     *nresults = nres;
   }
@@ -609,7 +614,12 @@ static int auxresume (lua_State *L, lua_State *co, int narg) {
 #ifdef SHUSO_LUA_DEBUG_ERRORS
     status = luaS_resume(co, NULL, narg, &nres);
 #else
-    status = lua_resume(co, NULL, narg, &nres);
+  #if LUA_VERSION_NUM >= 504
+  status = lua_resume(co, NULL, narg, &nres);
+  #else
+  status = lua_resume(co, NULL, narg);
+  nres = lua_gettop(co);
+  #endif
 #endif
   if (status == LUA_OK || status == LUA_YIELD) {
     if (!lua_checkstack(L, nres + 1)) {
