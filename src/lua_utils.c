@@ -193,12 +193,18 @@ char *luaS_dbgval(lua_State *L, int n) {
       break;
     case LUA_TTABLE:
       luaL_checkstack(L, 8, NULL);
-      lua_getglobal(L, "tostring");
-      lua_pushvalue(L, n);
-      lua_call(L, 1, 1);
-      str = lua_tostring(L, -1);
-      cur += sprintf(cur, "%s", str);
-      lua_pop(L, 1);
+      if(lua_status(L) == LUA_OK) {
+        lua_getglobal(L, "tostring");
+        lua_pushvalue(L, n);
+        lua_call(L, 1, 1);
+        str = lua_tostring(L, -1);
+        cur += sprintf(cur, "%s", str);
+        lua_pop(L, 1);
+      }
+      else {
+        cur += sprintf(cur, "table: %p", lua_topointer(L, n));
+      }
+      
       
       //is it a global?
       lua_rawgeti(L, LUA_REGISTRYINDEX, LUA_RIDX_GLOBALS);
@@ -238,11 +244,16 @@ char *luaS_dbgval(lua_State *L, int n) {
       break;
     case LUA_TLIGHTUSERDATA:
       luaL_checkstack(L, 2, NULL);
-      lua_getglobal(L, "tostring");
-      lua_pushvalue(L, n);
-      lua_call(L, 1, 1);
-      sprintf(cur, "light %s", lua_tostring(L, -1));
-      lua_pop(L, 1);
+      if(lua_status(L) == LUA_OK) {
+        lua_getglobal(L, "tostring");
+        lua_pushvalue(L, n);
+        lua_call(L, 1, 1);
+        sprintf(cur, "light %s", lua_tostring(L, -1));
+        lua_pop(L, 1);
+      }
+      else {
+        sprintf(cur, "light userdata: %p", lua_topointer(L, n));
+      }
       break;
     case LUA_TFUNCTION: {
       luaL_checkstack(L, 3, NULL);
@@ -250,9 +261,14 @@ char *luaS_dbgval(lua_State *L, int n) {
       lua_pushvalue(L, n);
       lua_getinfo(L, ">nSlu", &dbg);
       
-      lua_getglobal(L, "tostring");
-      lua_pushvalue(L, n);
-      lua_call(L, 1, 1);
+      if(lua_status(L) == LUA_OK) {
+        lua_getglobal(L, "tostring");
+        lua_pushvalue(L, n);
+        lua_call(L, 1, 1);
+      }
+      else {
+        lua_pushfstring(L, "function: %p", lua_topointer(L, n));
+      }
       
       sprintf(cur, "%s%s%s%s%s%s %s:%d", lua_iscfunction(L, n) ? "c " : "", lua_tostring(L, -1), strlen(dbg.namewhat)>0 ? " ":"", dbg.namewhat, dbg.name?" ":"", dbg.name?dbg.name:"", dbg.short_src, dbg.linedefined);
       lua_pop(L, 1);
@@ -264,20 +280,43 @@ char *luaS_dbgval(lua_State *L, int n) {
       luaL_checkstack(L, 4, NULL);
       luaL_checkstack(coro, 1, NULL);
       
-      lua_getglobal(L, "tostring");
-      lua_pushvalue(L, n);
-      lua_call(L, 1, 1);
+      if(lua_status(L) == LUA_OK) {
+        lua_getglobal(L, "tostring");
+        lua_pushvalue(L, n);
+        lua_call(L, 1, 1);
+      }
+      else {
+        lua_pushfstring(L, "thread: %p", lua_topointer(L, n));
+      }
       
-      lua_getglobal(L, "coroutine");
-      lua_getfield(L, -1, "status");
-      lua_remove(L, -2);
-      lua_pushvalue(L, n);
-      lua_call(L, 1, 1);
+      const char *status;
+      switch(lua_status(L)) {
+        case LUA_OK: {
+          lua_Debug ar;
+          if (lua_getstack(L, 0, &ar) > 0) {  /* does it have frames? */
+            status = "normal";
+          }
+          else if (lua_gettop(L) == 0) {
+            status = "dead";
+          }
+          else {
+            status ="suspended";  /* initial state */
+          }
+          break;
+        }
+        
+        case LUA_YIELD:
+          status = "suspended";
+          break;
+        default:
+          status = "dead";
+          break;
+      }
       
       luaL_where(coro, 1);
       if(L == coro) {
-        sprintf(cur, "%s (self) (%s) @ %s", lua_tostring(L, -3), lua_tostring(L, -2), lua_tostring(coro, -1));
-        lua_pop(L, 3);
+        sprintf(cur, "%s (self) (%s) @ %s", lua_tostring(L, -2), status, lua_tostring(coro, -1));
+        lua_pop(L, 2);
       }
       else {
         sprintf(cur, "%s (%s) @ %s", lua_tostring(L, -2), lua_tostring(L, -1), lua_tostring(coro, -1));
@@ -286,16 +325,26 @@ char *luaS_dbgval(lua_State *L, int n) {
       }
       break;
     }
-      
+    
+    case LUA_TNIL:
+      sprintf(cur, "%s", "nil");
+      break;
+    
     default:
-      luaL_checkstack(L, 2, NULL);
-      lua_getglobal(L, "tostring");
-      lua_pushvalue(L, n);
-      lua_call(L, 1, 1);
-      str = lua_tostring(L, -1);
-      
-      sprintf(cur, "%s", str);
-      lua_pop(L, 1);
+      if(lua_status(L) == LUA_OK) {
+        luaL_checkstack(L, 2, NULL);
+        lua_getglobal(L, "tostring");
+        lua_pushvalue(L, n);
+        lua_call(L, 1, 1);
+        str = lua_tostring(L, -1);
+        
+        sprintf(cur, "%s", str);
+        lua_pop(L, 1);
+      }
+      else {
+        sprintf(cur, "%s: %p", lua_typename(L, type), lua_topointer(L, n));
+      }
+      break;
   }
   return buf;
 }
@@ -578,9 +627,16 @@ int luaS_resume(lua_State *thread, lua_State *from, int nargs, int *nresults) {
   const char  *errmsg;
   //shuso_log_debug(shuso_state(thread), "resume coroutine %p from %p (main %p)", (void *)thread, (void *)from, (void *)S->lua.state);
   int nres;
+  //luaL_checkstack(thread, 1, NULL);
+  //luaL_traceback(thread, thread, "", 1);
+  //shuso_log_warning(shuso_state(thread), "thread: %s", lua_tostring(thread, -1));
+  //lua_pop(thread, 1);
+  //shuso_log_warning(shuso_state(thread), "nargs: %d", nargs);
 #if LUA_VERSION_NUM >= 504
+  //luaS_printstack(thread, "lua_resume stack");
   rc = lua_resume(thread, from, nargs, &nres);
 #else
+  //luaS_printstack(thread, "lua_resume stack");
   rc = lua_resume(thread, from, nargs);
   nres = lua_gettop(thread);
 #endif
