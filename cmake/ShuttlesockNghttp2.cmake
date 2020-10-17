@@ -16,6 +16,7 @@ function(shuttlesock_link_nghttp2 STATIC_BUILD)
   if(NGHTTP2_FOUND)
     target_require_package(shuttlesock PUBLIC nghttp2 HEADER_NAME nghttp2/nghttp2.h QUIET)
   else()
+    message(STATUS "Will build nghttp2 ${NGHTTP2_RELEASE_VERSION} from source")
     include(ExternalProject)
     
     set(NGHTTP2_PREFIX ${CMAKE_CURRENT_BINARY_DIR}/nghttp2)

@@ -2,6 +2,8 @@
 
 function(shuttlesock_link_picohttpparser)
   
+  message(STATUS "Will build picohttpparser from source")
+  
   #install header
   file(MAKE_DIRECTORY "${THIRDPARTY_PREFIX}/include")
   file(

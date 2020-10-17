@@ -1,5 +1,5 @@
-set(HYPERSCAN_RELEASE_VERSION 5.2.1)
-set(HYPERSCAN_RELEASE_MD5 "e722ec217282d38b1457cc751f0a4bb6")
+set(HYPERSCAN_RELEASE_VERSION 5.3.0)
+set(HYPERSCAN_RELEASE_MD5 "6acab4b242dd81b3cede211d4a9e7101")
 
 include(CheckCSourceRuns)
 include(CMakePushCheckState)
@@ -24,11 +24,12 @@ function(shuttlesock_link_hyperscan STATIC_BUILD)
       QUIET
     )
   else()
-    
     find_program(RAGEL_BINARY NAMES ragel)
     if(NOT RAGEL_BINARY)
       message(FATAL_ERROR "Ragel is not installed, but is required to build Hyperscan")
     endif()
+    
+    message(STATUS "Will build Hyperscan ${HYPERSCAN_RELEASE_VERSION} from source")
     
     include(ExternalProject)
     
@@ -37,7 +38,6 @@ function(shuttlesock_link_hyperscan STATIC_BUILD)
     else()
       set(fat_runtime -DFAT_RUNTIME=OFF)
     endif()
-    
     
     if(CMAKE_C_COMPILER_LAUNCHER)
       set(maybe_ccache "-DCMAKE_C_COMPILER_LAUNCHER=${CMAKE_C_COMPILER_LAUNCHER}" "-DCMAKE_CXX_COMPILER_LAUNCHER=${CMAKE_CXX_COMPILER_LAUNCHER}")
