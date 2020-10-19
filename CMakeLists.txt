@@ -73,46 +73,46 @@ shuttlesock_test_features(
 set(SHUTTLESOCK_MAX_WORKERS 256 CACHE INTERNAL "max number of workers")
 
 #pthreads
-include(ShuttlesockPthreads)
+include(dependencies/pthreads)
 shuttlesock_link_pthreads()
 
 #libev
-include(ShuttlesockLibev)
+include(dependencies/libev)
 shuttlesock_link_libev("${LIBEV_BUILD_STATIC}" "${LIBEV_BUILD_STATIC_EXTRAFLAGS}")
 
-#Lua 5.4
-include(ShuttlesockLua)
+#Lua
+include(dependencies/Lua)
 shuttlesock_link_lua("${LUA_VERSION}" "${LUA_BUILD_STATIC}" "${LUA_BUILD_STATIC_EXTRAFLAGS}")
 
 #c-ares
-include(ShuttlesockC-ares)
+include(dependencies/C-Ares)
 shuttlesock_link_c_ares("${C_ARES_BUILD_STATIC}")
 
 #Linux kernel's io_uring
-include(ShuttlesockLiburing)
+include(dependencies/liburing)
 if(SHUTTLESOCK_HAVE_IO_URING)
   shuttlesock_link_liburing("${LIBURING_BUILD_STATIC}")
 endif()
 
 #openssl
-include(ShuttlesockOpenSSL)
+include(dependencies/OpenSSL)
 shuttlesock_link_openssl("${OPENSSL_BUILD_STATIC}")
 
 #pico http parser
-include(ShuttlesockPicoHttpParser)
+include(dependencies/picohttpparser)
 shuttlesock_link_picohttpparser()
 
 #nghttp2
-include(ShuttlesockNghttp2)
+include(dependencies/Nghttp2)
 shuttlesock_link_nghttp2("${NGHTTP2_BUILD_STATIC}")
 
 #pcre2
-include(ShuttlesockPCRE)
+include(dependencies/PCRE)
 shuttlesock_link_pcre("${PCRE_BUILD_STATIC}")
 
 #hyperscan - x86-64 stupid fast kitchen sink multi-regex engine
 # (but no backreferences)
-include(ShuttlesockHyperscan)
+include(dependencies/Hyperscan)
 if(SHUTTLESOCK_HAVE_HYPERSCAN)  
   shuttlesock_link_hyperscan("${HYPERSCAN_BUILD_STATIC}")
 endif()
