@@ -626,18 +626,10 @@ bool shuso_lua_destroy(shuso_t *S) {
 int luaS_resume(lua_State *thread, lua_State *from, int nargs, int *nresults) {
   int          rc;
   const char  *errmsg;
-  //shuso_log_debug(shuso_state(thread), "resume coroutine %p from %p (main %p)", (void *)thread, (void *)from, (void *)S->lua.state);
   int nres;
-  //luaL_checkstack(thread, 1, NULL);
-  //luaL_traceback(thread, thread, "", 1);
-  //shuso_log_warning(shuso_state(thread), "thread: %s", lua_tostring(thread, -1));
-  //lua_pop(thread, 1);
-  //shuso_log_warning(shuso_state(thread), "nargs: %d", nargs);
 #if LUA_VERSION_NUM >= 504
-  //luaS_printstack(thread, "lua_resume stack");
   rc = lua_resume(thread, from, nargs, &nres);
 #else
-  //luaS_printstack(thread, "lua_resume stack");
   rc = lua_resume(thread, from, nargs);
   nres = lua_gettop(thread);
 #endif

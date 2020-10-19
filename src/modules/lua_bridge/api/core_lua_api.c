@@ -1186,6 +1186,8 @@ static bool lua_module_initialize_config(shuso_t *S, shuso_module_t *module, shu
   lua_State *L = S->lua.state;
   int        top = lua_gettop(L);
   
+  luaL_checkstack(L, 4, NULL);
+  
   luaS_push_lua_module_field(L, "shuttlesock.module", "find");
   lua_pushstring(L, module->name);
   if (!luaS_function_call_result_ok(L, 1, true)) {
@@ -1219,6 +1221,7 @@ static bool lua_module_initialize_config(shuso_t *S, shuso_module_t *module, shu
 
 static shuso_lua_event_data_wrapper_t *lua_event_get_data_wrapper(lua_State *L, const char *type) {
   int top = lua_gettop(L);
+  luaL_checkstack(L, 2, NULL);
   luaS_push_lua_module_field(L, "shuttlesock.core", "event_data_wrappers");
   if(!lua_istable(L, -1)) {
     lua_settop(L, top);
@@ -1238,7 +1241,7 @@ static void lua_module_event_listener(shuso_t *S, shuso_event_state_t *evs, intp
   lua_State *L = S->lua.state;
   int top = lua_gettop(L);
   
-  luaL_checkstack(L, 5, NULL);
+  luaL_checkstack(L, 7, NULL);
   
   luaS_push_lua_module_field(L, "shuttlesock.module", "event_subscribers");
   intptr_t fn_index = (intptr_t )pd;
