@@ -15,11 +15,12 @@ function(shuttlesock_link_pcre STATIC_BUILD)
   if(PCRE2_FOUND)
     target_require_package(shuttlesock PUBLIC pcre2-posix HEADER_NAME pcre2posix.h QUIET)
   else()
+    message(STATUS "Will build pcre2 ${PCRE2_RELEASE_VERSION} from source.")
     include(ExternalProject)
 
     set(PCRE2_PREFIX ${CMAKE_CURRENT_BINARY_DIR}/pcre2)
     ExternalProject_Add(pcre2
-      URL "ftp://ftp.pcre.org/pub/pcre/pcre2-10.34.zip"
+      URL "ftp://ftp.pcre.org/pub/pcre/pcre2-${PCRE2_RELEASE_VERSION}.zip"
       URL_MD5 "${PCRE2_RELEASE_MD5}"
       DOWNLOAD_NO_PROGRESS 1
       PREFIX "${PCRE2_PREFIX}"

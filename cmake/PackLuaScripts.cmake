@@ -3,7 +3,7 @@ include(CMakeParseArguments)
 set(packed_lua_scripts_target_deps "" CACHE INTERNAL "packed lua scripts deps" FORCE)
 set(packed_lua_scripts_config "" CACHE INTERNAL "packed lua scripts config" FORCE)
 
-set(LUA_VERSION_STRING "${SHUTTLESOCK_LUA_MIN_VERSION}")
+set(LUA_VERSION_STRING "${SHUTTLESOCK_LUA_VERSION}")
 string(REPLACE "\." "" LUA_VERSION_STRING_NO_DOT "${LUA_VERSION_STRING}")
 
 if(NOT SHUTTLESOCK_BUILD_LUA)

@@ -1,5 +1,5 @@
-set(C_ARES_RELEASE_VERSION 1.15.0)
-set(C_ARES_RELEASE_MD5 "d2391da274653f7643270623e822dff7")
+set(C_ARES_RELEASE_VERSION 1.16.1)
+set(C_ARES_RELEASE_MD5 "62dece8675590445d739b23111d93692")
 
 set(C_ARES_MIN_VERSION 1.13.0)
 
@@ -7,7 +7,7 @@ include(CheckCSourceRuns)
 include(CMakePushCheckState)
 
 function(test_c_ares_version_min c_ares_include_path c_ares_lib_path c_ares_version_check_result_var)
-  
+
   string(REGEX MATCH "^([0-9]+)\\.([0-9]+)\\.([0-9]+)$" c_ares_version_match "${C_ARES_MIN_VERSION}")
   set(ver_major ${CMAKE_MATCH_1})
   set(ver_minor ${CMAKE_MATCH_2})
@@ -60,6 +60,7 @@ function(shuttlesock_link_c_ares STATIC_BUILD)
   if(C_ARES_FOUND AND C_ARES_VERSION_OK)
     target_require_package(shuttlesock PUBLIC cares HEADER_NAME ares.h QUIET)
   else()
+    message(STATUS "Will build c-ares ${C_ARES_RELEASE_VERSION} from source")
     include(ExternalProject)
     
     if(CMAKE_C_COMPILER_LAUNCHER)

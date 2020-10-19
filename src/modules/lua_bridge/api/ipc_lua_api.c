@@ -390,7 +390,6 @@ static bool handle_lua_ipc_response(shuso_t *S, shuso_ipc_lua_data_t *d) {
   lua_getfield(L, -1, "caller");
   //pop the reftable from the stack
   lua_remove(L, -2);
-  
   lua_ipc_return_to_caller(S, L, true);
   if(d->automatic_gc) {
     luaS_lua_ipc_gc_data(L, d);
@@ -454,7 +453,11 @@ int luaS_ipc_send_message(lua_State *L) {
     lua_setfield(L, -2, "caller");
     lua_pop(L, 1);
   }
-  
+  else if(!lua_isnil(L, 5)) {
+    luaL_traceback(L, L, "unexpected non-function, non-thread, non-nil handler parameter for Lua IPC.send", 1);
+    shuso_set_error(S, lua_tostring(L, -1));
+    lua_pop(L, 1);
+  }
   
   bool ok;
   if((dst_proc->procnum == SHUTTLESOCK_MASTER && S->procnum >= SHUTTLESOCK_WORKER)

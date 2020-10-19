@@ -1,0 +1,10 @@
+
+function(shuttlesock_link_pthreads)
+  set(THREADS_PREFER_PTHREAD_FLAG ON)
+  message(STATUS "Check if pthreads is supported")
+  find_package(Threads REQUIRED QUIET)
+  message(STATUS "Check if pthreads is supported - yes (${CMAKE_THREAD_LIBS_INIT})")
+  if(CMAKE_THREAD_LIBS_INIT)
+    target_link_libraries(shuttlesock PUBLIC ${CMAKE_THREAD_LIBS_INIT})
+  endif()
+endfunction()

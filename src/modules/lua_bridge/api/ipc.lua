@@ -2,7 +2,6 @@ local Core = require "shuttlesock.core"
 --local Shuso = require "shuttlesock"
 local Process = require "shuttlesock.process"
 local Log = require "shuttlesock.log"
-
 local coroutine = require "shuttlesock.coroutine"
 local IPC = {}
 local debug = require "debug"
@@ -10,17 +9,39 @@ local debug = require "debug"
 IPC.code = 0
 IPC.reply_code = 0
 
-local all_waiting_handlers = {}
-IPC.waiting_handlers = all_waiting_handlers
+local all_waiting_handlers_refcounts = {}
+
+local function waiting_handler_refcount_increment(handler)
+  local cur = rawget(all_waiting_handlers_refcounts, handler)
+  if cur == nil then
+    rawset(all_waiting_handlers_refcounts, handler, 1)
+  else
+    assert(type(cur)=="number")
+    rawset(all_waiting_handlers_refcounts, handler, cur + 1)
+  end
+  return true
+end
+local function waiting_handler_refcount_decrement(handler)
+  local cur = rawget(all_waiting_handlers_refcounts, handler)
+  if cur == nil then
+    error("expected handler " .. tostring(handler).. " to have a waiting_handler reference, but it's not there")
+  elseif cur == 1 then
+    rawset(all_waiting_handlers_refcounts, handler, nil)
+  else
+    assert(type(cur) == "number")
+    assert(cur > 1)
+    rawset(all_waiting_handlers_refcounts, handler, cur - 1)
+  end
+  return true
+end
 
 local function ipc_coroutine_yield(kind)
   local coro = coroutine.running()
-  rawset(all_waiting_handlers, coro, kind or true)
+  waiting_handler_refcount_increment(coro, "handler")
   local data, src = coroutine.yield()
-  rawset(all_waiting_handlers, coro, nil)
+  waiting_handler_refcount_decrement(coro)
   return data, src
 end
-
 
 --[[ receivers are not copied from manager to workers, and must be re-initialized
 at the start of each worker. this is to permit the use of coroutine-based
@@ -93,6 +114,7 @@ local function run_handler(for_what, name, handler, ...)
     Log.error("Error while running Lua IPC message '%s' %s %s: %s", name, for_what, handler_type, err)
     return false
   end
+  return true
 end
 
 local function ipc_broadcast(dst, name, data, handler, must_yield)
@@ -120,6 +142,7 @@ local function ipc_broadcast(dst, name, data, handler, must_yield)
   local responses_pending, failed_count = #dstprocnums, 0
   local ipc_send_acknowledged_handler_coro
   ipc_send_acknowledged_handler_coro = coroutine.create(function(success)
+    waiting_handler_refcount_increment(ipc_send_acknowledged_handler_coro, "breadcast_handler")
     while true do
       responses_pending = responses_pending - 1
       if not success then
@@ -131,12 +154,13 @@ local function ipc_broadcast(dst, name, data, handler, must_yield)
       success = ipc_coroutine_yield("broadcast")
     end
     assert(Core.ipc_gc_message_data(packed_data))
-    rawset(all_waiting_handlers, ipc_send_acknowledged_handler_coro, nil)
+    local ret = true
     if handler then
-      return run_handler("broadcast", name, handler, #dstprocnums)
+       ret = run_handler("broadcast", name, handler, #dstprocnums)
     end
+    waiting_handler_refcount_decrement(ipc_send_acknowledged_handler_coro)
+    return ret
   end)
-  rawset(all_waiting_handlers, ipc_send_acknowledged_handler_coro, "broadcast_handler")
   for _, procnum in ipairs(dstprocnums) do
     local ok = Core.ipc_send_message(procnum, nil, nil, packed_data, ipc_send_acknowledged_handler_coro)
     assert(ok)
@@ -375,9 +399,37 @@ function IPC.FD_Receiver.start(name, timeout)
 end
 
 function IPC.shutdown_from_shuttlesock_core()
-  for receiver in pairs(all_active_receivers) do
+  local receivers_copy = {}
+  for k, v in pairs(all_active_receivers) do
+    receivers_copy[k]=v
+  end
+  for receiver in pairs(receivers_copy) do
     receiver:stop()
   end
 end
+
+
+IPC.debug = {}
+local function table_copy(tbl)
+  local cpy = {}
+  for k, v in pairs(tbl) do
+    cpy[k]=v
+  end
+  return cpy
+end
+function IPC.debug.waiting_handlers()
+  return table_copy(all_waiting_handlers_refcounts)
+end
+function IPC.debug.active_receivers()
+  return table_copy(all_active_receivers)
+end
+function IPC.debug.receivers()
+  return table_copy(receivers)
+end
+function IPC.debug.fd_receivers()
+  return table_copy(fd_receivers)
+end
+  
+
 
 return IPC

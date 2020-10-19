@@ -73,9 +73,8 @@ shuttlesock_test_features(
 set(SHUTTLESOCK_MAX_WORKERS 256 CACHE INTERNAL "max number of workers")
 
 #pthreads
-set(THREADS_PREFER_PTHREAD_FLAG ON)
-find_package(Threads REQUIRED)
-target_link_libraries(shuttlesock PUBLIC ${CMAKE_THREAD_LIBS_INIT})
+include(ShuttlesockPthreads)
+shuttlesock_link_pthreads()
 
 #libev
 include(ShuttlesockLibev)
@@ -83,7 +82,7 @@ shuttlesock_link_libev("${LIBEV_BUILD_STATIC}" "${LIBEV_BUILD_STATIC_EXTRAFLAGS}
 
 #Lua 5.4
 include(ShuttlesockLua)
-shuttlesock_link_lua("${LUA_BUILD_STATIC}" "${LUA_BUILD_STATIC_EXTRAFLAGS}")
+shuttlesock_link_lua("${LUA_VERSION}" "${LUA_BUILD_STATIC}" "${LUA_BUILD_STATIC_EXTRAFLAGS}")
 
 #c-ares
 include(ShuttlesockC-ares)
