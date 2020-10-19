@@ -172,7 +172,7 @@ char *luaS_dbgval(lua_State *L, int n) {
   int         integer;
   
   char *cur = buf;
-  
+  int top = lua_gettop(L);
   switch(type) {
     case LUA_TNUMBER:
       if(lua_isinteger(L, n)) {
@@ -289,22 +289,21 @@ char *luaS_dbgval(lua_State *L, int n) {
         lua_pushfstring(L, "thread: %p", lua_topointer(L, n));
       }
       
-      const char *status;
+      char *status = NULL;
       switch(lua_status(L)) {
         case LUA_OK: {
           lua_Debug ar;
-          if (lua_getstack(L, 0, &ar) > 0) {  /* does it have frames? */
+          if (lua_getstack(L, 0, &ar) > 0) {  // does it have frames? 
             status = "normal";
           }
           else if (lua_gettop(L) == 0) {
             status = "dead";
           }
           else {
-            status ="suspended";  /* initial state */
+            status ="suspended";  // initial state 
           }
           break;
         }
-        
         case LUA_YIELD:
           status = "suspended";
           break;
@@ -312,11 +311,12 @@ char *luaS_dbgval(lua_State *L, int n) {
           status = "dead";
           break;
       }
+      lua_pushstring(L, status);
       
       luaL_where(coro, 1);
       if(L == coro) {
-        sprintf(cur, "%s (self) (%s) @ %s", lua_tostring(L, -2), status, lua_tostring(coro, -1));
-        lua_pop(L, 2);
+        sprintf(cur, "%s (self) (%s) @ %s", lua_tostring(L, -3), lua_tostring(L, -2), lua_tostring(coro, -1));
+        lua_pop(L, 3);
       }
       else {
         sprintf(cur, "%s (%s) @ %s", lua_tostring(L, -2), lua_tostring(L, -1), lua_tostring(coro, -1));
@@ -346,6 +346,7 @@ char *luaS_dbgval(lua_State *L, int n) {
       }
       break;
   }
+  assert(lua_gettop(L)==top);
   return buf;
 }
 void luaS_printstack_named(lua_State *L, const char *name) {
