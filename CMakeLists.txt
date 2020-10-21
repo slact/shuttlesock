@@ -33,7 +33,8 @@ target_sources(shuttlesock PRIVATE
   src/embedded_lua_scripts.c
   src/lua_utils.c
   src/instring.c
-  src/io.c
+  src/io/io.c
+  src/io/io_libev.c
   src/buffer.c
 )
 
