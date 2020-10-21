@@ -52,14 +52,19 @@ typedef struct shuso_io_s {
     shuso_hostinfo_t *hostinfo; 
     void             *result_data;
   };
-  shuso_sockaddr_t *sockaddr; //needs to be separate because sendto/recvfrom use a buffer _and_ a sockaddr
+  union {
+    shuso_sockaddr_t *sockaddr; //needs to be separate because sendto/recvfrom use a buffer _and_ a sockaddr
+    struct iovec     *incomplete_original_iovec; //used for writev/readv/sendmsg/recvmsg
+  };
   union {
     size_t            iovcnt;
     ssize_t           len;
     int               intdata;
   };
-  int               flags; //needs to be separate because sendto/recvfrom takes flags _and_ a length
-  
+  union {
+    int               flags; //needs to be separate because sendto/recvfrom takes flags _and_ a length
+    struct iovec     *incomplete_temporary_iovec; //used for writev/readv/sendmsg/recvmsg
+  };
   union {
     ssize_t           result;
     int               result_fd;
@@ -79,6 +84,7 @@ typedef struct shuso_io_s {
   unsigned          readwrite:2;
   unsigned          use_io_uring:1;
   
+  unsigned          op_again:1;
   unsigned          op_repeat_to_completion:1;
   unsigned          op_registered_memory_buffer:1;
   

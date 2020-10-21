@@ -19,8 +19,9 @@
   shuso_log_debug(io->S, "io %p fd %d op %s w %s: " fmt, (void *)(io), (io)->io_socket.fd, io_op_str((io)->opcode), io_watch_type_str((io)->watch_type), __VA_ARGS__)
 
 static void shuso_io_ev_operation(shuso_io_t *io);
-static void io_run(shuso_io_t *io);
+static void shuso_io_handle(shuso_io_t *io);
 static void shuso_io_operation(shuso_io_t *io);
+static void shuso_io_op_cleanup(shuso_io_t *io);
 
 /*
 static char *shuso_io_op_str(shuso_io_opcode_t op) {
@@ -195,7 +196,7 @@ static void io_ev_watcher_handler(shuso_loop *loop, shuso_ev_io *ev, int evflags
     case SHUSO_IO_WATCH_POLL_READWRITE:
       if(ev_watch_poll_match_event_type(io->watch_type, evflags)) {
         io->watch_type = SHUSO_IO_WATCH_NONE;
-        io_run(io);
+        shuso_io_handle(io);
       }
       break;
   }
@@ -219,7 +220,7 @@ static void io_watch_update(shuso_io_t *io) {
   }
 }
 
-static void io_run(shuso_io_t *io) {
+static void shuso_io_handle(shuso_io_t *io) {
   if(io->error_handler && io->result == -1) {
     io->handler_stage = 0;
     io->error_handler(io->S, io);
@@ -233,23 +234,23 @@ static void io_run(shuso_io_t *io) {
 void shuso_io_resume_buf(shuso_io_t *io, char *buf, size_t len) {
   io->buf = buf;
   io->len = len;
-  io_run(io);
+  shuso_io_handle(io);
 }
 void shuso_io_resume_iovec(shuso_io_t *io, struct iovec *iov, int iovcnt) {
   io->iov = iov;
   io->iovcnt = iovcnt;
-  io_run(io);
+  shuso_io_handle(io);
 }
 void shuso_io_resume_msg(shuso_io_t *io, struct msghdr *msg, int flags) {
   io->msg = msg;
   io->flags = flags;
-  io_run(io);
+  shuso_io_handle(io);
 }
 
 void shuso_io_resume_data(shuso_io_t *io, void *data, int intdata) {
   io->result_data = data;
   io->intdata = intdata;
-  io_run(io);
+  shuso_io_handle(io);
 }
 
 /*
@@ -262,29 +263,91 @@ static size_t iovec_size(const struct iovec *iov, size_t iovcnt) {
 }
 */
 
-static bool io_iovec_op_update_and_check_completion(struct iovec **iov_ptr, size_t *iovcnt_ptr, ssize_t written) {
-  //returns true if operation is complete (iovec now empty)
-  size_t         iovcnt = *iovcnt_ptr;
+static bool io_iovec_update_on_incomplete_op(shuso_io_t *io, struct iovec **iovptr, size_t *iovcnt_ptr, size_t iovcnt_offset, size_t iov_start_offset) {
+  if(iov_start_offset == 0) {
+    if(!io->incomplete_original_iovec) {
+      io->incomplete_original_iovec = *iovptr;
+    }
+    assert(*iovcnt_ptr > iovcnt_offset);
+    *iovptr = &(*iovptr)[iovcnt_offset];
+    *iovcnt_ptr -= iovcnt_offset;
+  }
+  else {
+    if(!io->incomplete_temporary_iovec) {
+      ssize_t iovcnt = *iovcnt_ptr;
+      ssize_t new_iovcnt = iovcnt - iovcnt_offset;
+      assert(iovcnt > 0);
+      assert(new_iovcnt > 0);
+      assert(iovcnt + iovcnt_offset > 0);
+      struct iovec *iov = *iovptr;
+      struct iovec *tmp_iov = malloc(sizeof(*tmp_iov) * (size_t)new_iovcnt);
+      if(tmp_iov == NULL) {
+        io->error = errno;
+        io->result = -1;
+        return false;
+      }
+
+      for(unsigned i = 0; i < iovcnt + iovcnt_offset; i++) {
+        tmp_iov[i] = iov[i+iovcnt_offset];
+      }
+      assert(tmp_iov[0].iov_len > iov_start_offset);
+      tmp_iov[0].iov_len -= iov_start_offset;
+      tmp_iov[0].iov_base = &((char *)tmp_iov[0].iov_base)[iov_start_offset];
+      
+      io->incomplete_temporary_iovec = tmp_iov;
+      if(!io->incomplete_original_iovec) {
+        io->incomplete_original_iovec = *iovptr;
+      }
+      assert(*iovcnt_ptr > iovcnt_offset);
+      *iovcnt_ptr -= iovcnt_offset;
+      *iovptr = tmp_iov;
+    }
+    else {
+      assert(io->incomplete_original_iovec != NULL);
+      struct iovec *iov = *iovptr;
+      assert(iov[iovcnt_offset].iov_len > iov_start_offset);
+      assert(*iovcnt_ptr > iovcnt_offset);
+      *iovptr = &iov[iovcnt_offset];
+      *iovcnt_ptr -= iovcnt_offset;
+    }
+  }
+  return true;
+}
+
+static bool io_iovec_op_update_and_check_completion(shuso_io_t *io, struct iovec **iov_ptr, size_t *iovcnt_ptr, ssize_t written) {
+  //returns true if operation is complete (no more iovec to write, or there's an error)
   size_t         written_unaccounted_for = written;
-  struct iovec  *iov = *iov_ptr;
+  size_t         iovcnt = *iovcnt_ptr;
   size_t         i;
-  for(i=0; i < iovcnt && written_unaccounted_for > 0; i++) {
-    if(written_unaccounted_for < iov[i].iov_len) {
-      *iov_ptr = &iov[i];
-      iov[i].iov_len -= written_unaccounted_for;
-      *iovcnt_ptr = iovcnt - i;
+  struct iovec  *iov = *iov_ptr;
+  for(i = 0; i < iovcnt && written_unaccounted_for > 0; i++) {
+    size_t len = iov[i].iov_len;
+    if(written_unaccounted_for < len) {
+      //ended in the middle of an iovec
+      if(!io_iovec_update_on_incomplete_op(io, iov_ptr, iovcnt_ptr, i, written_unaccounted_for)) {
+        assert(io->error != 0);
+        return true; //finished with error
+      }
       return false;
     }
     else {
-      assert(written_unaccounted_for >= iov[i].iov_len);
-      written_unaccounted_for -= iov[i].iov_len;
+      written_unaccounted_for -= len;
     }
   }
-  *iovcnt_ptr = 0;
+  if(written_unaccounted_for > 0) {
+    //ended between iovecs
+    if(!io_iovec_update_on_incomplete_op(io, iov_ptr, iovcnt_ptr, i, 0)) {
+      assert(io->error != 0);
+      return true; //finished with error
+    }
+    return false;
+  }
   return true;
 }
 
 static bool io_op_update_and_check_completion(shuso_io_t *io, ssize_t result_sz) {
+  size_t  iovcnt;
+  bool    ret;
   switch((shuso_io_opcode_t )io->opcode) {
     case SHUSO_IO_OP_NONE:
     case SHUSO_IO_OP_CONNECT:
@@ -306,11 +369,17 @@ static bool io_op_update_and_check_completion(shuso_io_t *io, ssize_t result_sz)
       
     case SHUSO_IO_OP_READV:
     case SHUSO_IO_OP_WRITEV:
-      return io_iovec_op_update_and_check_completion(&io->iov, &io->iovcnt, result_sz);
+      iovcnt = io->iovcnt;
+      ret = io_iovec_op_update_and_check_completion(io, &io->iov, &iovcnt, result_sz);
+      io->iovcnt = iovcnt;
+      return ret;
       
     case SHUSO_IO_OP_RECVMSG:
     case SHUSO_IO_OP_SENDMSG:
-      return io_iovec_op_update_and_check_completion(&io->msg->msg_iov, (size_t *)&io->msg->msg_iovlen, result_sz);
+      iovcnt = (size_t )io->msg->msg_iovlen;
+      ret = io_iovec_op_update_and_check_completion(io, &io->msg->msg_iov, &iovcnt, result_sz);
+      io->msg->msg_iovlen = iovcnt;
+      return ret;
   }
   return true;
 }
@@ -379,7 +448,8 @@ static socklen_t af_sockaddrlen(sa_family_t fam) {
 
 static void shuso_io_ev_operation(shuso_io_t *io) {
   ssize_t result;
-  shuso_io_opcode_t op = io->opcode;
+  shuso_io_opcode_t   op = io->opcode;
+  int                 fd = io->io_socket.fd;
   
   do {
     switch(op) {
@@ -389,39 +459,39 @@ static void shuso_io_ev_operation(shuso_io_t *io) {
         break;
       
       case SHUSO_IO_OP_READ:
-        result = read(io->io_socket.fd, io->buf, io->len);
+        result = read(fd, io->buf, io->len);
         break;
       case SHUSO_IO_OP_WRITE:
         assert(io->len > 0);
-        result = write(io->io_socket.fd, io->buf, io->len);
+        result = write(fd, io->buf, io->len);
         break;
       case SHUSO_IO_OP_READV:
-        result = readv(io->io_socket.fd, io->iov, io->iovcnt);
+        result = readv(fd, io->iov, io->iovcnt);
         break;
       case SHUSO_IO_OP_WRITEV:
-        result = writev(io->io_socket.fd, io->iov, io->iovcnt);
+        result = writev(fd, io->iov, io->iovcnt);
+        break;
+      case SHUSO_IO_OP_SENDMSG:
+        result = sendmsg(fd, io->msg, io->flags);
+        break;
+      case SHUSO_IO_OP_RECVMSG:
+        result = recvmsg(fd, io->msg, io->flags);
         break;
       case SHUSO_IO_OP_RECVFROM: {
         assert(io->sockaddr);
         socklen_t sockaddrlen = af_sockaddrlen(io->sockaddr->any.sa_family);
-        result = recvfrom(io->io_socket.fd, io->buf, io->len, io->flags, &io->sockaddr->any, &sockaddrlen);
+        result = recvfrom(fd, io->buf, io->len, io->flags, &io->sockaddr->any, &sockaddrlen);
         break;
       }
       case SHUSO_IO_OP_RECV:
-        result = recv(io->io_socket.fd, io->buf, io->len, io->flags);
-        break;
-      case SHUSO_IO_OP_RECVMSG:
-        result = recvmsg(io->io_socket.fd, io->msg, io->flags);
-        break;
-      case SHUSO_IO_OP_SENDMSG:
-        result = sendmsg(io->io_socket.fd, io->msg, io->flags);
+        result = recv(fd, io->buf, io->len, io->flags);
         break;
       case SHUSO_IO_OP_SENDTO: 
         assert(io->sockaddr);
-        result = sendto(io->io_socket.fd, io->buf, io->len, io->flags, &io->sockaddr->any, af_sockaddrlen(io->sockaddr->any.sa_family));
+        result = sendto(fd, io->buf, io->len, io->flags, &io->sockaddr->any, af_sockaddrlen(io->sockaddr->any.sa_family));
         break;
       case SHUSO_IO_OP_SEND:
-        result = send(io->io_socket.fd, io->buf, io->len, io->flags);
+        result = send(fd, io->buf, io->len, io->flags);
         break;
       case SHUSO_IO_OP_CONNECT:
         result = io_ev_connect(io);
@@ -431,9 +501,9 @@ static void shuso_io_ev_operation(shuso_io_t *io) {
         assert(socklen == sizeof(*io->sockaddr));
         assert(io->sockaddr != NULL);
 #ifdef SHUTTLESOCK_HAVE_ACCEPT4
-        result = accept4(io->io_socket.fd, &io->sockaddr->any, &socklen, SOCK_NONBLOCK);
+        result = accept4(fd, &io->sockaddr->any, &socklen, SOCK_NONBLOCK);
 #else
-        result = accept(io->io_socket.fd, &io->sockaddr->any, &socklen);
+        result = accept(fd, &io->sockaddr->any, &socklen);
         if(result != -1) {
           fcntl(result, F_SETFL, O_NONBLOCK);
         }
@@ -442,10 +512,10 @@ static void shuso_io_ev_operation(shuso_io_t *io) {
         break;
       }
       case SHUSO_IO_OP_CLOSE:
-        result = close(io->io_socket.fd);
+        result = close(fd);
         break;
       case SHUSO_IO_OP_SHUTDOWN:
-        result = shutdown(io->io_socket.fd, io->flags);
+        result = shutdown(fd, io->flags);
         break;
     }
   } while(result == -1 && errno == EINTR);
@@ -497,7 +567,8 @@ static void shuso_io_ev_operation(shuso_io_t *io) {
       //legit error happened
       io->result = -1;
       io->error = errno;
-      io_run(io);
+      shuso_io_op_cleanup(io);
+      shuso_io_handle(io);
       return;
     }
   }
@@ -507,8 +578,9 @@ static void shuso_io_ev_operation(shuso_io_t *io) {
     io_watch_update(io);
     return;
   }
+  shuso_io_op_cleanup(io);
   io->result += result;
-  io_run(io);
+  shuso_io_handle(io);
   return;
 }
 
@@ -537,15 +609,25 @@ static void shuso_io_operation(shuso_io_t *io) {
   }
 }
 
-static void io_op_run_new(shuso_io_t *io, int opcode, void *init_ptr, ssize_t init_len, bool partial, bool registered) {
+static void io_op_run_new(shuso_io_t *io, shuso_io_opcode_t opcode, void *init_ptr, ssize_t init_len, bool partial, bool registered) {
   io->result = 0;
   io->error = 0;
+  io->op_again = 0;
   io->opcode = opcode;
   switch(opcode) {
     case SHUSO_IO_OP_READV:
     case SHUSO_IO_OP_WRITEV:
       io->iov = init_ptr;
       io->iovcnt = init_len;
+      io->incomplete_original_iovec = NULL;
+      io->incomplete_temporary_iovec = NULL;
+      break;
+    case SHUSO_IO_OP_SENDMSG:
+    case SHUSO_IO_OP_RECVMSG:
+      io->msg = init_ptr;
+      io->len = init_len;
+      io->incomplete_original_iovec = NULL;
+      io->incomplete_temporary_iovec = NULL;
       break;
     case SHUSO_IO_OP_ACCEPT:
       io->sockaddr = init_ptr;
@@ -560,6 +642,32 @@ static void io_op_run_new(shuso_io_t *io, int opcode, void *init_ptr, ssize_t in
   io->op_repeat_to_completion = !partial;
   io->op_registered_memory_buffer = registered;
   shuso_io_operation(io);
+}
+
+static void shuso_io_ev_iovec_op_cleanup(shuso_io_t *io) {
+  switch((shuso_io_opcode_t )io->opcode) {
+    case SHUSO_IO_OP_READV:
+    case SHUSO_IO_OP_WRITEV:
+    case SHUSO_IO_OP_SENDMSG:
+    case SHUSO_IO_OP_RECVMSG:
+      if(io->incomplete_temporary_iovec) {
+        free(io->incomplete_temporary_iovec);
+        io->incomplete_temporary_iovec = NULL;
+      }
+      break;
+    default:
+      break;
+  }
+}
+
+static void shuso_io_op_cleanup(shuso_io_t *io) {
+  if(io->use_io_uring) {
+    //TODO
+    abort();
+  }
+  else {
+    shuso_io_ev_iovec_op_cleanup(io);
+  }
 }
 
 void shuso_io_stop(shuso_io_t *io) {
@@ -580,6 +688,7 @@ void shuso_io_stop(shuso_io_t *io) {
 }
 
 void shuso_io_abort(shuso_io_t *io) {
+  shuso_io_op_cleanup(io);
   io->watch_type = SHUSO_IO_WATCH_NONE;
   io->error = ECANCELED;
   io->result = -1;
