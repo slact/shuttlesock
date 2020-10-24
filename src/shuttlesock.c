@@ -207,11 +207,6 @@ bool shuso_configure_finish(shuso_t *S) {
     goto fail;
   }
   
-  if(!shuso_core_io_uring_setup(S)) {
-    errmsg = "failed to set up io_uring";
-    goto fail;
-  }
-  
   set_default_config(S, ipc.send_retry_delay, SHUTTLESOCK_CONFIG_DEFAULT_IPC_SEND_RETRY_DELAY);
   set_default_config(S, ipc.send_timeout, SHUTTLESOCK_CONFIG_DEFAULT_IPC_SEND_TIMEOUT);
   assert(S->common->config.workers != 0);
@@ -445,6 +440,11 @@ bool shuso_run(shuso_t *S) {
       goto fail;
     }
     shuso_core_event_publish(S, "manager.start", SHUSO_OK, NULL);
+  }
+  
+  if(!shuso_core_io_uring_setup(S)) {
+    err = "failed to set up io_uring";
+    goto fail;
   }
   
   ev_run(S->ev.loop, 0);

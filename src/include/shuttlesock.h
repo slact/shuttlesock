@@ -153,9 +153,10 @@ typedef struct shuso_s {
   }                           ev;
   struct {
     bool                        on;
-    int                         eventfd;
 #ifdef SHUTTLESOCK_HAVE_IO_URING
+    int                         eventfd;
     struct io_uring             ring;
+    shuso_ev_io                 watcher;
 #endif
   }                           io_uring;
   shuso_common_t             *common;

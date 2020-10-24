@@ -1,5 +1,6 @@
 #include <shuttlesock.h>
 #include <shuttlesock/internal.h>
+#include <shuttlesock/watchers.h>
 #include "core.h"
 #include "core_io_uring.h"
 #ifndef SHUTTLESOCK_HAVE_IO_URING
@@ -15,6 +16,10 @@ bool shuso_core_io_uring_teardown(shuso_t *S) {
 #include <liburing.h>
 //if we have io_uring we're in linux land so surely we have eventfd too
 #include <sys/eventfd.h>
+
+
+static void io_uring_eventfd_handler(shuso_loop *loop, shuso_ev_io *ev, int evflags);
+static void io_uring_handle_completions(shuso_t *S);
 
 #define __OP(name) {.code = IORING_OP_ ## name, .str = "IORING_OP_" #name " is not supported"}
 struct {
@@ -155,17 +160,36 @@ bool shuso_core_io_uring_setup(shuso_t *S) {
     return uring_setup_fail(S, "Failed to initialize io_uring: IORING_REGISTER_EVENTFD_ASYNC failed with error '%s'", err);
   }
   
-  
+  shuso_ev_init(S, &S->io_uring.watcher, S->io_uring.eventfd, EV_READ, io_uring_eventfd_handler, NULL);
+  shuso_ev_io_start(S, &S->io_uring.watcher);
+  shuso_log_debug(S, "io_uring started");
   return true;
 }
 
 bool shuso_core_io_uring_teardown(shuso_t *S) {
-  if(!S->io_uring.on) {
-    return true;
+  if(shuso_ev_active(&S->io_uring.watcher)) {
+    shuso_ev_stop(S, &S->io_uring.watcher);
   }
-  io_uring_queue_exit(&S->io_uring.ring);
+  if(S->io_uring.on) {
+    io_uring_queue_exit(&S->io_uring.ring);
+    shuso_log_debug(S, "io_uring stopped");
+  }
   S->io_uring.on = false;
+  if(S->io_uring.eventfd != -1) {
+    close(S->io_uring.eventfd);
+    S->io_uring.eventfd = -1;
+  }
   return true;
 }
 
+
+static void io_uring_eventfd_handler(shuso_loop *loop, shuso_ev_io *ev, int evflags) {
+  shuso_t *S = shuso_state(loop, ev);
+  io_uring_handle_completions(S);
+}
+
+
+static void io_uring_handle_completions(shuso_t *S) {
+  //TODO
+}
 #endif
