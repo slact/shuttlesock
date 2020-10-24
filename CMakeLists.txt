@@ -145,8 +145,12 @@ pack_lua_module("shuttlesock.core.event"         src/event.lua)
 pack_lua_module("shuttlesock.core.instring"      src/instring.lua)
 
 add_core_module("core"
-  SOURCES core.c
-  HEADERS core.h
+  SOURCES
+    core.c
+    core_io_uring.c
+  HEADERS 
+    core.h
+    PRIVATE core_io_uring.h
 )
 
 add_core_module("config"

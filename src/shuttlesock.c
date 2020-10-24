@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <shuttlesock.h>
 #include <shuttlesock/modules/config/private.h>
+#include <shuttlesock/modules/core/core_io_uring.h>
 #include <assert.h>
 #include <unistd.h>
 #include <sys/types.h>
@@ -205,9 +206,15 @@ bool shuso_configure_finish(shuso_t *S) {
     errmsg = "failed to create event loop";
     goto fail;
   }
+  
+  if(!shuso_core_io_uring_setup(S)) {
+    errmsg = "failed to set up io_uring";
+    goto fail;
+  }
+  
   set_default_config(S, ipc.send_retry_delay, SHUTTLESOCK_CONFIG_DEFAULT_IPC_SEND_RETRY_DELAY);
   set_default_config(S, ipc.send_timeout, SHUTTLESOCK_CONFIG_DEFAULT_IPC_SEND_TIMEOUT);
-  set_default_config(S, workers, shuso_system_cores_online());
+  assert(S->common->config.workers != 0);
   
   shm_slab_created = shuso_shared_slab_create(S, &S->common->shm, S->common->config.shared_slab_size, "main shuttlesock slab");
   if(!shm_slab_created) {
@@ -265,10 +272,7 @@ fail:
 }
 
 static bool test_features(shuso_t *S, const char **errmsg) {
-  if(S->common->config.features.io_uring) {
-    //TODO: set S->common.features.io_uring
-    return false; //not implemented yet
-  }
+  //TODO: add some feature tests maybe? i dunno, this seems like some boilerplate for a distant refactor-to-be. premature refactorization, if you will
   return true;
 }
 
@@ -450,7 +454,7 @@ bool shuso_run(shuso_t *S) {
   else if(shuso_is_manager(S)) {
     shuso_core_event_publish(S, "manager.exit", SHUSO_OK, NULL);
   }
-  
+  shuso_core_io_uring_teardown(S);
   shuso_cleanup_loop(S);
   shuso_resolver_cleanup(&S->resolver);
   *S->process->state = SHUSO_STATE_STOPPED;
@@ -710,7 +714,7 @@ bool shuso_stop_worker(shuso_t *S, shuso_process_t *proc, shuso_stop_t forcefuln
   }
 }
 
-static void shuso_set_error_vararg(shuso_t *S, const char *fmt, va_list args) {
+static void shuso_set_error_internal_vararg(shuso_t *S, const char *fmt, va_list args) {
   const char *free_oldmsg = NULL;
   S->error.error_count++;
   if(S->error.msg && !S->error.static_memory) {
@@ -766,17 +770,26 @@ bool shuso_set_error(shuso_t *S, const char *fmt, ...) {
   va_list args;
   S->error.error_number = 0;
   va_start(args, fmt);
-  shuso_set_error_vararg(S, fmt, args);
+  shuso_set_error_internal_vararg(S, fmt, args);
   va_end(args);
   return false;
 }
+void shuso_set_error_vararg(shuso_t *S, const char *fmt, va_list args) {
+  S->error.error_number = 0;
+  shuso_set_error_internal_vararg(S, fmt, args);
+}
+
 bool shuso_set_error_errno(shuso_t *S, const char *fmt, ...) {
   va_list args;
   S->error.error_number = errno;
   va_start(args, fmt);
-  shuso_set_error_vararg(S, fmt, args);
+  shuso_set_error_internal_vararg(S, fmt, args);
   va_end(args);
   return false;
+}
+void shuso_set_error_errno_vararg(shuso_t *S, const char *fmt, va_list args) {
+  S->error.error_number = errno;
+  shuso_set_error_internal_vararg(S, fmt, args);
 }
 
 const char *shuso_last_error(shuso_t *S) {

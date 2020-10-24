@@ -193,12 +193,9 @@ static bool core_module_initialize_config(shuso_t *S, shuso_module_t *module, sh
   if(!shuso_config_match_path(S, block, "/")) {
     return true;
   }
+  
   shuso_setting_t *workers = shuso_setting(S, block, "workers");
   int              nworkers;
-  if(!workers) {
-    return true;
-  }
-  
   if(shuso_setting_integer(S, workers, 0, &nworkers)) {
     if(nworkers < 0) {
       return shuso_config_error(S, workers, "invalid value %d", nworkers);
@@ -212,11 +209,40 @@ static bool core_module_initialize_config(shuso_t *S, shuso_module_t *module, sh
     if(!shuso_setting_string_matches(S, workers, 0, "^auto$")) {
       return shuso_config_error(S, workers, "invalid value");
     }
-    S->common->config.workers = 0;
+    S->common->config.workers = shuso_system_cores_online();
   }
   else {
     return shuso_config_error(S, workers, "invalid value");
   }
+  
+  
+  shuso_setting_t  *io_uring_setting = shuso_setting(S, block, "io_uring");
+  bool              io_uring_setting_val;
+  if(shuso_setting_string_matches(S, workers, 0, "^auto$")) {
+    S->common->config.io_uring.enabled = SHUSO_MAYBE;
+  }
+  if(!shuso_setting_boolean(S, workers, 0, &io_uring_setting_val)) {
+    return shuso_config_error(S, io_uring_setting, "invalid value");
+  }
+#ifndef SHUTTLESOCK_HAVE_IO_URING
+  if(io_uring_setting_val) {
+    return shuso_config_error(S, io_uring_setting, "io_uring is not supported in this build of Shuttlesock");
+  }
+    
+#endif
+  S->common->config.io_uring.enabled = io_uring_setting_val;
+  
+  
+  shuso_setting_t  *io_uring_entries = shuso_setting(S, block, "io_uring_queue_entries");
+  int               entries;
+  if(!shuso_setting_integer(S, io_uring_entries, 0, &entries)) {
+    return shuso_config_error(S, io_uring_entries, "invalid value");
+  }
+  if(entries <= 0) {
+    return shuso_config_error(S, io_uring_entries, "invalid value");
+  }
+  
+  S->common->config.io_uring.worker_entries = entries;
   
   return true;
 }
@@ -259,6 +285,23 @@ shuso_module_t shuso_core_module = {
       .default_value = "auto",
       .nargs = "1"
     },
+    
+    {
+      .name = "io_uring",
+      .path = "/",
+      .description = "Use the Linux kernel's io_uring I/O API",
+      .default_value = "auto",
+      .nargs = "1"
+    },
+    
+    {
+      .name = "io_uring_queue_entries",
+      .path = "/",
+      .description = "The number of io_uring queue entries.",
+      .default_value = "4096",
+      .nargs = "1"
+    },
+    
     {0}
   },
   .subscribe = 

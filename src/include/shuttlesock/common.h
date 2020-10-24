@@ -15,6 +15,10 @@ typedef struct shuso_fn_debug_info_s shuso_fn_debug_info_t;
 
 typedef struct ev_loop shuso_loop; //don't want to write struct ev_loop everywhere or use EV_A and EV_P_ macros, they're ugly.
 
+#define SHUSO_NO    0
+#define SHUSO_YES   1
+#define SHUSO_MAYBE 2
+
 typedef enum {
   SHUSO_OK        =  1,
   SHUSO_FAIL      =  0,

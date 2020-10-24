@@ -6,7 +6,7 @@
 
 #define NONNULL(...) __attribute__((nonnull(__VA_ARGS__)))
 
-static NONNULL(1,3) void shuso_log_level_vararg(shuso_t *S, shuso_loglevel_t level, const char *fmt, va_list args)   {
+NONNULL(1,3) void shuso_log_level_vararg(shuso_t *S, shuso_loglevel_t level, const char *fmt, va_list args)   {
   char *log = S->logbuf;
   char *cur = log;
   int procnum = S->procnum;

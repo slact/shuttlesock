@@ -41,7 +41,32 @@ function(shuttlesock_link_liburing STATIC_BUILD)
         endif()
       endif()
       
-      if(LIBURING_HAS_OPCODE_SUPPORTED)
+      if(NOT DEFINED LIBURING_HAS_REGISTER_EVENTFD_ASYNC)
+        message(STATUS "Check if liburing has IORING_REGISTER_EVENTFD_ASYNC")
+        cmake_push_check_state(RESET)
+        set(CMAKE_REQUIRED_QUIET 1)
+        set(CMAKE_REQUIRED_INCLUDES ${liburing_include_path})
+        set(CMAKE_REQUIRED_LIBRARIES ${liburing_lib_path})
+        check_c_source_compiles("
+          #include <stdlib.h>
+          #include <liburing.h>
+          int main(void) {
+            int opcode = IORING_REGISTER_EVENTFD_ASYNC;
+            return opcode;
+          }
+        " LIBURING_HAS_REGISTER_EVENTFD_ASYNC)
+        set(LIBURING_HAS_REGISTER_EVENTFD_ASYNC "${LIBURING_HAS_REGISTER_EVENTFD_ASYNC}" CACHE INTERNAL "")
+        cmake_reset_check_state()
+        if(LIBURING_HAS_REGISTER_EVENTFD_ASYNC)
+          message(STATUS "Check if liburing has IORING_REGISTER_EVENTFD_ASYNC - yes")
+          set(${result_var} YES PARENT_SCOPE)
+        else()
+          message(STATUS "Check if liburing IORING_REGISTER_EVENTFD_ASYNC - no")
+          set(${result_var} NO PARENT_SCOPE)
+        endif()
+      endif()
+      
+      if("${LIBURING_HAS_OPCODE_SUPPORTED}" AND "${LIBURING_HAS_REGISTER_EVENTFD_ASYNC}")
         target_require_package(shuttlesock PUBLIC uring HEADER_NAME liburing.h QUIET)
       else()
         set(STATIC_BUILD "YES")

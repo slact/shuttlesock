@@ -28,6 +28,9 @@
 #include <shuttlesock/core_modules.h>
 #include <shuttlesock/buffer.h>
 #include <shuttlesock/instring.h>
+#ifdef SHUTTLESOCK_HAVE_IO_URING
+#include <liburing.h>
+#endif
 
 typedef struct shuso_process_s {
   shuso_t                          *S;
@@ -67,9 +70,10 @@ typedef struct shuso_config_s {
     float               send_retry_delay;
     float               send_timeout;
   }                   ipc;
-  struct {          //features
-    int                 io_uring;
-  }                   features;
+  struct {
+    int                 enabled;
+    int                 worker_entries;
+  }                   io_uring;
   struct {          //resolver
     int                 timeout; //milliseconds
     int                 tries;
@@ -130,9 +134,6 @@ typedef struct shuso_common_s {
   struct {          //log
     int                 fd;
   }                   log;
-  struct {          //features
-    bool                io_uring;
-  }                   features;
   shuso_shared_slab_t shm;
   bool                master_has_root;
 } shuso_common_t;
@@ -152,6 +153,10 @@ typedef struct shuso_s {
   }                           ev;
   struct {
     bool                        on;
+    int                         eventfd;
+#ifdef SHUTTLESOCK_HAVE_IO_URING
+    struct io_uring             ring;
+#endif
   }                           io_uring;
   shuso_common_t             *common;
   struct {                  //base_watchers
@@ -213,6 +218,10 @@ bool shuso_set_log_fd(shuso_t *S, int fd);
 
 bool shuso_set_error(shuso_t *S, const char *fmt, ...);
 bool shuso_set_error_errno(shuso_t *S, const char *fmt, ...);
+
+void shuso_set_error_vararg(shuso_t *S, const char *fmt, va_list args);
+void shuso_set_error_errno_vararg(shuso_t *S, const char *fmt, va_list args);
+
 int shuso_error_count(shuso_t *S);
 
 int shuso_error_capture_start(shuso_t *S);

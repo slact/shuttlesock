@@ -503,13 +503,16 @@ bool shuso_config_system_generate(shuso_t *S) {
     for(unsigned j=0; j < S->common->modules.count; j++) {
       shuso_module_t *module = S->common->modules.array[j];
       int errcount = shuso_error_count(S);
-      if(module->initialize_config && !module->initialize_config(S, module, block)) {
-        if(shuso_error_count(S) == errcount) {
+      if(module->initialize_config) {
+        //shuso_log_debug(S, "Module %s config initialization", module->name);
+        if(!module->initialize_config(S, module, block)) {
+          if(shuso_error_count(S) == errcount) {
+            lua_settop(L, top);
+            return shuso_set_error(S, "Module %s failed to initialize config, but reported no error", module->name);
+          }
           lua_settop(L, top);
-          return shuso_set_error(S, "module %s failed to initialize config, but reported no error", module->name);
+          return false;
         }
-        lua_settop(L, top);
-        return false;
       }
       if(shuso_error_count(S) > errcount) {
         lua_settop(L, top);
