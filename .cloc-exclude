@@ -1,0 +1,4 @@
+build/
+coredump/
+thirdparty/
+src/luarocks/
