@@ -19,7 +19,6 @@ void shuso_ev_io_stop(shuso_t *S, shuso_ev_io *w) {
   ev_io_stop(S->ev.loop, &w->ev);
 }
 
-
 // ev_timer
 
 typedef void ev_timer_fn(struct ev_loop *, ev_timer *, int);

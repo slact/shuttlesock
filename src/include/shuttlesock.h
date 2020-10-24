@@ -59,7 +59,6 @@ typedef struct shuso_sockopts_s {
   shuso_sockopt_t *array;
 } shuso_sockopts_t;
 
-
 //the shuso_config struct is designed to be zeroed on initialization
 typedef struct shuso_config_s {
   struct {

@@ -77,7 +77,10 @@ typedef struct shuso_io_s {
   uint8_t           closed;
   
   //everything else is private, more or less
-  shuso_ev_io       watcher;
+  union {
+    shuso_ev_io       watcher;
+    shuso_io_uring_handle_t io_uring_handle;
+  };
   
   uint8_t           opcode;
   uint8_t           watch_type;

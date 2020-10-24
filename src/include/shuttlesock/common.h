@@ -78,6 +78,7 @@ typedef struct shuso_ev_signal_s shuso_ev_signal;
 typedef union shuso_ev_any_u shuso_ev_any;
 typedef int lua_reference_t;
 
+
 typedef struct shuso_s shuso_t;
 typedef struct shuso_common_s shuso_common_t;
 typedef struct shuso_process_s shuso_process_t;
@@ -122,6 +123,13 @@ typedef struct shuso_str_s {
   char            *data;
   size_t           len;
 } shuso_str_t;
+
+typedef struct shuso_io_uring_handle_s shuso_io_uring_handle_t;
+typedef void shuso_io_uring_fn(shuso_t *S, shuso_io_uring_handle_t *handle, void *pd);
+struct shuso_io_uring_handle_s {
+  shuso_io_uring_fn *callback;
+  void              *pd;
+}; // shuso_io_uring_handle_t
 
 typedef struct shuso_connection_s shuso_connection_t;
 

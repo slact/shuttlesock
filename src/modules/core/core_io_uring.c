@@ -19,7 +19,8 @@ bool shuso_core_io_uring_teardown(shuso_t *S) {
 
 
 static void io_uring_eventfd_handler(shuso_loop *loop, shuso_ev_io *ev, int evflags);
-static void io_uring_handle_completions(shuso_t *S);
+static void io_uring_check_cqueue(shuso_t *S);
+static void io_uring_handle_cqe(shuso_t *S, struct io_uring_cqe *cqe);
 
 #define __OP(name) {.code = IORING_OP_ ## name, .str = "IORING_OP_" #name " is not supported"}
 struct {
@@ -185,11 +186,29 @@ bool shuso_core_io_uring_teardown(shuso_t *S) {
 
 static void io_uring_eventfd_handler(shuso_loop *loop, shuso_ev_io *ev, int evflags) {
   shuso_t *S = shuso_state(loop, ev);
-  io_uring_handle_completions(S);
+  io_uring_check_cqueue(S);
 }
 
 
-static void io_uring_handle_completions(shuso_t *S) {
-  //TODO
+static void io_uring_check_cqueue(shuso_t *S) {
+  struct io_uring_cqe *cqes[SHUTTLESOCK_CORE_IO_URING_CQE_BATCH_SIZE];
+  unsigned cqe_count;
+  while(true) {
+    cqe_count = io_uring_peek_batch_cqe(&S->io_uring.ring, cqes, SHUTTLESOCK_CORE_IO_URING_CQE_BATCH_SIZE);
+    if(cqe_count == 0) {
+      break;
+    }
+    for(unsigned i=0; i<cqe_count; i++) {
+      io_uring_handle_cqe(S, cqes[i]);
+    }
+    
+  }
 }
+
+static void io_uring_handle_cqe(shuso_t *S, struct io_uring_cqe *cqe) {
+  shuso_io_uring_handle_t *handle = io_uring_cqe_get_data(cqe);
+  handle->callback(S, handle, handle->pd);
+  io_uring_cqe_seen(&S->io_uring.ring, cqe);
+}
+
 #endif
