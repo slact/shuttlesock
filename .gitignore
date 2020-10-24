@@ -5,5 +5,8 @@ CMakeFiles/
 cachegrind.*
 callgrind-*
 coverage/
+.coverage_data/
+*.profraw
+*.profdata
 thirdparty/*.tar.*
 thirdparty/*.zip
