@@ -20,7 +20,6 @@ bool shuso_core_io_uring_teardown(shuso_t *S) {
 
 static void io_uring_eventfd_handler(shuso_loop *loop, shuso_ev_io *ev, int evflags);
 static void io_uring_check_cqueue(shuso_t *S);
-static void io_uring_handle_cqe(shuso_t *S, struct io_uring_cqe *cqe);
 
 #define __OP(name) {.code = IORING_OP_ ## name, .str = "IORING_OP_" #name " is not supported"}
 struct {
@@ -183,7 +182,6 @@ bool shuso_core_io_uring_teardown(shuso_t *S) {
   return true;
 }
 
-
 static void io_uring_eventfd_handler(shuso_loop *loop, shuso_ev_io *ev, int evflags) {
   shuso_t *S = shuso_state(loop, ev);
   io_uring_check_cqueue(S);
@@ -200,15 +198,37 @@ static void io_uring_check_cqueue(shuso_t *S) {
     }
     for(unsigned i=0; i<cqe_count; i++) {
       io_uring_handle_cqe(S, cqes[i]);
+      shuso_io_uring_handle_t *handle = io_uring_cqe_get_data(cqe);
+      handle->callback(S, handle, handle->pd);
+      io_uring_cqe_seen(&S->io_uring.ring, cqe);
     }
-    
-  }
+  }  
 }
 
-static void io_uring_handle_cqe(shuso_t *S, struct io_uring_cqe *cqe) {
-  shuso_io_uring_handle_t *handle = io_uring_cqe_get_data(cqe);
-  handle->callback(S, handle, handle->pd);
-  io_uring_cqe_seen(&S->io_uring.ring, cqe);
+struct io_uring_sqe *shuso_io_uring_get_sqe(shuso_t *S) {
+  struct io_uring_sqe *sqe;
+  return shuso_io_uring_get_sqes(S, &sqe, 1) ? sqe : NUL;
+}
+
+bool shuso_io_uring_get_sqes(shuso_t *S, struct io_uring_sqe **sqes, int num_sqes) {
+  for(int i=0; i< num_sqes; i++) {
+    struct io_uring_sqe *sqe = io_uring_get_sqe(&S->io_uring.ring);
+    if(!sqe) {
+      //maybe submit the SQE ring?
+      io_uring_submit(&S->io_uring.ring);
+      sqe = io_uring_get_sqe(&S->io_uring.ring);
+    }
+    if(!sqe) {
+      //didn't get enough SQEs. recycle the ones we have by no-opping them
+      for(j=0; j<i; j++) {
+        io_uring_prep_nop(sqes[j]);
+      }
+      io_uring_submit(&S->io_uring.ring);
+      return false;
+    }
+    sqes[i]=sqe;
+  }
+  return true;
 }
 
 #endif

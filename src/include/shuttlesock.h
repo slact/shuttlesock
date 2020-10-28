@@ -155,6 +155,10 @@ typedef struct shuso_s {
 #ifdef SHUTTLESOCK_HAVE_IO_URING
     int                         eventfd;
     struct io_uring             ring;
+    struct {
+      shuso_io_uring_handle_t    *head;
+      shuso_io_uring_handle_t    *tail;
+    }                           sqe_request_queue;
     shuso_ev_io                 watcher;
 #endif
   }                           io_uring;

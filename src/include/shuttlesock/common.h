@@ -127,8 +127,8 @@ typedef struct shuso_str_s {
 typedef struct shuso_io_uring_handle_s shuso_io_uring_handle_t;
 typedef void shuso_io_uring_fn(shuso_t *S, shuso_io_uring_handle_t *handle, void *pd);
 struct shuso_io_uring_handle_s {
-  shuso_io_uring_fn *callback;
-  void              *pd;
+  shuso_io_uring_fn       *callback;
+  void                    *pd;
 }; // shuso_io_uring_handle_t
 
 typedef struct shuso_connection_s shuso_connection_t;

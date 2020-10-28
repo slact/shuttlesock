@@ -6,6 +6,10 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
+#ifdef SHUTTLESOCK_HAVE_IO_URING
+#include <liburing.h>
+#endif
+
 typedef struct shuso_io_s shuso_io_t;
 
 typedef void shuso_io_fn(shuso_t *S, shuso_io_t *io);
@@ -39,6 +43,18 @@ typedef enum {
   SHUSO_IO_WATCH_POLL_WRITE,
   SHUSO_IO_WATCH_POLL_READWRITE,
 } shuso_io_watch_type_t;
+
+#ifdef SHUTTLESOCK_HAVE_IO_URING
+typedef struct {
+  shuso_io_uring_handle_t   handle;
+  int                       stage;
+  struct {
+    struct io_uring_sqe    *sqe;
+    struct io_uring_cqe    *cqe;
+    int                     ret;
+  };
+} shuso_io_uring_coro_t;
+#endif
 
 typedef struct shuso_io_s {
   shuso_t          *S;
@@ -79,7 +95,9 @@ typedef struct shuso_io_s {
   //everything else is private, more or less
   union {
     shuso_ev_io       watcher;
-    shuso_io_uring_handle_t io_uring_handle;
+#ifdef SHUTTLESOCK_HAVE_IO_URING
+    shuso_io_uring_coro_t uring_coro;
+#endif
   };
   
   uint8_t           opcode;

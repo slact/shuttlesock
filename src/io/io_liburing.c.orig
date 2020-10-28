@@ -1,0 +1,85 @@
+#include <shuttlesock.h>
+
+#include <liburing.h>
+
+void shuso_io_uring_operation(shuso_ui_t *io) {
+  shuso_io_opcode_t   op = io->opcode;
+  int                 fd = io->io_socket.fd;
+  
+  
+  struct io_uring_sqe *sqe = io_uring_get_sqe(ring);
+  if(sqe == NULL) {
+    //submission queue is full. what do?
+    //TODO: handle this situation by forcing the sqeueue to be read or waiting around
+    assert(0);
+  }
+  
+  
+  switch(op) {
+    case SHUSO_IO_OP_NONE:
+      //should never happen
+      raise(SIGABRT);
+      break;
+    
+    case SHUSO_IO_OP_READ:
+      result = read(fd, io->buf, io->len);
+      break;
+    case SHUSO_IO_OP_WRITE:
+      assert(io->len > 0);
+      result = write(fd, io->buf, io->len);
+      break;
+    case SHUSO_IO_OP_READV:
+      result = readv(fd, io->iov, io->iovcnt);
+      break;
+    case SHUSO_IO_OP_WRITEV:
+      result = writev(fd, io->iov, io->iovcnt);
+      break;
+    case SHUSO_IO_OP_SENDMSG:
+      result = sendmsg(fd, io->msg, io->flags);
+      break;
+    case SHUSO_IO_OP_RECVMSG:
+      result = recvmsg(fd, io->msg, io->flags);
+      break;
+    case SHUSO_IO_OP_RECVFROM: {
+      assert(io->sockaddr);
+      socklen_t sockaddrlen = shuso_io_af_sockaddrlen(io->sockaddr->any.sa_family);
+      result = recvfrom(fd, io->buf, io->len, io->flags, &io->sockaddr->any, &sockaddrlen);
+      break;
+    }
+    case SHUSO_IO_OP_RECV:
+      result = recv(fd, io->buf, io->len, io->flags);
+      break;
+    case SHUSO_IO_OP_SENDTO: 
+      assert(io->sockaddr);
+      result = sendto(fd, io->buf, io->len, io->flags, &io->sockaddr->any, shuso_io_af_sockaddrlen(io->sockaddr->any.sa_family));
+      break;
+    case SHUSO_IO_OP_SEND:
+      result = send(fd, io->buf, io->len, io->flags);
+      break;
+    case SHUSO_IO_OP_CONNECT:
+      result = shuso_io_ev_connect(io);
+      break;
+    case SHUSO_IO_OP_ACCEPT: {
+      socklen_t         socklen = io->len;
+      assert(socklen == sizeof(*io->sockaddr));
+      assert(io->sockaddr != NULL);
+#ifdef SHUTTLESOCK_HAVE_ACCEPT4
+      result = accept4(fd, &io->sockaddr->any, &socklen, SOCK_NONBLOCK);
+#else
+      result = accept(fd, &io->sockaddr->any, &socklen);
+      if(result != -1) {
+        fcntl(result, F_SETFL, O_NONBLOCK);
+      }
+#endif
+      io->len = socklen;
+      break;
+    }
+    case SHUSO_IO_OP_CLOSE:
+      result = close(fd);
+      break;
+    case SHUSO_IO_OP_SHUTDOWN:
+      result = shutdown(fd, io->flags);
+      break;
+  }
+  
+}
