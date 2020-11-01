@@ -47,13 +47,17 @@ typedef enum {
 #ifdef SHUTTLESOCK_HAVE_IO_URING
 typedef struct {
   shuso_io_uring_handle_t   handle;
-  int                       stage;
-  struct {
-    struct io_uring_sqe    *sqe;
-    struct io_uring_cqe    *cqe;
-    int                     ret;
-  };
-} shuso_io_uring_coro_t;
+  shuso_io_uring_handle_t   timeout_handle;
+  shuso_io_uring_handle_t   cancel_handle;
+  socklen_t                 addrlen;
+  struct __kernel_timespec  timeout;
+  uint8_t                   sqe_opcode;
+  uint8_t                   sqe_flags;
+  unsigned                  watching:1;
+  unsigned                  active:1;
+  unsigned                  timeout_active:1;
+  unsigned                  cancel_active:1;
+} shuso_io_ioring_state_t;
 #endif
 
 typedef struct shuso_io_s {
@@ -86,6 +90,7 @@ typedef struct shuso_io_s {
     int               result_fd;
   };
   int               error;
+  const char       *strerror;
   shuso_io_fn      *handler;
   shuso_io_fn      *error_handler;
   void             *privdata;
@@ -96,7 +101,7 @@ typedef struct shuso_io_s {
   union {
     shuso_ev_io       watcher;
 #ifdef SHUTTLESOCK_HAVE_IO_URING
-    shuso_io_uring_coro_t uring_coro;
+    shuso_io_ioring_state_t uring;
 #endif
   };
   

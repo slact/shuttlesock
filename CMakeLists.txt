@@ -35,6 +35,7 @@ target_sources(shuttlesock PRIVATE
   src/instring.c
   src/io/io.c
   src/io/io_libev.c
+  src/io/io_liburing.c
   src/buffer.c
 )
 
@@ -150,7 +151,6 @@ add_core_module("core"
     core_io_uring.c
   HEADERS 
     core.h
-    PRIVATE core_io_uring.h
 )
 
 add_core_module("config"

@@ -2,7 +2,6 @@
 #include <shuttlesock/internal.h>
 #include <shuttlesock/watchers.h>
 #include "core.h"
-#include "core_io_uring.h"
 #ifndef SHUTTLESOCK_HAVE_IO_URING
 bool shuso_core_io_uring_setup(shuso_t *S) {
   S->io_uring.on = false;
@@ -197,17 +196,18 @@ static void io_uring_check_cqueue(shuso_t *S) {
       break;
     }
     for(unsigned i=0; i<cqe_count; i++) {
-      io_uring_handle_cqe(S, cqes[i]);
-      shuso_io_uring_handle_t *handle = io_uring_cqe_get_data(cqe);
-      handle->callback(S, handle, handle->pd);
-      io_uring_cqe_seen(&S->io_uring.ring, cqe);
+      shuso_io_uring_handle_t *handle = io_uring_cqe_get_data(cqes[i]);
+      int32_t                  result = cqes[i]->res;
+      uint32_t                 flags = cqes[i]->flags;
+      handle->callback(S, result, flags, handle, handle->pd);
+      io_uring_cqe_seen(&S->io_uring.ring, cqes[i]);
     }
   }  
 }
 
 struct io_uring_sqe *shuso_io_uring_get_sqe(shuso_t *S) {
   struct io_uring_sqe *sqe;
-  return shuso_io_uring_get_sqes(S, &sqe, 1) ? sqe : NUL;
+  return shuso_io_uring_get_sqes(S, &sqe, 1) ? sqe : NULL;
 }
 
 bool shuso_io_uring_get_sqes(shuso_t *S, struct io_uring_sqe **sqes, int num_sqes) {
@@ -220,7 +220,7 @@ bool shuso_io_uring_get_sqes(shuso_t *S, struct io_uring_sqe **sqes, int num_sqe
     }
     if(!sqe) {
       //didn't get enough SQEs. recycle the ones we have by no-opping them
-      for(j=0; j<i; j++) {
+      for(int j=0; j<i; j++) {
         io_uring_prep_nop(sqes[j]);
       }
       io_uring_submit(&S->io_uring.ring);
@@ -229,6 +229,11 @@ bool shuso_io_uring_get_sqes(shuso_t *S, struct io_uring_sqe **sqes, int num_sqe
     sqes[i]=sqe;
   }
   return true;
+}
+
+void shuso_io_uring_submit(shuso_t *S) {
+  //TODO: batch up submissions when not using SQPOLL mode
+  io_uring_submit(&S->io_uring.ring);
 }
 
 #endif

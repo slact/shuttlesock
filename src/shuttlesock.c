@@ -2,7 +2,6 @@
 #include <stdio.h>
 #include <shuttlesock.h>
 #include <shuttlesock/modules/config/private.h>
-#include <shuttlesock/modules/core/core_io_uring.h>
 #include <assert.h>
 #include <unistd.h>
 #include <sys/types.h>

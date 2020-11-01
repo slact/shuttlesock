@@ -15,8 +15,9 @@
 #include <liburing.h>
 #endif
 
-#include "io.h"
+#include "io_private.h"
 #include "io_libev.h"
+#include "io_liburing.h"
 
 /*
 static char *shuso_io_op_str(shuso_io_opcode_t op) {
@@ -91,8 +92,7 @@ void __shuso_io_init_fd(shuso_t *S, shuso_io_t *io, int fd, int readwrite, shuso
 
 static void shuso_io_watch_update(shuso_io_t *io) {
   if(io->use_io_uring) {
-    //TODO: //run watcher or op via io_uring
-    return;
+    shuso_io_uring_watch_update(io);
   }
   else {
     shuso_io_ev_watch_update(io);
@@ -280,6 +280,55 @@ socklen_t shuso_io_af_sockaddrlen(sa_family_t fam) {
   return 0;
 }
 
+void shuso_io_update_fd_closed_status_from_op_result(shuso_io_t *io, shuso_io_opcode_t op, int result) {
+//if we got a 0 from a read or write operation, mark this thing closed
+  switch(op) {
+    case SHUSO_IO_OP_READ:
+    case SHUSO_IO_OP_READV:
+    case SHUSO_IO_OP_RECVFROM:
+    case SHUSO_IO_OP_RECV:
+    case SHUSO_IO_OP_RECVMSG:
+      if(result == 0) {
+        io->closed |= SHUSO_IO_READ;
+      }
+      else {
+        io->closed &= ~SHUSO_IO_READ;
+      }
+      break;
+    case SHUSO_IO_OP_WRITE:
+    case SHUSO_IO_OP_WRITEV:
+    case SHUSO_IO_OP_SENDMSG:
+    case SHUSO_IO_OP_SENDTO:
+    case SHUSO_IO_OP_SEND:
+      if(result == 0) {
+        io->closed |= SHUSO_IO_WRITE;
+      }
+      else {
+        io->closed &= ~SHUSO_IO_WRITE;
+      }
+      break;
+      
+    default:
+      break;
+  }
+}
+
+void shuso_io_op_cleanup(shuso_io_t *io) {
+  switch((shuso_io_opcode_t )io->opcode) {
+    case SHUSO_IO_OP_READV:
+    case SHUSO_IO_OP_WRITEV:
+    case SHUSO_IO_OP_SENDMSG:
+    case SHUSO_IO_OP_RECVMSG:
+      if(io->incomplete_temporary_iovec) {
+        free(io->incomplete_temporary_iovec);
+        io->incomplete_temporary_iovec = NULL;
+      }
+      break;
+    default:
+      break;
+  }
+}
+
 static void io_op_run_new(shuso_io_t *io, shuso_io_opcode_t opcode, void *init_ptr, ssize_t init_len, bool partial, bool registered) {
   io->result = 0;
   io->error = 0;
@@ -343,7 +392,7 @@ void shuso_io_abort(shuso_io_t *io) {
     abort();
   }
   else {
-    shuso_io_ev_op_cleanup(io);
+    shuso_io_op_cleanup(io);
   }
   io->watch_type = SHUSO_IO_WATCH_NONE;
   io->error = ECANCELED;

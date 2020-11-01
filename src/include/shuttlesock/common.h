@@ -6,7 +6,6 @@
 #include <sys/un.h>
 #include <sys/socket.h>
 #include <shuttlesock/build_config.h>
-
 #ifndef container_of
 #define container_of(ptr, type, member) ((type *)(void *)((char *)(1 ? (ptr) : &((type *)0)->member) - offsetof(type, member)))
 #endif
@@ -125,7 +124,7 @@ typedef struct shuso_str_s {
 } shuso_str_t;
 
 typedef struct shuso_io_uring_handle_s shuso_io_uring_handle_t;
-typedef void shuso_io_uring_fn(shuso_t *S, shuso_io_uring_handle_t *handle, void *pd);
+typedef void shuso_io_uring_fn(shuso_t *S, int32_t ret, uint32_t flags, shuso_io_uring_handle_t *handle, void *pd);
 struct shuso_io_uring_handle_s {
   shuso_io_uring_fn       *callback;
   void                    *pd;

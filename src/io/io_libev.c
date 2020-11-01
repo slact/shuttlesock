@@ -12,7 +12,7 @@
 #include <errno.h>
 #include <sys/uio.h>
 
-#include "io.h"
+#include "io_private.h"
 #include "io_libev.h"
 
 static bool ev_opcode_finish_match_event_type(shuso_io_opcode_t opcode, int evflags) {
@@ -157,29 +157,12 @@ int shuso_io_ev_connect(shuso_io_t *io) {
   }
   
   shuso_sockaddr_t     *connect_sockaddr;
-  sa_family_t           fam = 0;
   size_t                sockaddr_sz;
   
   assert(io->io_socket.host.sockaddr);
   
   connect_sockaddr = io->io_socket.host.sockaddr;
-  fam = io->io_socket.host.sockaddr->any.sa_family;
-  
-  switch(fam) {
-    case AF_INET:
-      sockaddr_sz = sizeof(struct sockaddr_in);
-      break;
-#ifdef SHUTTLESOCK_HAVE_IPV6
-    case AF_INET6:
-      sockaddr_sz = sizeof(struct sockaddr_in6);
-      break;
-#endif
-    case AF_UNIX:
-      sockaddr_sz = sizeof(struct sockaddr_un);
-      break;
-    default:
-      sockaddr_sz = 0;
-  }
+  sockaddr_sz = shuso_io_af_sockaddrlen(io->io_socket.host.sockaddr->any.sa_family);
   
   return connect(io->io_socket.fd, &connect_sockaddr->any, sockaddr_sz);
 }
@@ -274,36 +257,7 @@ void shuso_io_ev_operation(shuso_io_t *io) {
     }
   } while(result == -1 && errno == EINTR);
   
-  //if we got a 0 from a read or write operation, mark this thing closed
-  switch(op) {
-    case SHUSO_IO_OP_READ:
-    case SHUSO_IO_OP_READV:
-    case SHUSO_IO_OP_RECVFROM:
-    case SHUSO_IO_OP_RECV:
-    case SHUSO_IO_OP_RECVMSG:
-      if(result == 0) {
-        io->closed |= SHUSO_IO_READ;
-      }
-      else {
-        io->closed &= ~SHUSO_IO_READ;
-      }
-      break;
-    case SHUSO_IO_OP_WRITE:
-    case SHUSO_IO_OP_WRITEV:
-    case SHUSO_IO_OP_SENDMSG:
-    case SHUSO_IO_OP_SENDTO:
-    case SHUSO_IO_OP_SEND:
-      if(result == 0) {
-        io->closed |= SHUSO_IO_WRITE;
-      }
-      else {
-        io->closed &= ~SHUSO_IO_WRITE;
-      }
-      break;
-      
-    default:
-      break;
-  }
+  shuso_io_update_fd_closed_status_from_op_result(io, op, result);
   
   if(result == -1) {
     if(op == SHUSO_IO_OP_CONNECT && (errno == EAGAIN || errno == EINPROGRESS)) {
@@ -321,7 +275,7 @@ void shuso_io_ev_operation(shuso_io_t *io) {
       //legit error happened
       io->result = -1;
       io->error = errno;
-      shuso_io_ev_op_cleanup(io);
+      shuso_io_op_cleanup(io);
       shuso_io_run_handler(io);
       return;
     }
@@ -332,25 +286,10 @@ void shuso_io_ev_operation(shuso_io_t *io) {
     shuso_io_ev_watch_update(io);
     return;
   }
-  shuso_io_ev_op_cleanup(io);
+  shuso_io_op_cleanup(io);
   io->result += result;
   shuso_io_run_handler(io);
   return;
 }
 
-void shuso_io_ev_op_cleanup(shuso_io_t *io) {
-  assert(!io->use_io_uring);
-  switch((shuso_io_opcode_t )io->opcode) {
-    case SHUSO_IO_OP_READV:
-    case SHUSO_IO_OP_WRITEV:
-    case SHUSO_IO_OP_SENDMSG:
-    case SHUSO_IO_OP_RECVMSG:
-      if(io->incomplete_temporary_iovec) {
-        free(io->incomplete_temporary_iovec);
-        io->incomplete_temporary_iovec = NULL;
-      }
-      break;
-    default:
-      break;
-  }
-}
+
