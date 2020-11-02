@@ -9,7 +9,11 @@ static void io_uring_cqe_op_handler(shuso_t *S, int32_t ret, uint32_t flags, shu
 static void io_uring_cqe_timeout_handler(shuso_t *S, int32_t ret, uint32_t flags, shuso_io_uring_handle_t *handle, void *pd);
 static void io_uring_cqe_cancel_handler(shuso_t *S, int32_t ret, uint32_t flags, shuso_io_uring_handle_t *handle, void *pd);
 
-void shuso_io_uring_operation_sqe(shuso_io_t *io) {
+void shuso_io_uring_init_socket(shuso_t *S, shuso_io_t *io, shuso_socket_t *sock, int readwrite, shuso_io_fn *coro, void *privdata) {
+  //TODO: register socket maybe? for now, nothing.
+}
+
+void shuso_io_uring_operation(shuso_io_t *io) {
   shuso_io_opcode_t       op = io->opcode;
   int                     fd = io->io_socket.fd;
   shuso_io_ioring_state_t *iors = &io->uring; //ioring state
@@ -277,8 +281,8 @@ static void io_uring_cqe_cancel_handler(shuso_t *S, int32_t ret, uint32_t flags,
   //TODO: handle cancelation
 }
 
-static void io_uring_cqe_cancel_handler(shuso_t *S, int32_t ret, uint32_t flags, shuso_io_uring_handle_t *handle, void *pd) {
-  //TODO: cleanups
+static void io_uring_cqe_timeout_handler(shuso_t *S, int32_t ret, uint32_t flags, shuso_io_uring_handle_t *handle, void *pd) {
+  //TODO: timeout handler
 }
 
 #endif

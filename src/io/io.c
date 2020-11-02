@@ -71,7 +71,7 @@ void __shuso_io_init_socket(shuso_t *S, shuso_io_t *io, shuso_socket_t *sock, in
   }
   
   if(io->use_io_uring) {
-    //TODO: initialize io_uring fd watcher
+    shuso_io_uring_init_socket(S, io, sock, readwrite, coro, privdata);
   }
   else {
     shuso_io_ev_init_socket(S, io, sock, readwrite, coro, privdata);
@@ -362,7 +362,7 @@ static void io_op_run_new(shuso_io_t *io, shuso_io_opcode_t opcode, void *init_p
   io->op_repeat_to_completion = !partial;
   io->op_registered_memory_buffer = registered;
   if(io->use_io_uring) {
-    //do io_uring stuff
+    shuso_io_uring_operation(io);
   }
   else {
     shuso_io_ev_operation(io);

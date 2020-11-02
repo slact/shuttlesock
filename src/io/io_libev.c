@@ -15,6 +15,9 @@
 #include "io_private.h"
 #include "io_libev.h"
 
+static int shuso_io_ev_connect(shuso_io_t *io);
+static void shuso_io_ev_watcher_handler(shuso_loop *loop, shuso_ev_io *ev, int evflags);
+
 static bool ev_opcode_finish_match_event_type(shuso_io_opcode_t opcode, int evflags) {
   switch(opcode) {
     case SHUSO_IO_OP_NONE:
@@ -80,7 +83,7 @@ static bool ev_watch_poll_match_event_type(shuso_io_watch_type_t watchtype, int 
   return false;
 }
 
-void shuso_io_ev_watcher_handler(shuso_loop *loop, shuso_ev_io *ev, int evflags) {
+static void shuso_io_ev_watcher_handler(shuso_loop *loop, shuso_ev_io *ev, int evflags) {
   shuso_io_t *io = shuso_ev_data(ev);
   switch((shuso_io_watch_type_t )io->watch_type) {    
     case SHUSO_IO_WATCH_NONE:
@@ -137,7 +140,7 @@ void shuso_io_ev_init_socket(shuso_t *S, shuso_io_t *io, shuso_socket_t *sock, i
   shuso_ev_init(io->S, &io->watcher, io->io_socket.fd, events, shuso_io_ev_watcher_handler, io);
 }
 
-int shuso_io_ev_connect(shuso_io_t *io) {
+static int shuso_io_ev_connect(shuso_io_t *io) {
   if(io->io_socket.fd == -1) {
     errno = EBADF;
     return -1;
