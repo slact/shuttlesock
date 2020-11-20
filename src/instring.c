@@ -253,6 +253,8 @@ static shuso_instring_t *luaS_instring_lua_to_c_generic(lua_State *L, shuso_sett
     instring->buffer.iov[0].iov_base = literal_str->data;
     instring->buffer.iov[0].iov_len = literal_str->len;
     instring->cached_value.string = *literal_str;
+    lua_pushlstring(L, literal_str->data, literal_str->len);
+    instring->cached_value.string_lua_ref = luaL_ref(L, LUA_REGISTRYINDEX);
     instring->cached_value.state.string = SHUTTLESOCK_INSTRING_VALUE_VALID;
     
     shuso_instring_boolean_value(S, instring, NULL);
