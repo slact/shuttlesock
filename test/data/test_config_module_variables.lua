@@ -12,9 +12,10 @@ local var = {
 testmod:add_variable(var)
 
 function testmod:initialize_config(block)
-  assert(block.name == "::ROOT")
-  local setting = assert(block:setting("ookay"))
-  assert(setting:value(1) == "meh")
+  if block.name == "::ROOT" then
+    local setting = assert(block:setting("ookay"))
+    assert(setting:value(1) == "meh")
+  end
 end
 
 assert(testmod:add())

@@ -38,7 +38,6 @@ local Server = Module.new {
       path="(http|stream)/**",
       constant=true,
       eval = function(setting, block, params)
-        require"mm"(block)
         return "0.0.0.0"
       end
     },

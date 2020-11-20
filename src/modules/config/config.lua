@@ -31,6 +31,42 @@ local function glob(globstr)
   return system.glob(globstr)
 end
 
+local function new_setting(setting_name, module_name)
+  assert(setting_name)
+  local setting = {
+    type = "setting",
+    name = setting_name,
+    module = module_name,
+    position = {},
+    values = {},
+    tokens = {},
+    comments = {},
+    block = nil,
+  }
+  if module_name then
+    setting.full_name = setting.module .. ":" .. setting.name
+  end
+  return setting
+end
+
+local function new_block(block_name, source_setting)
+  local block = {
+    type = "block",
+    name = block_name,
+    position = {
+      first = nil,
+      last = nil,
+      settings_first = nil,
+      settings_last = nil
+    },
+    settings = {},
+    comments = {},
+    tokens = {},
+    source_setting = source_setting,
+    variables = {} --for variables set with the "set" command
+  }
+  return block
+end
 
 local config_settings = {
   {
@@ -260,24 +296,9 @@ do --parser
     if type(setting_name) == "table" and not module_name then
       setting = setting_name
     elseif type(setting_name) == "string" then
-      setting = {
-        type = "setting",
-        name = setting_name,
-        module = module_name,
-        position = {
-          first = self.cur,
-          last = self.cur,
-          values_first = nil,
-          values_last = nil
-        },
-        values = {},
-        tokens = {},
-        comments = {},
-        block = nil,
-      }
-      if module_name then
-        setting.full_name = setting.module .. ":" .. setting.name
-      end
+      setting = new_setting(setting_name, module_name)
+      setting.position.first = self.cur
+      setting.position.last = self.cur
       if is_root and not setting.parent then
         setting.parent = setting --i'm my own grandpa
       else
@@ -378,21 +399,9 @@ do --parser
   function parser:push_block(block_name)
     local block
     if type(block_name) == "string" or not block_name then
-      block = {
-        type = "block",
-        name = block_name,
-        position = {
-          first = self.cur,
-          last = self.cur,
-          settings_first = nil,
-          settings_last = nil
-        },
-        settings = {},
-        comments = {},
-        tokens = {},
-        source_setting = assert(self:in_setting()),
-        variables = {} --for variables set with the "set" command
-      }
+      block = new_block(block_name, assert(self:in_setting()))
+      block.position.first = self.cur
+      block.position.last = self.cur
     elseif type(block_name) == "table" and block_name.type == "block" then
       block = block_name
     else
@@ -1011,6 +1020,52 @@ do --config
     __name="config"
   }
   
+  function config:add_defaults_to_block_recursive(block)
+    local handlers_unique = {}
+    for _, handler in pairs(self.handlers) do
+      handlers_unique[handler]=true
+    end
+    local child_blocks = {}
+    --except the already set settings
+    local current_block = block
+    local prev_block
+    repeat
+      for _, setting in pairs(current_block.settings or {}) do
+        local handler = self:find_handler_for_setting(setting)
+        if handler then
+          handlers_unique[handler] = nil
+        end
+        if current_block == block and setting.block then
+          table.insert(child_blocks, setting.block)
+        end
+      end
+      prev_block = current_block
+      current_block = (current_block.setting or current_block.source_setting).parent.block
+    until current_block == prev_block -- we've asked for root's parent, which is its own grandpa
+    for handler, _ in pairs(handlers_unique) do
+      self:get_path(block)
+      if Config.match_path(block, handler) and handler.default_values then
+        --add default value thingy
+        local default_setting = new_setting(handler.name, handler.module)
+        default_setting.default = true
+        default_setting.values = nil  --no values set
+        default_setting.parent = block.setting or block.source_setting
+        assert(default_setting.parent)
+        if handler.block then
+          default_setting.block = new_block(nil, default_setting)
+          table.insert(child_blocks, default_setting.block)
+        end
+        table.insert(block.settings, default_setting)
+      end
+    end
+    
+    for _, child_block in ipairs(child_blocks) do
+      self:add_defaults_to_block_recursive(child_block)
+    end
+    
+    return true
+  end
+  
   function config:parse(str, opt)
     assert(type(str) == "string")
     opt = opt or {}
@@ -1040,6 +1095,9 @@ do --config
     --now handle includes
     assert(self:handle("config:include_path"))
     assert(self:handle("config:include"))
+    
+    --inject defaults
+    self:add_defaults_to_block_recursive(self.root.block)
     
     --handle instrings
     for setting in self:each_setting() do
@@ -1152,7 +1210,8 @@ do --config
       return (s.parent == s) or not s.parent
     end
     if block_or_setting.type == "block" then
-      local setting = block_or_setting.setting
+      --require"mm"(block_or_setting)
+      local setting = block_or_setting.setting or block_or_setting.source_setting
       local setting_path = self:get_path(setting)
       local setting_path_part = is_root(setting) and "" or (setting.full_name or setting.name)
       local slash = setting_path:match("/$") and "" or "/"
@@ -1261,13 +1320,15 @@ do --config
         end
       elseif not handler_name or handler_name == handler.full_name then
         local ok, handler_err = true, nil
-        if handler.handler then
-          ok, handler_err = handler.handler(setting.values, handler.default)
-        elseif handler.internal_handler then
-          ok, handler_err = handler.internal_handler(setting, handler.default, self)
-        end
-        if not ok then
-          return nil, handler_errmsg(setting, tostring(handler_err))
+        if not setting.default then
+          if handler.handler then
+            ok, handler_err = handler.handler(setting.values, handler.default)
+          elseif handler.internal_handler then
+            ok, handler_err = handler.internal_handler(setting, handler.default, self)
+          end
+          if not ok then
+            return nil, handler_errmsg(setting, tostring(handler_err))
+          end
         end
         
         setting.handled_by = handler.full_name
@@ -1275,12 +1336,14 @@ do --config
           setting.module = handler.module
         end
         assert(setting.module == handler.module)
-      
-        if #setting.values < handler.nargs_min then
-          return nil, handler_errmsg(setting, "too few arguments, must have at least " .. handler.nargs_min)
-        end
-        if #setting.values > handler.nargs_max then
-          return nil, handler_errmsg(setting, "too many arguments, must have at most " .. handler.nargs_min)
+        
+        if not setting.default then
+          if #setting.values < handler.nargs_min then
+            return nil, handler_errmsg(setting, "too few arguments, must have at least " .. handler.nargs_min)
+          end
+          if #setting.values > handler.nargs_max then
+            return nil, handler_errmsg(setting, "too many arguments, must have at most " .. handler.nargs_min)
+          end
         end
         if handler.block == true and not setting.block then
           return nil, handler_errmsg(setting, "missing block")
@@ -1288,6 +1351,7 @@ do --config
         if not handler.block and setting.block then
           return nil, handler_errmsg(setting, "unexpected block")
         end
+        
       end
     end
     return true
@@ -1768,12 +1832,65 @@ do --config
     return self.root
   end
   
+  function config:each_block()
+    return coroutine.wrap(function()
+      for setting in self:each_setting(nil, {setting = function(s) return s.block end}) do
+        coroutine.yield(setting.block)
+      end
+    end)
+  end
+  
   function config:all_blocks()
     local t = {self.root.block}
     for setting in self:each_setting(nil, {setting = function(s) return s.block end}) do
       table.insert(t, setting.block)
     end
     return t
+  end
+  
+  function config:tostring(setting, prefix)
+    if not prefix then
+      prefix = ""
+    end
+    if not setting then
+      setting = self.root
+    end
+    
+    local buf = {}
+    local line = prefix
+    --if setting ~= self.root then
+      line = line .. setting.name
+      for _, val in ipairs(setting.values or {}) do
+        line = ("%s \"%s\""):format(line, val.raw)
+      end
+    --end
+    
+    local blockbuf = {}
+    if setting.block then
+      for _, s in ipairs(setting.block.settings) do
+        table.insert(blockbuf, self:tostring(s, prefix.."  "))
+      end
+    end
+    
+    --if setting ~= self.root then
+      line = line .. (setting.block and "{" or ";")
+    --end
+      
+    if setting.default then
+      line = line .. " #DEFAULT"
+    end
+    
+    table.insert(buf, line)
+    
+    for _, v in pairs(blockbuf) do
+      table.insert(buf, v)
+    end
+    
+    if setting.block  then
+      table.insert(buf, prefix .. "}")
+    end
+    
+    return table.concat(buf, "\n")
   end
   
   function config:predecessor(setting) --setting to inherit values from

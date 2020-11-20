@@ -195,9 +195,11 @@ static bool core_module_initialize_config(shuso_t *S, shuso_module_t *module, sh
   }
   shuso_setting_t *workers = shuso_setting(S, block, "workers");
   int              nworkers;
+  shuso_str_t     *workers_str = NULL;
   if(!workers) {
     return true;
   }
+  
   
   if(shuso_setting_integer(S, workers, 0, &nworkers)) {
     if(nworkers < 0) {
@@ -208,9 +210,9 @@ static bool core_module_initialize_config(shuso_t *S, shuso_module_t *module, sh
     }
     S->common->config.workers = nworkers;
   }
-  else if(shuso_setting_string(S, workers, 0, NULL)) {
+  else if(shuso_setting_string(S, workers, 0, workers_str)) {
     if(!shuso_setting_string_matches(S, workers, 0, "^auto$")) {
-      return shuso_config_error(S, workers, "invalid value");
+      return shuso_config_error(S, workers, "invalid value \"%s\"", workers_str->data);
     }
     S->common->config.workers = 0;
   }
