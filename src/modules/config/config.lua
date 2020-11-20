@@ -420,11 +420,11 @@ do --parser
     local setting = assert(self:in_setting())
     if not setting.block then
       setting.block = block
-      block.setting = setting
+      block.source_setting = setting
     else
       --sanity checks
       assert(setting.block == block)
-      assert(block.setting == setting)
+      assert(block.source_setting == setting)
     end
     --finishing a block means we are also finishing the setting it belongs to
     self:pop_setting()
@@ -1040,7 +1040,7 @@ do --config
         end
       end
       prev_block = current_block
-      current_block = (current_block.setting or current_block.source_setting).parent.block
+      current_block = current_block.source_setting.parent.block
     until current_block == prev_block -- we've asked for root's parent, which is its own grandpa
     for handler, _ in pairs(handlers_unique) do
       self:get_path(block)
@@ -1049,7 +1049,7 @@ do --config
         local default_setting = new_setting(handler.name, handler.module)
         default_setting.default = true
         default_setting.values = nil  --no values set
-        default_setting.parent = block.setting or block.source_setting
+        default_setting.parent = block.source_setting
         assert(default_setting.parent)
         if handler.block then
           default_setting.block = new_block(nil, default_setting)
@@ -1211,7 +1211,7 @@ do --config
     end
     if block_or_setting.type == "block" then
       --require"mm"(block_or_setting)
-      local setting = block_or_setting.setting or block_or_setting.source_setting
+      local setting = block_or_setting.source_setting
       local setting_path = self:get_path(setting)
       local setting_path_part = is_root(setting) and "" or (setting.full_name or setting.name)
       local slash = setting_path:match("/$") and "" or "/"
@@ -1698,7 +1698,7 @@ do --config
       end
       
       prev_parent_block = parent_block
-      parent_block = parent_block.setting.parent.block
+      parent_block = parent_block.source_setting.parent.block
       block_distance = block_distance+1
     end
     if setvar and block_distance == 0 then
