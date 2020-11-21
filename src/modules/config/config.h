@@ -105,6 +105,7 @@ bool shuso_config_match_block_path(shuso_t *S, const shuso_setting_block_t *bloc
   )(S, thing, path)
 
 
+bool shuso_config_value_error(shuso_t *S, shuso_setting_t *s, int valnum);
 bool shuso_config_setting_error(shuso_t *S, shuso_setting_t *s, const char *fmt, ...);
 bool shuso_config_block_error(shuso_t *S, shuso_setting_block_t *b, const char *fmt, ...);
 #define shuso_config_error(S, thing, ...) \
@@ -115,5 +116,7 @@ bool shuso_config_block_error(shuso_t *S, shuso_setting_block_t *b, const char *
 
 bool shuso_configure_string(shuso_t *S, const char *title, const char *str);
 bool shuso_configure_file(shuso_t *S, const char *path);
+
+void shuso_config_log_processed_settings(shuso_t *S, shuso_loglevel_t lvl);
   
 #endif //SHUTTLESOCK_CONFIG_MODULE_H

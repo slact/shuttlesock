@@ -614,17 +614,17 @@ bool shuso_setting_value(shuso_t *S, const shuso_setting_t *setting, size_t nval
   
   switch(valtype) {
     case SHUSO_SETTING_BOOLEAN: 
-      return shuso_instring_boolean_value(S, instring, ret);
+      return shuso_instring_boolean_value(S, instring, (bool *)ret);
     case SHUSO_SETTING_INTEGER:
-      return shuso_instring_integer_value(S, instring, ret);
+      return shuso_instring_integer_value(S, instring, (int *)ret);
     case SHUSO_SETTING_NUMBER:
-      return shuso_instring_number_value(S, instring, ret);
+      return shuso_instring_number_value(S, instring, (double *)ret);
     case SHUSO_SETTING_SIZE:
-      return shuso_instring_size_value(S, instring, ret);
+      return shuso_instring_size_value(S, instring, (size_t *)ret);
     case SHUSO_SETTING_STRING:
-      return shuso_instring_string_value(S, instring, ret);
+      return shuso_instring_string_value(S, instring, (shuso_str_t *)ret);
     case SHUSO_SETTING_BUFFER:
-      return shuso_instring_buffer_value(S, instring, ret);
+      return shuso_instring_buffer_value(S, instring, (shuso_buffer_t **)ret);
     default:
       shuso_set_error(S, "Fatal API error: invalid setting type %d, shuso_setting_value() was probably called incorrectly", mergetype);
       raise(SIGABRT);
@@ -783,7 +783,25 @@ static bool shuso_config_error_va(shuso_t *S, const void *ptr, const char *fmt, 
   lua_settop(L, top);
   return false;
 }
+void shuso_config_log_processed_settings(shuso_t *S, shuso_loglevel_t lvl) {
+  lua_State *L = S->lua.state;
+  luaS_pcall_config_method(L, "tostring", 0, 1);
+  const char *str = lua_tostring(L, -1);
+  shuso_log_level(S, lvl, "%s", str);
+  lua_pop(L, 1);
+}
 
+bool shuso_config_value_error(shuso_t *S, shuso_setting_t *s, int value_num) {
+  bool ret;
+  shuso_str_t   val;
+  if(!shuso_setting_string(S, s, value_num, &val)) {
+    ret = shuso_config_error(S, s, "missing value #%i", value_num + 1);
+  }
+  else {
+    ret = shuso_config_error(S, s, "invalid value \"%s\"", val.data);
+  }
+  return ret;
+}
 bool shuso_config_setting_error(shuso_t *S, shuso_setting_t *s, const char *fmt, ...) {
   va_list args;
   va_start(args, fmt);

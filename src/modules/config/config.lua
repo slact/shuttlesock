@@ -1147,22 +1147,6 @@ do --config
       end
     end
     
-    --not in parent context. maybe use a default value?
-    local path = self:get_path(context.block)
-    local fakesetting = {
-      name = name,
-      path = path
-    }
-    local found_handler = self:find_handler_for_setting(fakesetting)
-    if found_handler then
-      --copy?
-      local default_setting = {}
-      for k, v in pairs(found_handler.default_setting) do
-        rawset(default_setting, k, v)
-      end
-      setmetatable(default_setting, getmetatable(found_handler.default_setting))
-      return default_setting
-    end
     return false
   end
 
@@ -1245,6 +1229,7 @@ do --config
   end
   
   function config:error(block_or_setting, message, ...)
+    assert(block_or_setting, "block or setting missing for error")
     if type(block_or_setting) == "userdata" then
       block_or_setting = self:ptr_lookup(block_or_setting)
     end
@@ -1873,11 +1858,19 @@ do --config
     end
     
     --if setting ~= self.root then
-      line = line .. (setting.block and "{" or ";")
+      line = line .. (setting.block and " {" or ";")
     --end
       
     if setting.default then
       line = line .. " #DEFAULT"
+      local default_setting_handler = self:find_handler_for_setting(setting)
+      if default_setting_handler then
+        local default_vals = {}
+        for _, val in ipairs(default_setting_handler.default_values or {}) do
+          table.insert(default_vals, "\""..val.raw.."\"")
+        end
+        line = line .. "["..table.concat(default_vals, " ").."]"
+      end
     end
     
     table.insert(buf, line)

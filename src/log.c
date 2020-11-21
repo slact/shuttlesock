@@ -68,6 +68,13 @@ NONNULL(1,3) void shuso_log_level_vararg(shuso_t *S, shuso_loglevel_t level, con
   write((S)->common->log.fd, log, cur - log);
 }
 
+void shuso_log_level(shuso_t *S, shuso_loglevel_t level, const char *fmt, ...) {
+  va_list args;
+  va_start(args, fmt);
+  shuso_log_level_vararg(S, level, fmt, args);
+  va_end (args);
+}
+
 void shuso_log(shuso_t *S, const char *fmt, ...) {
   va_list args;
   va_start(args, fmt);

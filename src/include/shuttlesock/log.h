@@ -13,6 +13,7 @@ void shuso_log_error(shuso_t *S, const char *fmt, ...);
 void shuso_log_critical(shuso_t *S, const char *fmt, ...);
 void shuso_log_fatal(shuso_t *S, const char *fmt, ...);
 
+void shuso_log_level(shuso_t *S, shuso_loglevel_t level, const char *fmt, ...);
 void shuso_log_level_vararg(shuso_t *S, shuso_loglevel_t level, const char *fmt, va_list args);
 
 
