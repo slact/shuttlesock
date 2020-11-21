@@ -665,7 +665,7 @@ bool shuso_setting_string_matches(shuso_t *S, shuso_setting_t *setting, int n, c
   lua_reference_t string_ref = instring->cached_value.string_lua_ref;
   assert(string_ref != LUA_NOREF);
   
-  if(lua_checkstack(L, 3)) {
+  if(!lua_checkstack(L, 3)) {
     return false;
   }
   luaS_push_lua_module_field(L, "string", "match");

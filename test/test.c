@@ -42,6 +42,195 @@ static void stop_shuttlesock(shuso_t *S, void *pd) {
   
 }
 
+#define assert_conftest_ok(S, confstring) \
+  luaL_checkstack(S->lua.state, 10, "no stack space"); \
+  lua_pushstring(S->lua.state, confstring); \
+  assert_luaL_dofile_args(S->lua.state, "test_config.lua", 2); \
+  assert_shuso(S, )
+
+#define assert_conftest_fail(S, confstring, error_match) \
+  luaL_checkstack(S->lua.state, 10, "no stack space"); \
+  lua_pushstring(S->lua.state, confstring); \
+  assert_luaL_dofile_args(S->lua.state, "test_config.lua", 2); \
+  assert_shuso_error(S, error_match)
+  
+
+describe(configuration) {
+  static shuso_t          *S = NULL;
+  static test_runcheck_t  *chk = NULL;
+  static lua_State        *L = NULL;
+  before_each() {
+    S = shusoT_create(&chk, 5555.0);
+    L = S->lua.state;
+    assert_luaL_dofile(S->lua.state, "config_test_module.lua");
+  }
+  after_each() {
+    if(S) shusoT_destroy(S, &chk);
+  }
+  
+  subdesc(setting_paths) {
+    test("generic path matching") {
+      assert_luaL_dofile(L, "config_path_matching.lua");
+    }
+    test("unmatched path") {
+      assert_conftest_fail(S, 
+        "block2 { foo val; }",
+        "unknown setting foo"
+      );
+    }
+    test("matched path") {
+      assert_conftest_ok(S, 
+        "block3 { foo val; }"
+      );
+    }
+  }
+  
+  subdesc(blocks) {
+    test("missing block") {
+      assert_conftest_fail(S, 
+        "root_config \"foo\";",
+        "\"root_config\".+ missing block"
+      );
+    }
+    test("unexpected block") {
+      assert_conftest_fail(S, 
+        "bar \"foo\" {}",
+        "\"bar\".+ unexpected block"
+      );
+    }
+    test("semicolon after unexpected block") {
+      assert_conftest_fail(S, 
+        "bar \"foo\" {};",
+        "unexpected \";\""
+      );
+    }
+    test("semicolon after expected block") {
+      assert_conftest_fail(S, 
+        "root_config \"foo\" {};",
+        "unexpected \";\""
+      );
+    }
+    test("optional block present") {
+      assert_conftest_ok(S, 
+        "block_maybe {};"
+      );
+    }
+    test("optional block absent") {
+      assert_conftest_ok(S, 
+        "block_maybe;"
+      );
+    }
+  }
+  
+  subdesc(heredocs) {
+    test("many heredocs on the same line") {
+      assert_luaL_dofile_args(L, "test_config_heredocs_valid.lua", 1);
+    }
+    test("unterminated heredoc with no body") {
+      assert_conftest_fail(S, 
+        "bar <<~HEY_HEREDOC;",
+        "unexpected end .* \"HEY_HEREDOC\""
+      );
+    }
+    test("unterminated heredoc with body") {
+      assert_conftest_fail(S, 
+        "bar <<~HEY_HEREDOC;\nwhat\nohno",
+        "unterminated heredoc.* HEY_HEREDOC"
+      );
+    }
+  }
+  
+  subdesc(strings) {
+    test("string values") {
+      assert_luaL_dofile_args(L, "test_config_string_values.lua", 1);
+    }
+    test("unterminated string due to EOF") {
+      assert_conftest_fail(S, 
+        "bar \"oh look string",
+        "unterminated string"
+      );
+    }
+    test("unterminated string with stuff after it") {
+      assert_conftest_fail(S, 
+        "bar \"oh look string;\nbar hey;",
+        "unterminated string"
+      );
+    }
+  }
+  
+  subdesc(value_types) {
+    test("all possible value types") {
+      assert_luaL_dofile_args(L, "test_config_value_types.lua", 1);
+    }
+  }
+  
+  subdesc(defaults) {
+    test("default value is present") {
+      assert_luaL_dofile_args(L, "test_config_default_values.lua", 1);
+    }
+  }
+  
+  subdesc(variables) {
+    subdesc(lua_bad_declaration) {
+      test("variable isn't a table") {
+        assert_luaL_dostring(L, "return {var=22}, 'variable .* must be a table'");
+        assert_luaL_dofile_args(L, "test_config_module_bad_variable_declarations.lua", 3);
+      }
+      test("variable with a metatable") {
+        assert_luaL_dostring(L, "return {var=setmetatable({name='foo'},{})}, 'variable $foo .*isn\\'t supposed to have a metatable'");
+        assert_luaL_dofile_args(L, "test_config_module_bad_variable_declarations.lua", 3);
+      }
+      test("variable with no name") {
+        assert_luaL_dostring(L, "return {'name'}, 'variable name is missing'");
+        assert_luaL_dofile_args(L, "test_config_module_bad_variable_declarations.lua", 3);
+      }
+      test("variable with non-string name") {
+        assert_luaL_dostring(L, "return {name={}}, 'variable name must be a string'");
+        assert_luaL_dofile_args(L, "test_config_module_bad_variable_declarations.lua", 3);
+      }
+      test("variable with invalid aliases") {
+        assert_luaL_dostring(L, "return {aliases=25}, 'variable $testvar aliases.* must be a table or string'");
+        assert_luaL_dofile_args(L, "test_config_module_bad_variable_declarations.lua", 3);
+      }
+      test("variable with no path") {
+        assert_luaL_dostring(L, "return {'path'}, 'variable $testvar path is missing'");
+        assert_luaL_dofile_args(L, "test_config_module_bad_variable_declarations.lua", 3);
+      }
+      test("variable with non-string path") {
+        assert_luaL_dostring(L, "return {path={}}, 'variable $testvar path must be a string'");
+        assert_luaL_dofile_args(L, "test_config_module_bad_variable_declarations.lua", 3);
+      }
+      test("variable with no eval") {
+        assert_luaL_dostring(L, "return {'eval'}, 'variable $testvar eval is missing'");
+        assert_luaL_dofile_args(L, "test_config_module_bad_variable_declarations.lua", 3);
+      }
+      test("variable with non-function eval") {
+        assert_luaL_dostring(L, "return {eval=coroutine.create(function()end)}, 'variable $testvar eval must be a function'");
+        assert_luaL_dofile_args(L, "test_config_module_bad_variable_declarations.lua", 3);
+      }
+    }
+    test("set $variable") {
+      assert_luaL_dofile_args(L, "config_variable_simple.lua", 1);
+    }
+    test("constant module $variable") {
+      assert_luaL_dofile_args(L, "test_config_module_variables.lua", 1);
+    }
+    subdesc(at_runtime) {
+      test("cacheable variable on different workers") {
+        assert_luaL_dofile_args(L, "test_config_module_variables_once_per_worker.lua", 1);
+        shuso_run(S);
+        assert_shuso_ran_ok(S);
+      }
+    }
+  }
+  
+  test("module with a bunch of config settings") {
+    assert_luaL_dofile_args(S->lua.state, "test_config_general.lua", 1);
+    shuso_run(S);
+    assert_shuso_ran_ok(S);
+  }
+}
+
 describe(init_and_shutdown) {
   static shuso_t          *S = NULL;
   static test_runcheck_t  *chk = NULL;
@@ -698,191 +887,6 @@ describe(lua_api) {
     }
   }
 }
-
-
-#define assert_conftest_ok(S, confstring) \
-  luaL_checkstack(S->lua.state, 10, "no stack space"); \
-  lua_pushstring(S->lua.state, confstring); \
-  assert_luaL_dofile_args(S->lua.state, "test_config.lua", 2); \
-  assert_shuso(S, )
-
-#define assert_conftest_fail(S, confstring, error_match) \
-  luaL_checkstack(S->lua.state, 10, "no stack space"); \
-  lua_pushstring(S->lua.state, confstring); \
-  assert_luaL_dofile_args(S->lua.state, "test_config.lua", 2); \
-  assert_shuso_error(S, error_match)
-  
-
-describe(configuration) {
-  static shuso_t          *S = NULL;
-  static test_runcheck_t  *chk = NULL;
-  static lua_State        *L = NULL;
-  before_each() {
-    S = shusoT_create(&chk, 5555.0);
-    L = S->lua.state;
-    assert_luaL_dofile(S->lua.state, "config_test_module.lua");
-  }
-  after_each() {
-    if(S) shusoT_destroy(S, &chk);
-  }
-  
-  subdesc(setting_paths) {
-    test("generic path matching") {
-      assert_luaL_dofile(L, "config_path_matching.lua");
-    }
-    test("unmatched path") {
-      assert_conftest_fail(S, 
-        "block2 { foo val; }",
-        "unknown setting foo"
-      );
-    }
-    test("matched path") {
-      assert_conftest_ok(S, 
-        "block3 { foo val; }"
-      );
-    }
-  }
-  
-  subdesc(blocks) {
-    test("missing block") {
-      assert_conftest_fail(S, 
-        "root_config \"foo\";",
-        "\"root_config\".+ missing block"
-      );
-    }
-    test("unexpected block") {
-      assert_conftest_fail(S, 
-        "bar \"foo\" {}",
-        "\"bar\".+ unexpected block"
-      );
-    }
-    test("semicolon after unexpected block") {
-      assert_conftest_fail(S, 
-        "bar \"foo\" {};",
-        "unexpected \";\""
-      );
-    }
-    test("semicolon after expected block") {
-      assert_conftest_fail(S, 
-        "root_config \"foo\" {};",
-        "unexpected \";\""
-      );
-    }
-    test("optional block present") {
-      assert_conftest_ok(S, 
-        "block_maybe {};"
-      );
-    }
-    test("optional block absent") {
-      assert_conftest_ok(S, 
-        "block_maybe;"
-      );
-    }
-  }
-  
-  subdesc(heredocs) {
-    test("many heredocs on the same line") {
-      assert_luaL_dofile_args(L, "test_config_heredocs_valid.lua", 1);
-    }
-    test("unterminated heredoc with no body") {
-      assert_conftest_fail(S, 
-        "bar <<~HEY_HEREDOC;",
-        "unexpected end .* \"HEY_HEREDOC\""
-      );
-    }
-    test("unterminated heredoc with body") {
-      assert_conftest_fail(S, 
-        "bar <<~HEY_HEREDOC;\nwhat\nohno",
-        "unterminated heredoc.* HEY_HEREDOC"
-      );
-    }
-  }
-  
-  subdesc(strings) {
-    test("string values") {
-      assert_luaL_dofile_args(L, "test_config_string_values.lua", 1);
-    }
-    test("unterminated string due to EOF") {
-      assert_conftest_fail(S, 
-        "bar \"oh look string",
-        "unterminated string"
-      );
-    }
-    test("unterminated string with stuff after it") {
-      assert_conftest_fail(S, 
-        "bar \"oh look string;\nbar hey;",
-        "unterminated string"
-      );
-    }
-  }
-  
-  subdesc(value_types) {
-    test("all possible value types") {
-      assert_luaL_dofile_args(L, "test_config_value_types.lua", 1);
-    }
-  }
-  
-  subdesc(variables) {
-    subdesc(lua_bad_declaration) {
-      test("variable isn't a table") {
-        assert_luaL_dostring(L, "return {var=22}, 'variable .* must be a table'");
-        assert_luaL_dofile_args(L, "test_config_module_bad_variable_declarations.lua", 3);
-      }
-      test("variable with a metatable") {
-        assert_luaL_dostring(L, "return {var=setmetatable({name='foo'},{})}, 'variable $foo .*isn\\'t supposed to have a metatable'");
-        assert_luaL_dofile_args(L, "test_config_module_bad_variable_declarations.lua", 3);
-      }
-      test("variable with no name") {
-        assert_luaL_dostring(L, "return {'name'}, 'variable name is missing'");
-        assert_luaL_dofile_args(L, "test_config_module_bad_variable_declarations.lua", 3);
-      }
-      test("variable with non-string name") {
-        assert_luaL_dostring(L, "return {name={}}, 'variable name must be a string'");
-        assert_luaL_dofile_args(L, "test_config_module_bad_variable_declarations.lua", 3);
-      }
-      test("variable with invalid aliases") {
-        assert_luaL_dostring(L, "return {aliases=25}, 'variable $testvar aliases.* must be a table or string'");
-        assert_luaL_dofile_args(L, "test_config_module_bad_variable_declarations.lua", 3);
-      }
-      test("variable with no path") {
-        assert_luaL_dostring(L, "return {'path'}, 'variable $testvar path is missing'");
-        assert_luaL_dofile_args(L, "test_config_module_bad_variable_declarations.lua", 3);
-      }
-      test("variable with non-string path") {
-        assert_luaL_dostring(L, "return {path={}}, 'variable $testvar path must be a string'");
-        assert_luaL_dofile_args(L, "test_config_module_bad_variable_declarations.lua", 3);
-      }
-      test("variable with no eval") {
-        assert_luaL_dostring(L, "return {'eval'}, 'variable $testvar eval is missing'");
-        assert_luaL_dofile_args(L, "test_config_module_bad_variable_declarations.lua", 3);
-      }
-      test("variable with non-function eval") {
-        assert_luaL_dostring(L, "return {eval=coroutine.create(function()end)}, 'variable $testvar eval must be a function'");
-        assert_luaL_dofile_args(L, "test_config_module_bad_variable_declarations.lua", 3);
-      }
-    }
-    test("set $variable") {
-      assert_luaL_dofile_args(L, "config_variable_simple.lua", 1);
-    }
-    test("constant module $variable") {
-      assert_luaL_dofile_args(L, "test_config_module_variables.lua", 1);
-    }
-    subdesc(at_runtime) {
-      test("cacheable variable on different workers") {
-        assert_luaL_dofile_args(L, "test_config_module_variables_once_per_worker.lua", 1);
-        shuso_run(S);
-        assert_shuso_ran_ok(S);
-      }
-    }
-  }
-  
-  test("module with a bunch of config settings") {
-    assert_luaL_dofile_args(S->lua.state, "test_config_general.lua", 1);
-    shuso_run(S);
-    assert_shuso_ran_ok(S);
-  }
-}
-
 
 #define IPC_ECHO 130
 
