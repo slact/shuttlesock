@@ -2358,7 +2358,7 @@ static int Lua_shuso_coroutine_resume(lua_State *L) {
 
 static int Lua_shuso_master_has_root(lua_State *L) {
   shuso_t *S = shuso_state(L);
-  lua_pushboolean(L, S->common->master_has_root);
+  lua_pushboolean(L, shuso_master_has_root(S));
   return 1;
 }
 

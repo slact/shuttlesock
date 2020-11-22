@@ -159,6 +159,10 @@ fail:
   return NULL;
 }
 
+bool shuso_master_has_root(shuso_t *S) {
+  return S->common->master_has_root;
+}
+
 bool shuso_runstate_check(shuso_t *S, shuso_runstate_t allowed_state, const char *whatcha_doing) {
   if(S->common->state == allowed_state) {
     return true;

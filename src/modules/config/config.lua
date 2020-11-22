@@ -1978,6 +1978,52 @@ do --config
   
 end
 
+function Config.str_time_to_seconds(str)
+  local num, unit = str:match("^%s*(%d+)%s?(%w*)%s*$")
+  if not num then
+    return false
+  end
+  
+  local value = tonumber(num)
+  if not value then return false end
+  if unit == "us" or unit == "usec" or unit:match("^microseconds?$") then
+    value = value / 1000000.0
+  elseif unit == "ms" or unit == "msec" or unit:match("^milliseconds?$") then
+    value = value / 1000.0
+  elseif unit == "" or unit == "s" or unit == "sec" or unit:match("^seconds?$") then
+    --nothing to do
+  elseif unit == "m" or unit == "min" or unit:match("^minutes?$") then
+    value = value*60
+  elseif unit == "h" or unit:match("^hours?$") then
+    value = value*60*60
+  elseif unit == "d" or unit:match("^days?%") then
+    value = value*60*60*24
+  end
+  return value
+end
+
+function Config.str_size_to_bytes(str)
+  local num, unit = str:match("^%s*(%d+)%s?(%w*)%s*$")
+  if not num then
+    return false
+  end
+  
+  local value = tonumber(num)
+  if not value then return false end
+  if unit:match("^[bB]?$") then
+    --we're good
+  elseif unit:match("^[Kk][bB]?") then
+    value = value * 1024
+  elseif unit:match("^[Mm][Bb]?%") then
+    value = value * 1048576
+  elseif unit:match("^[Gg][Bb]?%") then
+    value = value * 1073741824
+  else
+    return false
+  end
+  return value
+end
+
 --needed in luaS_gxcopy
 Config.metatable = config_mt
 Config.parser_metatable = parser_mt

@@ -115,7 +115,7 @@ bool shuso_core_io_uring_setup(shuso_t *S) {
   }
   
   struct io_uring        *ring = &S->io_uring.ring;
-  struct io_uring_params  params;
+  struct io_uring_params  params = {0};
   int                     entries;
   switch(S->procnum) {
     case SHUTTLESOCK_MASTER:
@@ -129,7 +129,11 @@ bool shuso_core_io_uring_setup(shuso_t *S) {
       break;
   }
   
-  params.flags = IORING_SETUP_SQPOLL;
+  params.flags = 0;
+  if(S->common->config.io_uring.sqpoll_thread) {
+    params.flags |= IORING_SETUP_SQPOLL;
+    params.sq_thread_idle=S->common->config.io_uring.sqpoll_thread_idle;
+  }
   
   int         rc;
   const char *err;

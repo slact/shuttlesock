@@ -650,6 +650,30 @@ bool shuso_setting_string(shuso_t *S, shuso_setting_t *setting, int n, shuso_str
 bool shuso_setting_buffer(shuso_t *S, shuso_setting_t *setting, int n, const shuso_buffer_t **ret) {
   return shuso_setting_value(S, setting, n, SHUSO_SETTING_MERGED, SHUSO_SETTING_BUFFER, ret);
 }
+bool shuso_setting_time_sec(shuso_t *S, shuso_setting_t *setting, int n, double *sec) {
+  lua_State    *L = S->lua.state;
+  shuso_str_t   val;
+  bool ok = shuso_setting_value(S, setting, n, SHUSO_SETTING_MERGED, SHUSO_SETTING_STRING, &val);
+  if(!ok) {
+    return false;
+  }
+  if(!lua_checkstack(L, 3)) {
+    return false;
+  }
+  luaS_push_lua_module_field(L, "shuttlesock.core.config", "str_time_to_seconds");
+  assert(lua_isfunction(L, -1));
+  lua_pushlstring(L, val.data, val.len);
+  lua_call(L, 1, 1);
+  if(!lua_toboolean(L, -1)) {
+    lua_pop(L, 1);
+    return false;
+  }
+  lua_Number num = lua_tonumber(L, -1);
+  lua_pop(L, 1);
+  *sec = num;
+  return true;
+}
+
 bool shuso_setting_string_matches(shuso_t *S, shuso_setting_t *setting, int n, const char *lua_matchstring) {
   lua_State *L = S->lua.state;
   int top = lua_gettop(L);

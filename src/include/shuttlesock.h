@@ -72,6 +72,8 @@ typedef struct shuso_config_s {
   struct {
     int                 enabled;
     int                 worker_entries;
+    int                 sqpoll_thread;          
+    int                 sqpoll_thread_idle;
   }                   io_uring;
   struct {          //resolver
     int                 timeout; //milliseconds
@@ -205,6 +207,7 @@ shuso_t *shuso_create_with_lua(lua_State *lua, const char **err);
 bool shuso_runstate_check(shuso_t *S, shuso_runstate_t allowed_state, const char *whatcha_doing);
 bool shuso_configure_finish(shuso_t *S);
 
+bool shuso_master_has_root(shuso_t *S);
 
 bool shuso_destroy(shuso_t *S);
 bool shuso_run(shuso_t *S);

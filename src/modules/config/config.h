@@ -95,6 +95,7 @@ bool shuso_setting_string(shuso_t *S, shuso_setting_t *setting, int n, shuso_str
 bool shuso_setting_buffer(shuso_t *S, shuso_setting_t *setting, int n, const shuso_buffer_t **ret);
 bool shuso_setting_string_matches(shuso_t *S, shuso_setting_t *setting, int n, const char *lua_matchstring);
 
+bool shuso_setting_time_sec(shuso_t *S, shuso_setting_t *setting, int n, double *sec);
 
 bool shuso_config_match_setting_path(shuso_t *S, const shuso_setting_t *setting, const char *path);
 bool shuso_config_match_block_path(shuso_t *S, const shuso_setting_block_t *block, const char *path);

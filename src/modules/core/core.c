@@ -218,7 +218,6 @@ static bool core_module_initialize_config(shuso_t *S, shuso_module_t *module, sh
   
   shuso_setting_t  *io_uring_setting = shuso_setting(S, block, "io_uring");
   bool              io_uring_setting_val;
-  shuso_setting_string(S, io_uring_setting, 0, &setting_str);
   if(shuso_setting_string_matches(S, io_uring_setting, 0, "^auto$")) {
     S->common->config.io_uring.enabled = SHUSO_MAYBE;
   }
@@ -244,8 +243,34 @@ static bool core_module_initialize_config(shuso_t *S, shuso_module_t *module, sh
   if(entries <= 0) {
     return shuso_config_value_error(S, io_uring_entries, 0);
   }
-  
   S->common->config.io_uring.worker_entries = entries;
+  
+  
+  
+  shuso_setting_t  *io_uring_sq_kernel_poll = shuso_setting(S, block, "io_uring_sq_kernel_poll");
+  if(shuso_setting_string_matches(S, io_uring_sq_kernel_poll, 0, "^auto$")) {
+    S->common->config.io_uring.sqpoll_thread = shuso_master_has_root(S);
+  }
+  else {
+    bool sqpoll_thread;
+    if(!shuso_setting_boolean(S, io_uring_sq_kernel_poll, 0, &sqpoll_thread)) {
+      return shuso_config_value_error(S, io_uring_sq_kernel_poll, 0);
+    }
+    if(sqpoll_thread && !shuso_master_has_root(S)) {
+      return shuso_config_error(S, io_uring_sq_kernel_poll, "can't use SQ kernel thread without root");
+    }
+    S->common->config.io_uring.sqpoll_thread = sqpoll_thread;
+  }
+  
+  
+  shuso_setting_t  *io_uring_sq_thread_idle = shuso_setting(S, block, "io_uring_sq_thead_idle");
+  double  sec;
+  if(!shuso_setting_time_sec(S, io_uring_sq_thread_idle, 0, &sec)) {
+    return shuso_config_value_error(S, io_uring_sq_thread_idle, 0);
+  }
+  else {
+    S->common->config.io_uring.sqpoll_thread_idle = sec*1000;
+  }
   
   return true;
 }
@@ -302,6 +327,22 @@ shuso_module_t shuso_core_module = {
       .path = "/",
       .description = "The number of io_uring queue entries.",
       .default_value = "4096",
+      .nargs = "1"
+    },
+    
+    {
+      .name = "io_uring_sq_thead_idle",
+      .path = "/",
+      .description = "Inactivity timeout for kernel SQ thread.",
+      .default_value = "500ms",
+      .nargs = "1"
+    },
+    
+    {
+      .name = "io_uring_sq_kernel_poll",
+      .path = "/",
+      .description = "Enable SQ kernel thread polling.",
+      .default_value = "auto",
       .nargs = "1"
     },
     
