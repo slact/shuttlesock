@@ -104,7 +104,10 @@ static bool uring_setup_fail(shuso_t *S, const char *fmt, ...) {
 }
 
 bool shuso_core_io_uring_setup(shuso_t *S) {
-  int enabled = S->common->config.io_uring.enabled;
+  int enabled;
+  
+  //turn off incomplete io_uring implementation for now
+  enabled = false; //S->common->config.io_uring.enabled;
   
   //initial state: assi,e io_uring has not bee set up
   S->io_uring.on = false;
