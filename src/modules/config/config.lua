@@ -1992,6 +1992,7 @@ function Config.str_time_to_seconds(str)
     value = value / 1000.0
   elseif unit == "" or unit == "s" or unit == "sec" or unit:match("^seconds?$") then
     --nothing to do
+    value = value
   elseif unit == "m" or unit == "min" or unit:match("^minutes?$") then
     value = value*60
   elseif unit == "h" or unit:match("^hours?$") then
@@ -2012,6 +2013,7 @@ function Config.str_size_to_bytes(str)
   if not value then return false end
   if unit:match("^[bB]?$") then
     --we're good
+    value = value
   elseif unit:match("^[Kk][bB]?") then
     value = value * 1024
   elseif unit:match("^[Mm][Bb]?%") then
