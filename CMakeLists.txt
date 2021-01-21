@@ -201,7 +201,6 @@ shuttlesock_add_module("lua_bridge"
     "shuttlesock.debug"           api/debug.lua
     "shuttlesock.debug.spinlock"  api/debug/spinlock.lua
     "shuttlesock.debug.mutex"     api/debug/mutex.lua
-    "shuttlesock.foo-bar"         api/foo-bar.lua
   LUA_SOURCES
     #utils used inside "shuttlesock.core" lua_binding
     "shuttlesock.core" api/core.lua
