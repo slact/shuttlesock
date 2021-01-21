@@ -151,7 +151,8 @@ pack_lua_module("shuttlesock.core.module"        src/module.lua)
 pack_lua_module("shuttlesock.core.event"         src/event.lua)
 pack_lua_module("shuttlesock.core.instring"      src/instring.lua)
 
-add_core_module("core"
+shuttlesock_add_module("core"
+  CORE
   SOURCES
     core.c
     core_io_uring.c
@@ -159,7 +160,8 @@ add_core_module("core"
     core.h
 )
 
-add_core_module("config"
+shuttlesock_add_module("config"
+  CORE
   SOURCES config.c
   LUA_MODULES
     "shuttlesock.core.config" config.lua
@@ -168,7 +170,8 @@ add_core_module("config"
     PRIVATE private.h
 )
 
-add_core_module("lua_bridge"
+shuttlesock_add_module("lua_bridge"
+  CORE
   SOURCES
     lua_bridge.c
     api/lazy_atomics.c
@@ -198,12 +201,14 @@ add_core_module("lua_bridge"
     "shuttlesock.debug"           api/debug.lua
     "shuttlesock.debug.spinlock"  api/debug/spinlock.lua
     "shuttlesock.debug.mutex"     api/debug/mutex.lua
+    "shuttlesock.foo-bar"         api/foo-bar.lua
   LUA_SOURCES
     #utils used inside "shuttlesock.core" lua_binding
     "shuttlesock.core" api/core.lua
 )
 
-add_core_module("server" LUA
+shuttlesock_add_module("server" LUA
+  CORE
   LUA_MODULES
     "shuttlesock.modules.core.server" server.lua
   SOURCES
@@ -217,5 +222,5 @@ add_core_module("server" LUA
 )
 
 set_lua_packed_script_file("src/embedded_lua_scripts.c")
-finish_adding_core_modules()
+
 configure_file(src/include/shuttlesock/build_config.h.tmpl src/include/shuttlesock/build_config.h)
