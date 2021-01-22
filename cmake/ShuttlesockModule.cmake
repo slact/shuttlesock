@@ -15,8 +15,7 @@ include(CMakeParseArguments)
 #  add_library(${SHUTTLESOCK_MODULE_LIBRARY} ${SHUTTLESOCK_MODULE_SOURCE})
 #endmacro()
 
-set(SHUTTLESOCK_CORE_MODULES "" CACHE INTERNAL "Core modules" FORCE)
-set(SHUTTLESOCK_CORE_LUA_MODULES "" CACHE INTERNAL "Core Lua modules" FORCE)
+set(SHUTTLESOCK_CORE_MODULES_LISTING "" CACHE INTERNAL "Core modules listings for neat C iteration" FORCE)
 set(SHUTTLESOCK_CORE_MODULES_INCLUDE_HEADERS "" CACHE INTERNAL "Module headers list" FORCE)
 set(SHUTTLESOCK_CORE_MODULES_PREINITIALIZATION_FUNCTIONS "" CACHE INTERNAL "Core module preinitialization functions" FORCE)
 set(SHUTTLESOCK_CORE_MODULES_FINISHED "" CACHE INTERNAL "done with core modules" FORCE)
@@ -24,6 +23,9 @@ set(SHUTTLESOCK_CORE_MODULES_FINISHED "" CACHE INTERNAL "done with core modules"
 function(shuttlesock_generate_core_modules_build_files)
   list(LENGTH SHUTTLESOCK_CORE_MODULES SHUTTLESOCK_CORE_MODULES_LENGTH)
   string(REPLACE ";" "\n" SHUTTLESOCK_CORE_MODULES_INCLUDE_HEADERS "${SHUTTLESOCK_CORE_MODULES_INCLUDE_HEADERS}")
+  
+  string(REPLACE ";" ",\n  " SHUTTLESOCK_CORE_MODULES_LISTING "${SHUTTLESOCK_CORE_MODULES_LISTING}")
+  
   configure_file(src/include/shuttlesock/core_modules.h.tmpl src/include/shuttlesock/core_modules.h)
   configure_file(src/core_modules.c.tmpl src/core_modules.c)
   target_sources(shuttlesock PRIVATE src/core_modules.c)
@@ -146,9 +148,9 @@ function(shuttlesock_add_module MODULE_NAME)
   
   if(MODULE_CORE)
     target_sources(shuttlesock PRIVATE ${module_pathed_sources})
-    list(APPEND SHUTTLESOCK_CORE_MODULES_LIST "${module_listing}")
-    
-    set(SHUTTLESOCK_CORE_MODULES_LIST "${SHUTTLESOCK_CORE_MODULES_LIST}" CACHE INTERNAL "Core module listings" FORCE)
+      
+    list(APPEND SHUTTLESOCK_CORE_MODULES_LISTING "${module_listing}")
+    set(SHUTTLESOCK_CORE_MODULES_LISTING "${SHUTTLESOCK_CORE_MODULES_LISTING}" CACHE INTERNAL "" FORCE)
     
     set(symlink_commands "")
     set(symlink_byproducts "")
