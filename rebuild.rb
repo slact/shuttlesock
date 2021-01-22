@@ -494,6 +494,9 @@ rebuild = Opts.new do
   no_eventfd :debug_flag,
     cmake_define: {SHUTTLESOCK_USE_EVENTFD: false}
   
+  no_io_uring :debug_flag,
+    cmake_define: {SHUTTLESOCK_USE_IO_URING: false}
+  
   no_pool :debug_flag,
     alt: ["nopool"],
     cmake_define: {SHUTTLESOCK_DEBUG_NOPOOL: true}
