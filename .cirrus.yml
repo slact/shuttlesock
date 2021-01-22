@@ -56,7 +56,7 @@ osx_task:
   osx_instance:
     image: catalina-xcode
   setup_script:
-    - /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install.sh)"
+#homebrew should already be installed
     - brew update
     - brew upgrade
     - brew install ccache libev zsh ruby lua luarocks pcre2 openssl c-ares
