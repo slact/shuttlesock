@@ -5,7 +5,9 @@
 #ifndef SHUTTLESOCK_HAVE_IO_URING
 bool shuso_core_io_uring_setup(shuso_t *S) {
   S->io_uring.on = false;
+#ifdef SHUTTLESOCK_HAVE_EVENTFD
   S->io_uring.eventfd = -1;
+#endif
   return true;
 }
 bool shuso_core_io_uring_teardown(shuso_t *S) {
