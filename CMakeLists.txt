@@ -16,13 +16,17 @@ include(ShuttlesockModule)
 #set(CMAKE_VERBOSE_MAKEFILE ON)
 
 #build shared and static libs in one go
-add_library(shuttlesock OBJECT)
+add_library(shuttlesock SHARED)
 set_property(TARGET shuttlesock PROPERTY C_STANDARD 11)
 set_property(TARGET shuttlesock PROPERTY POSITION_INDEPENDENT_CODE 1)
-add_library(shuttlesock_shared SHARED $<TARGET_OBJECTS:shuttlesock>)
-add_library(shuttlesock_static STATIC $<TARGET_OBJECTS:shuttlesock>)
-set_target_properties(shuttlesock_shared PROPERTIES OUTPUT_NAME shuttlesock)
-set_target_properties(shuttlesock_static PROPERTIES OUTPUT_NAME shuttlesock)
+
+#build shared and static lib at the same time -- doesn't work right on MacOS and FreeBSD.
+#Don't do this for now
+#add_library(shuttlesock OBJECT)
+#add_library(shuttlesock_shared SHARED $<TARGET_OBJECTS:shuttlesock>)
+#add_library(shuttlesock_static STATIC $<TARGET_OBJECTS:shuttlesock>)
+#set_target_properties(shuttlesock_shared PROPERTIES OUTPUT_NAME shuttlesock)
+#set_target_properties(shuttlesock_static PROPERTIES OUTPUT_NAME shuttlesock)
 
 target_sources(shuttlesock PRIVATE
   src/shuttlesock.c
