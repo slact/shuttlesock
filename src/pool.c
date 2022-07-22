@@ -353,7 +353,7 @@ size_t shuso_pool_space(shuso_pool_t *pool, shuso_pool_space_kind_t kind) {
 #else
     case SPACE_USED:
       space = pool->page.size * (pool->page.count - 1)
-            + pool->page.last == NULL ? 0 : page_used_space(pool->page.last, pool->page.cur);
+            + (pool->page.last == NULL ? 0 : page_used_space(pool->page.last, pool->page.cur));
       break;
     case SPACE_FREE:
       space = pool->page.last == NULL ? 0 : pool->page.size - page_used_space(pool->page.last, pool->page.cur);
