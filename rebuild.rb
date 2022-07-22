@@ -13,12 +13,13 @@ BUILD_DIR= "build"
 raise "just a single-level build dir, please" if BUILD_DIR.match("/")
 class Opts
   class Opt
-    attr_accessor :name, :type, :opt, :matches
+    attr_accessor :name, :type, :opt, :matches, :priority
     def initialize(name, type, opt)
       @opt = opt
       @name = name.to_s.gsub("_", "-")
       @type = type
       @matches = {}
+      @priority = opt[:priority] || 0
       @opt[:alt]=(opt[:alt] || {}).map{|v| v.to_s.gsub("_", "-")}
       @opt[:imply]=(opt[:imply]).map{|v| v.to_s.gsub("_", "-")} if @opt[:imply]
     end
@@ -515,15 +516,6 @@ rebuild = Opts.new do
   include_what_you_use :debug_flag,
     cmake_define: {CMAKE_C_INCLUDE_WHAT_YOU_USE: "/usr/bin/include-what-you-use;-Xiwyu;--verbose=1"}
   
-  passthrough :debug_flag,
-    display_as: "-...",
-    info: "passthrough configure option directly to cmake",
-    match: /^(\-.+)/,
-    repeatable: true,
-    run: (Proc.new do |opt, arg|
-      opt.cmake_opts=[arg]
-    end)
-  
   lua_version :flag,
     display_as: "lua=...",
     info: "USe specified Lua version",
@@ -569,7 +561,17 @@ rebuild = Opts.new do
     set: {generator: "Ninja"}
   
   help :flag,
+    alt: ['-h', '--help'],
     set: {help: true}
+  
+  passthrough :debug_flag,
+    display_as: "-...",
+    info: "passthrough configure option directly to cmake",
+    match: /^(\-.+)/,
+    repeatable: true,
+    run: (Proc.new do |opt, arg|
+      opt.cmake_opts=[arg]
+    end)
     
 end
 
