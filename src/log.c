@@ -9,6 +9,7 @@
 NONNULL(1,3) void shuso_log_level_vararg(shuso_t *S, shuso_loglevel_t level, const char *fmt, va_list args)   {
   char *log = S->logbuf;
   char *cur = log;
+  char *last = &log[SHUTTLESOCK_MAX_LOG_LINE_SIZE-1];
   int procnum = S->procnum;
   const char *procname;
   const char *lvl;
@@ -56,15 +57,20 @@ NONNULL(1,3) void shuso_log_level_vararg(shuso_t *S, shuso_loglevel_t level, con
   }
   
   if(procnum >= SHUTTLESOCK_WORKER) {
-    cur += sprintf(cur, "[%d %s %i] %s: ", getpid(), procname, procnum, lvl);
+    cur += snprintf(cur, last - cur, "[%d %s %i] %s: ", getpid(), procname, procnum, lvl);
   }
   else {
-    cur += sprintf(cur, "[%d %s] %s: ", getpid(), procname, lvl);
+    cur += snprintf(cur, last - cur, "[%d %s] %s: ", getpid(), procname, lvl);
   }
   
-  cur += vsprintf(cur, fmt, args);
-
-  cur += sprintf(cur, "\n");
+  cur += vsnprintf(cur, last - cur, fmt, args);
+  if(cur >= last) {
+    cur = last - 5;
+    cur += snprintf(cur, last - cur, "...\n");
+  }
+  else {
+    cur += snprintf(cur, last - cur, "\n");
+  }
   write((S)->common->log.fd, log, cur - log);
 }
 

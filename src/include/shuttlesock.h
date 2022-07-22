@@ -144,6 +144,8 @@ _Static_assert(offsetof(shuso_common_t, process.worker)+sizeof(shuso_process_t)*
 
 LLIST_TYPEDEF_LINK_STRUCT(shuso_ev_timer);
 
+#define SHUTTLESOCK_MAX_LOG_LINE_SIZE 4096
+
 typedef struct shuso_s {
   int                         procnum;
   shuso_process_t            *process;
@@ -197,7 +199,7 @@ typedef struct shuso_s {
     bool                        do_not_log;
     bool                        do_not_publish_event;
   }                           error;
-  char                        logbuf[1024];
+  char                        logbuf[SHUTTLESOCK_MAX_LOG_LINE_SIZE];
 } shuso_t;
 
 //shuso_t *shuso_create(unsigned int ev_loop_flags, shuso_runtime_handlers_t *handlers, shuso_config_t *config, const char **err);
