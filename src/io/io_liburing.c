@@ -169,7 +169,7 @@ static bool shuso_io_uring_watcher_stop(shuso_io_t *io) {
     .callback = io_uring_cqe_cancel_handler,
     .pd = io
   };
-  io_uring_prep_poll_remove(sqe, &io->uring.handle);
+  io_uring_prep_poll_remove(sqe, (uintptr_t )&io->uring.handle);
   io->uring.cancel_active = true;
   return true;
 }
