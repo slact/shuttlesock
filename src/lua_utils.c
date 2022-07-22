@@ -163,8 +163,7 @@ void luaS_call(lua_State *L, int nargs, int nresults) {
 #endif
 }
 
-char *luaS_dbgval(lua_State *L, int n) {
-  static char buf[512];
+char *luaS_dbgval(lua_State *L, int n, char *buf, size_t buflen) {
   int         type = lua_type(L, n);
   const char *typename = lua_typename(L, type);
   const char *str;
@@ -172,24 +171,27 @@ char *luaS_dbgval(lua_State *L, int n) {
   int         integer;
   
   char *cur = buf;
+  const char *last = &buf[buflen-2];
+
   int top = lua_gettop(L);
+  size_t    sz;
   switch(type) {
     case LUA_TNUMBER:
       if(lua_isinteger(L, n)) {
         integer = lua_tointeger(L, n);
-        sprintf(cur, "%s: %d", typename, integer);
+        snprintf(cur, last - cur, "%s: %d", typename, integer);
       }
       else {
         num = lua_tonumber(L, n);
-        sprintf(cur, "%s: %f", typename, num);
+        snprintf(cur, last - cur, "%s: %f", typename, num);
       }
       break;
     case LUA_TBOOLEAN:
-      sprintf(cur, "%s: %s", typename, lua_toboolean(L, n) ? "true" : "false");
+      snprintf(cur, last - cur, "%s: %s", typename, lua_toboolean(L, n) ? "true" : "false");
       break;
     case LUA_TSTRING:
-      str = lua_tostring(L, n);
-      sprintf(cur, "%s: \"%.50s%s\"", typename, str, strlen(str) > 50 ? "..." : "");
+      str = lua_tolstring(L, n, &sz);
+      snprintf(cur, last - cur, "%s: \"%.50s%s\"[%i]", typename, str, strlen(str) > 50 ? "..." : "", (int )sz);
       break;
     case LUA_TTABLE:
       luaL_checkstack(L, 8, NULL);
@@ -198,26 +200,25 @@ char *luaS_dbgval(lua_State *L, int n) {
         lua_pushvalue(L, n);
         lua_call(L, 1, 1);
         str = lua_tostring(L, -1);
-        cur += sprintf(cur, "%s", str);
+        cur += snprintf(cur, last - cur, "%s", str);
         lua_pop(L, 1);
       }
       else {
-        cur += sprintf(cur, "table: %p", lua_topointer(L, n));
+        cur += snprintf(cur, last - cur, "table: %p", lua_topointer(L, n));
       }
-      
       
       //is it a global?
       lua_rawgeti(L, LUA_REGISTRYINDEX, LUA_RIDX_GLOBALS);
       if(lua_compare(L, -1, n, LUA_OPEQ)) {
         //it's the globals table
-        sprintf(cur, "%s", " _G");
+        snprintf(cur, last - cur, "%s", " _G");
         lua_pop(L, 1);
         break;
       }
       lua_pushnil(L);
       while(lua_next(L, -2)) {
         if(lua_compare(L, -1, n, LUA_OPEQ)) {
-          cur += sprintf(cur, " _G[\"%s\"]", lua_tostring(L, -2));
+          cur += snprintf(cur, last - cur, " _G[\"%s\"]", lua_tostring(L, -2));
           lua_pop(L, 2);
           break;
         }
@@ -234,7 +235,7 @@ char *luaS_dbgval(lua_State *L, int n) {
         
         if(lua_compare(L, -1, n, LUA_OPEQ)) {
         //it's the globals table
-          sprintf(cur, " module \"%s\"", lua_tostring(L, -2));
+          snprintf(cur, last - cur, " module \"%s\"", lua_tostring(L, -2));
           lua_pop(L, 2);
           break;
         }
@@ -248,11 +249,11 @@ char *luaS_dbgval(lua_State *L, int n) {
         lua_getglobal(L, "tostring");
         lua_pushvalue(L, n);
         lua_call(L, 1, 1);
-        sprintf(cur, "light %s", lua_tostring(L, -1));
+        snprintf(cur, last - cur, "light %s", lua_tostring(L, -1));
         lua_pop(L, 1);
       }
       else {
-        sprintf(cur, "light userdata: %p", lua_topointer(L, n));
+        snprintf(cur, last - cur, "light userdata: %p", lua_topointer(L, n));
       }
       break;
     case LUA_TFUNCTION: {
@@ -270,7 +271,7 @@ char *luaS_dbgval(lua_State *L, int n) {
         lua_pushfstring(L, "function: %p", lua_topointer(L, n));
       }
       
-      sprintf(cur, "%s%s%s%s%s%s %s:%d", lua_iscfunction(L, n) ? "c " : "", lua_tostring(L, -1), strlen(dbg.namewhat)>0 ? " ":"", dbg.namewhat, dbg.name?" ":"", dbg.name?dbg.name:"", dbg.short_src, dbg.linedefined);
+      snprintf(cur, last - cur, "%s%s%s%s%s%s %s:%d", lua_iscfunction(L, n) ? "c " : "", lua_tostring(L, -1), strlen(dbg.namewhat)>0 ? " ":"", dbg.namewhat, dbg.name?" ":"", dbg.name?dbg.name:"", dbg.short_src, dbg.linedefined);
       lua_pop(L, 1);
       
       break;
@@ -315,11 +316,11 @@ char *luaS_dbgval(lua_State *L, int n) {
       
       luaL_where(coro, 1);
       if(L == coro) {
-        sprintf(cur, "%s (self) (%s) @ %s", lua_tostring(L, -3), lua_tostring(L, -2), lua_tostring(coro, -1));
+        snprintf(cur, last - cur, "%s (self) (%s) @ %s", lua_tostring(L, -3), lua_tostring(L, -2), lua_tostring(coro, -1));
         lua_pop(L, 3);
       }
       else {
-        sprintf(cur, "%s (%s) @ %s", lua_tostring(L, -2), lua_tostring(L, -1), lua_tostring(coro, -1));
+        snprintf(cur, last - cur, "%s (%s) @ %s", lua_tostring(L, -2), lua_tostring(L, -1), lua_tostring(coro, -1));
         lua_pop(L, 2);
         lua_pop(coro, 1);
       }
@@ -338,11 +339,11 @@ char *luaS_dbgval(lua_State *L, int n) {
         lua_call(L, 1, 1);
         str = lua_tostring(L, -1);
         
-        sprintf(cur, "%s", str);
+        snprintf(cur, last - cur, "%s", str);
         lua_pop(L, 1);
       }
       else {
-        sprintf(cur, "%s: %p", lua_typename(L, type), lua_topointer(L, n));
+        snprintf(cur, last - cur, "%s: %p", lua_typename(L, type), lua_topointer(L, n));
       }
       break;
   }
@@ -352,15 +353,16 @@ char *luaS_dbgval(lua_State *L, int n) {
 void luaS_printstack_named(lua_State *L, const char *name) {
   int        top = lua_gettop(L);
   shuso_t   *S = shuso_state(L);
-  const char line[256];
+  char dbgval[128];
+  char line[256];
   luaL_Buffer buf;
   luaL_buffinit(L, &buf);
   
-  sprintf((char *)line, "lua stack %s:", name);
+  sprintf(line, "lua stack %s:", name);
   luaL_addstring(&buf, line);
   
   for(int n=top; n>0; n--) {
-    snprintf((char *)line, 256, "\n                               [%-2i  %i]: %s", -(top-n+1), n, luaS_dbgval(L, n));
+    snprintf(line, 256, "\n                               [%-2i  %i]: %s", -(top-n+1), n, luaS_dbgval(L, n, dbgval, sizeof(dbgval)));
     luaL_addstring(&buf, line);
   }
   luaL_checkstack(L, 1, NULL);

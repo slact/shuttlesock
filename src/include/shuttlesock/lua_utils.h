@@ -27,7 +27,7 @@ int luaS_push_system_module(lua_State *L);
 void luaS_do_embedded_script(lua_State *L, const char *name, int nargs);
 
 //debug stuff
-char *luaS_dbgval(lua_State *L, int n);
+char *luaS_dbgval(lua_State *L, int n, char *buf, size_t buflen);
 void luaS_mm(lua_State *L, int stack_index);
 void luaS_inspect(lua_State *L, int stack_index);
 void luaS_push_inspect_string(lua_State *L, int stack_index);
