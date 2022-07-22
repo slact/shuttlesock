@@ -758,19 +758,32 @@ bool luaS_push_lua_module_field(lua_State *L, const char *module_name, const cha
   return true;
 }
 
+typedef struct {
+  bool          initialized;  /* true iff buffer has been initialized */
+  luaL_Buffer   buffer;
+} buffer_writer_data_t;
 
-static int lua_function_dump_writer (lua_State *L, const void *b, size_t size, void *B) {
-  luaL_addlstring((luaL_Buffer *) B, (const char *)b, size);
+static int lua_function_dump_writer (lua_State *L, const void *b, size_t size, void *pd) {
+  buffer_writer_data_t *writer = pd;
+  if(!writer->initialized) {
+    writer->initialized = true;
+    luaL_buffinit(L, &writer->buffer);
+  }
+  luaL_addlstring(&writer->buffer, (const char *)b, size);
   return 0;
 }
+
 int luaS_function_dump(lua_State *L) {
-  luaL_Buffer b;
+  buffer_writer_data_t bw = { .initialized = false };
+  
   luaL_checktype(L, -1, LUA_TFUNCTION);
-  luaL_checkstack(L, 1, NULL);
-  luaL_buffinit(L,&b);
-  if (lua_dump(L, lua_function_dump_writer, &b, 0) != 0)
+  luaL_checkstack(L, 3, NULL);
+  
+  if (lua_dump(L, lua_function_dump_writer, &bw, 0) != 0) {
     return luaL_error(L, "unable to dump given function");
-  luaL_pushresult(&b);
+  }
+  luaL_pushresult(&bw.buffer);
+  
   return 1;
 }
 
