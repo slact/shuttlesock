@@ -5,6 +5,8 @@
 #include <shuttlesock/modules/lua_bridge/api/ipc_lua_api.h>
 #ifndef __clang_analyzer__
 
+#define ONELINER(...) #__VA_ARGS__
+
 test_config_t test_config;
 int dev_null;
 
@@ -767,62 +769,97 @@ describe(lua_api) {
     test("pack/unpack data in heap") {
       assert_shuso(S, shuso_configure_finish(S));
       lua_State *L = S->lua.state;
-      assert_luaL_dostring(L,"\
-        local x = {}\n\
-        x.x=x\n\
-        local self = {\n\
-          121,\n\
-          x,\n\
-          {\n\
-            112,\n\
-            'banana',\n\
-            true,\n\
-            false,\n\
-            x=12,\n\
-          },\n\
-          {[{}]='!!!'}\n\
-        } \n\
-        self.self = self\n\
-        return self\n\
-        "
-      );
+      
+      assert_luaL_dostring(L,ONELINER(
+        local x = ({});
+        x.x=x;
+        local self = {
+          121,
+          x,
+          {
+            112,
+            "banana",
+            true,
+            false,
+            x=12,
+          },
+          {[{}]='!!!'}
+        };
+        self.self = self;
+        return self;
+      ));
+      
       shuso_ipc_lua_data_t *data = luaS_lua_ipc_pack_data(L, -1, "beep", false);
       lua_pop(L, 1);
       lua_gc(L, LUA_GCCOLLECT, 0);
       luaS_lua_ipc_unpack_data(L, data);
       lua_setglobal(L, "unpacked");
       
-      lua_rawgeti(L, LUA_REGISTRYINDEX, data->reftable);
+      int reftable_index = data->reftable;
+      lua_rawgeti(L, LUA_REGISTRYINDEX, reftable_index);
       lua_setglobal(L, "data_reftable");
       
-      assert_luaL_dostring(L, " \
-        assert(type(unpacked) == 'table') \n\
-        assert(unpacked.self == unpacked) \n\
-        assert(unpacked[1]==121)\n\
-        assert(unpacked[2].x == unpacked[2]) \n\
-        assert(unpacked[3][1]==112)\n\
-        assert(unpacked[3][2]=='banana')\n\
-        assert(unpacked[3][3]==true) \n\
-        local k, v = next(unpacked[4], nil) \n\
-        assert(type(k)=='table' and next(k) == nil) \n\
-        assert(v == '!!!') \n\
-        _G.weak=setmetatable({data=unpacked}, {__mode='v'}) \n\
-        local n = 0 \n\
-        for k,v in pairs(_G.data_reftable) do \n\
-          if type(v) ~= 'string' then\n\
-            _G.weak[k]=v \n\
-            n=n+1 \n\
-          end\n\
-        end \n\
-        _G.data_reftable=nil\n\
-        assert(n>1)\n\
-      ");
+      lua_pushnumber(L, reftable_index);
+      lua_setglobal(L, "reftable_index");
+      
+      shuso_log_warning(S, "hey!");
+      
+      assert_luaL_dostring(L, ONELINER(
+        assert(type(unpacked) == "table") \n
+        assert(unpacked.self == unpacked) \n
+        assert(unpacked[1]==121)\n
+        assert(unpacked[2].x == unpacked[2]) \n
+        assert(unpacked[3][1]==112)\n
+        assert(unpacked[3][2]=="banana")\n
+        assert(unpacked[3][3]==true) \n
+        local k, v = next(unpacked[4], nil) \n
+        assert(type(k)=="table" and next(k) == nil) \n
+        assert(v == "!!!") \n
+        _G.weak=setmetatable({data=unpacked}, {__mode="v"}) \n
+        local n = 0 \n
+        for k,v in pairs(_G.data_reftable) do \n
+          if type(v) ~= "string" and type(v) ~= "number" then \n
+            _G.weak[k]=v \n
+            n=n+1 \n
+          end\n
+        end \n
+        _G.data_reftable=nil\n
+        assert(n>1)\n
+        local reftable = debug.getregistry()[_G.reftable_index] \n
+        _G.reftable_signature = tostring(reftable) \n
+        
+        assert(tostring(debug.getregistry()[_G.reftable_index]) == _G.reftable_signature) \n
+        assert(debug.getregistry()[_G.reftable_index] ~= nil, "reftable's still there") \n
+      ));
+      
       assert_luaL_dostring(L, "_G.weak.data = nil");
+      //ok it should be gone now
       lua_gc(L, LUA_GCCOLLECT, 0);
-      assert_luaL_dostring(L, "assert(next(_G.weak) ~= nil)");
+      
+      assert_luaL_dostring(L, ONELINER(
+        local count = 0 \n
+        for k,v in pairs(_G.weak) do \n
+          count = count + 1 \n
+        end \n
+        assert(count > 1, "table contents persist. good") \n
+      ));
+      
       luaS_lua_ipc_gc_data(L, data);
+      //ok all the refs keeping this data around should be gone now
       lua_gc(L, LUA_GCCOLLECT, 0);
-      assert_luaL_dostring(L, "assert(next(_G.weak) == nil)");
+      
+      assert_luaL_dostring(L, ONELINER(
+        local count = 0 \n
+        for k,v in pairs(_G.weak) do \n
+          count = count + 1\n
+        end \n
+        assert(count == 0, "table contents should have been cleared") \n
+        
+        assert(tostring(debug.getregistry()[_G.reftable_index]) ~= _G.reftable_signature, "reftable's gone");
+      ));
+      
+      //reftable_ref
+      
     }
     
     test("pack/unpack data in shared memory") {
