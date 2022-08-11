@@ -86,20 +86,11 @@ function(shuttlesock_link_lua LUA_VERSION STATIC_BUILD LUA_EXTRA_CFLAGS)
     
     shuttlesock_build_lua(${LUA_RELEASE_VERSION} ${LUA_RELEASE_MD5} "${LUA_EXTRA_CFLAGS}")
     target_link_libraries(shuttlesock PUBLIC ${THIRDPARTY_PREFIX}/lib/liblua.a)
-    if(CMAKE_SYSTEM_NAME STREQUAL Linux)
-      target_link_libraries(shuttlesock PRIVATE m) #lua links to libm on linux only
-    endif()
     target_link_libraries(shuttlesock PRIVATE dl)
   endif()
 endfunction()
 
 function (shuttlesock_build_lua LUA_RELEASE_VERSION LUA_RELEASE_MD5 LUA_EXTRA_CFLAGS)
-  if(SHUTTLESOCK_BUILD_LUA)
-    #already building it
-    return()
-  else()
-    set(SHUTTLESOCK_BUILD_LUA ON CACHE INTERNAL "")
-  endif()
   
   if(CMAKE_SYSTEM_NAME STREQUAL Linux)
     set(LUA_BUILD_TARGET linux)
