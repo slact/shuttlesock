@@ -317,6 +317,9 @@ function translaters.number (val, ctx)
   return { tostring (val), colors = C.m .. C.br }
 end
 
+function translaters.boolean (val, ctx)
+  return { tostring(val), colors = C.b .. C.br }
+end
 
 -- Check whether a value can be represented as a Lua identifier, without the
 -- need for quotes or translation.
