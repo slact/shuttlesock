@@ -163,7 +163,7 @@ class Opts
     # we need this stupid hack because cmake the idiot forgets its command-line defines if
     #  CMAKE_C_COMPILER is changed on a pre-existing build
     @last_used_compiler_file="#{BUILD_DIR}/.last_used_compiler.because_cmake_is_terrible"
-    if File.exists?(@last_used_compiler_file) && (@vars[:compiler] || "") != File.read(@last_used_compiler_file)
+    if File.exist?(@last_used_compiler_file) && (@vars[:compiler] || "") != File.read(@last_used_compiler_file)
       puts yellow ">> cmake build must be reset because a different compiler than"
       puts yellow "initially configured This is because cmake is utterly terrible."
       puts ""
@@ -175,8 +175,8 @@ class Opts
       system "rm", "-R", "-f", "#{BUILD_DIR}"
     end
     
-    if !Dir.exists? BUILD_DIR
-      system "rm", "-Rf", BUILD_DIR if File.exists? BUILD_DIR
+    if !Dir.exist? BUILD_DIR
+      system "rm", "-Rf", BUILD_DIR if File.exist? BUILD_DIR
       puts yellow ">> mkdir -p #{BUILD_DIR}"
       system "mkdir", "-p", BUILD_DIR
     end
@@ -204,7 +204,7 @@ class Opts
     end
     
     if @vars[:generator] == "Ninja" || !@vars[:generator]
-      if File.exists? "/usr/bin/ninja"
+      if File.exist? "/usr/bin/ninja"
         @cmake_opts << "-GNinja"
         @ninja = true
       elsif @vars[:generator] == "Ninja"
@@ -326,7 +326,7 @@ class Opts
       fake_system_echo "./merge_luacov_stats.lua", "#{BUILD_DIR}/luacov.stats.out.*", "--out=#{BUILD_DIR}/luacov.stats.out"
       system "./merge_luacov_stats.lua", *statsfiles, "--out=#{BUILD_DIR}/luacov.stats.out"
       system_echo "mkdir coverage 2>/dev/null"
-      if File.exists? "#{BUILD_DIR}/luacov.stats.out" then
+      if File.exist? "#{BUILD_DIR}/luacov.stats.out" then
         puts green "Preparing Lua coverage reports..."
         system_echo "rm -Rf coverage/lua 2>/dev/null"
         system_echo "mkdir coverage/lua 2>/dev/null"
