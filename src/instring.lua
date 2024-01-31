@@ -61,7 +61,15 @@ function Token.escape(str, cur)
     return true, {type="literal", value=fc}, 2
   end
 end
-  
+
+function Token.variable(str, cur)
+  local ok, res, len = Token.simple_variable(str, cur)
+  if ok == nil then
+    ok, res, len = Token.bracketed_variable(str, cur)
+  end
+  return ok, res, len
+end
+
 function Token.simple_variable(str, cur)
   local m = str:match("^%$([%w_]+)", cur)
   local start = cur
@@ -132,10 +140,7 @@ function Instring.parse(setting_value)
     end
     table.insert(tokens, res)
   elseif valtype == "variable" then
-    ok, res, len = Token.simple_variable(str, 1)
-    if ok == nil then
-      ok, res, len = Token.bracketed_variable(str, 1)
-    end
+    ok, res, len = Token.variable(str, 1)
     if not ok then
       return nil, (res or "not a variable"), 1, len
     end
@@ -147,10 +152,7 @@ function Instring.parse(setting_value)
       --print("match", str:sub(cur))
       ok, res, len = Token.escape(str, cur)
       if ok == nil then
-        ok, res, len = Token.simple_variable(str, cur)
-      end
-      if ok == nil then
-        ok, res, len = Token.bracketed_variable(str, cur)
+        ok, res, len = Token.variable(str, cur)
       end
       if ok == nil then
         ok, res, len = Token.literal(str, cur)

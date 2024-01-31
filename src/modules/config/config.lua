@@ -577,24 +577,21 @@ do --parser
   end
   
   function parser:match_variable()
-    local var = self:match("^(%$[%w%.%_]*)")
-    if not var then
-      return false
-    end
-    if #var == 1 then
-      return nil, "empty variable name"
-    end
-    if var then
-      return self:add_value_to_setting("variable")
+    local cur = self.cur
+    local ok, res, len = Instring.Token.variable(self.str, cur)
+    if not ok then
+      return nil, res
     end
     
-    if self:match("^%$[^%s;]+") then
-      return nil, "invalid variable name " .. self:match()
-    elseif self:match("^%$") then
-      return nil, "empty variable name"
-    else
-      return nil, "invalid variable"
+    --make sure there's no stringy stuff right after the var
+    local nextchar = self.str:sub(cur + len, cur+len)
+    if nextchar and not nextchar:match("^[%s;]") then
+      --nope it's an non-quoted string that starts with a variable
+      return false
     end
+    
+    self.cur = cur + len
+    return self:add_value_to_setting("variable", self.str:sub(cur, cur+len-1))
   end
   
   function parser:match_value()
