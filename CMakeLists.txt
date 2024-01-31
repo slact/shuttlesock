@@ -1,5 +1,6 @@
-cmake_minimum_required(VERSION 3.4)
+cmake_minimum_required(VERSION 3.7)
 set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/cmake" )
+cmake_policy(SET CMP0126 NEW)
 
 include(SetProjectCompiler)
 
