@@ -1,4 +1,6 @@
-set(LIBURING_RELEASE_VERSION 0.7)
+set(LIBURING_RELEASE_VERSION 2.5)
+set(LIBURING_GIT_REPO "https://git.kernel.dk/liburing.git")
+set(LIBURING_GIT_TAG "liburing-${LIBURING_RELEASE_VERSION}")
 
 function(shuttlesock_link_liburing STATIC_BUILD)
   
@@ -15,7 +17,7 @@ function(shuttlesock_link_liburing STATIC_BUILD)
       if(NOT DEFINED LIBURING_HAS_OPCODE_SUPPORTED)
         message(STATUS "Check if liburing has io_uring_opcode_supported()")
         cmake_push_check_state(RESET)
-        set(CMAKE_REQUIRED_QUIET 1)
+        set(CMAKE_REQUIRED_QUIET 0)
         set(CMAKE_REQUIRED_INCLUDES ${liburing_include_path})
         set(CMAKE_REQUIRED_LIBRARIES ${liburing_lib_path})
         check_c_source_runs("
@@ -25,7 +27,7 @@ function(shuttlesock_link_liburing STATIC_BUILD)
             struct io_uring_probe *probe = io_uring_get_probe();
             if(probe) {
               io_uring_opcode_supported(probe, IORING_OP_NOP);
-              free(probe);
+              io_uring_free_probe(probe);
             }
             return 0;
           }
@@ -88,8 +90,8 @@ function(shuttlesock_link_liburing STATIC_BUILD)
     
     include(ExternalProject)
     ExternalProject_Add(liburing
-      GIT_REPOSITORY "https://git.kernel.dk/liburing"
-      GIT_TAG "liburing-${LIBURING_RELEASE_VERSION}"
+      GIT_REPOSITORY "${LIBURING_GIT_REPO}"
+      GIT_TAG "${LIBURING_GIT_TAG}"
       DOWNLOAD_NO_PROGRESS 1
       PREFIX ${LIBURING_PREFIX_DIR}
       DOWNLOAD_DIR "${THIRDPARTY_DOWNLOAD}"
